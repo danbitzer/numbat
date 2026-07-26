@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **Settings backup**: a new **Backup** card at the bottom of Settings.
+  **Export settings** downloads the saved config as a JSON file (the exact
+  `/data/hem-config.json` document, via `GET /api/config/export`);
+  **Import settings** restores one — exported file, copied `hem-config.json`
+  or its `.bak` — replacing every setting after a confirmation modal, with
+  the same server-side validation as a save. Works on a fresh unconfigured
+  install too, so a new box (or a renamed add-on) can be seeded from a
+  backup.
+- Repository and images moved with the GitHub account rename: the add-on now
+  lives at `github.com/danbitzer/hem` and pulls images from
+  `ghcr.io/danbitzer/hem-{arch}`. GitHub redirects the old repo URL, but the
+  old GHCR namespace does not — this release carries the corrected `image:`
+  reference.
+
 ## 0.9.0
 
 - **Live/Test mode navigation redesign**: the Dashboard/Settings/Test tabs are

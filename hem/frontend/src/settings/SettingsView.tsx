@@ -26,17 +26,33 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { refetchPlanUntilFresh } from "@/planRefresh";
 import { setThemePref, type ThemePref, useThemePref } from "@/theme";
+import { BackupCard } from "./BackupCard";
 import { buildDefaults, CollapsibleCard, FieldRow, mapServerErrors, toDoc } from "./form";
 import { getPath, SECTIONS } from "./spec";
 import { VacationCard } from "./VacationCard";
 
 export function SettingsView() {
   const config = useQuery({ queryKey: ["config"], queryFn: fetchConfig });
+  // Bumped after a successful import so the form remounts and rebuilds its
+  // defaults from the freshly imported config (useForm captures them once).
+  const [formEpoch, setFormEpoch] = useState(0);
   if (config.isPending) return <div className="p-6 text-center">loading…</div>;
   if (config.isError) {
     return <div className="p-6 text-center text-destructive">{String(config.error)}</div>;
   }
-  return <SettingsForm initialConfig={config.data.config} />;
+  return (
+    // w-full matters: with mx-auto the flex parent can't stretch this (auto
+    // cross-axis margins disable it), and shrink-to-fit sizing is floored by
+    // min-content — one wide entity label would widen everything past the
+    // viewport.
+    <div className="mx-auto w-full max-w-3xl space-y-4">
+      <SettingsForm key={formEpoch} initialConfig={config.data.config} />
+      <BackupCard
+        configured={config.data.configured}
+        onImported={() => setFormEpoch((e) => e + 1)}
+      />
+    </div>
+  );
 }
 
 function SettingsForm({ initialConfig }: { initialConfig: Record<string, unknown> | null }) {
@@ -98,11 +114,7 @@ function SettingsForm({ initialConfig }: { initialConfig: Record<string, unknown
 
   return (
     <form
-      // w-full matters: with mx-auto the flex parent can't stretch this
-      // (auto cross-axis margins disable it), and shrink-to-fit sizing is
-      // floored by min-content — one wide entity label would widen the form
-      // past the viewport and every card with it.
-      className="mx-auto w-full max-w-3xl space-y-4"
+      className="space-y-4"
       // The server (pydantic) is the validation authority — native browser
       // validation would reject values it accepts (e.g. step mismatches like
       // a 0.12 daily target against step=0.05) with a bubble instead of our

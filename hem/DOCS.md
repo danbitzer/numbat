@@ -40,6 +40,13 @@ updates, previous version in `.bak`). Note ingress is HA-session
 authenticated: any logged-in HA user who can open the panel can edit the
 config — the same trust level as the rest of the dashboard.
 
+**Backup** (Settings → Backup, at the bottom): **Export settings** downloads
+the saved config as a JSON file — the exact `hem-config.json` document — and
+**Import settings** restores one, replacing every setting after a
+confirmation. Import accepts an exported file, a copied `hem-config.json`, or
+its `.bak`, and validates it exactly like a save. Use it before experiments,
+or to seed a fresh install.
+
 The sections below document what each setting means in depth. Values quoted
 here are what the config **document** stores; ratio-type settings (SoC
 bounds, the daily target, the load buffer, hold value scaling, the forecast

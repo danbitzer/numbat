@@ -116,7 +116,7 @@ Two things to check:
 ## 6. Install the HEM add-on
 
 1. Settings → Add-ons → Add-on store → ⋮ → Repositories → add
-   `https://github.com/danielbitzer/hem` → install **Home Energy Manager**.
+   `https://github.com/danbitzer/hem` → install **Home Energy Manager**.
 2. Start the add-on. It boots **unconfigured and disabled** — no planning
    runs yet. Open the **Energy Manager** sidebar item (ingress) → **Settings**
    and fill in (every field has inline help; entity fields are searchable
