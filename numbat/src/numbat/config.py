@@ -138,7 +138,10 @@ class Battery(BaseModel):
     daily_target_penalty_per_kwh: float = Field(default=0.05, ge=0)
     # 0 = use the fixed penalty above. >0 = also enforce a penalty of at least
     # (multiple × median forward import price), so the target dominates the
-    # tariff and actually gets filled. a few × is plenty.
+    # tariff and actually gets filled. Edited as a percentage in the UI
+    # (0.5 = 50%). The penalty accrues per hour of the hold window, so even
+    # sub-1 multiples dominate a multi-hour hold (1.0 × median × 4 h ≈ 4× the
+    # going rate); large multiples only raise what an extreme day may cost.
     daily_target_penalty_price_multiple: float = Field(default=0.0, ge=0)
 
     @model_validator(mode="after")

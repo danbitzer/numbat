@@ -196,8 +196,12 @@ full-charge target** (e.g. 100% at 3pm). Two things make it work:
 > short of the target. Either raise the penalty, or set the
 > **daily target price multiple**, which
 > automatically keeps the penalty above the going price level (it uses
-> whichever is higher: your fixed penalty, or the multiple × the median
-> upcoming import price). A multiple of 2–3 is plenty.
+> whichever is higher: your fixed penalty, or the configured percentage of
+> the median upcoming import price). Because the penalty accrues per hour
+> of the hold, modest settings dominate: 100% of the median across a 4-hour
+> hold already makes a full-window shortfall worth ~4× the going rate.
+> 50–150% is plenty; larger values only raise what an extreme-priced day
+> can cost you.
 
 > **Pitfall — expecting the target to stop cheap dumping.** If tomorrow's
 > feed-in goes negative (a solar glut), refilling tomorrow is nearly free —
