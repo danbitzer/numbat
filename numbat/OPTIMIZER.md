@@ -135,12 +135,13 @@ beats the value of keeping it. Roughly:
 sell when:   feed-in price  >  hold value (+ losses)  +  wear cost  +  your margin
 ```
 
-That last term is the **minimum battery export spread** (default 0 = off).
+That last term is the **minimum battery export spread** (default 5c; 0 = off).
 It's your personal "worth getting off the couch for" threshold — the minimum
 *profit* per exported kWh, after wear is paid and the energy is valued at
 its rebuy cost. If cycling your battery for less than 5c/kWh profit isn't
-worth it to you, set the spread to 5c. Feed-in spikes sail over any sensible
-spread, so spike revenue is unaffected.
+worth it to you, that's the default; set 0 to sell whenever marginally
+profitable. Feed-in spikes sail over any sensible spread, so spike revenue
+is unaffected.
 
 There's also a blunter tool: **minimum battery export price**, a hard floor.
 Below it the battery never sells, full stop (it still runs the house, and
@@ -162,7 +163,7 @@ knob waiting to be told your time has value.
 The optimizer treats forecast prices as certain: a predicted 26c sell
 tonight justifies a certain 20c import now, at any positive margin. If
 you're warier than that — forecasts change, the import is real money — the
-**import reluctance** setting (default 0 = off) adds a virtual toll to every
+**import reluctance** setting (default 5c; 0 = off) adds a virtual toll to every
 imported kWh *in the planning maths only* (the dashboard's dollar figures
 stay real). Import-dependent bets then need bigger margins, and the plan
 leans toward solar and stored energy. Genuine spikes clear any sensible

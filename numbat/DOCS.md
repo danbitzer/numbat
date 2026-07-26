@@ -16,7 +16,8 @@ nothing is written to your inverter.
 - [Open-Meteo Solar Forecast](https://github.com/rany2/ha-open-meteo-solar-forecast)
 - Battery SoC/power sensors (e.g. the
   [mkaiser Sungrow Modbus package](https://github.com/mkaiser/Sungrow-SHx-Inverter-Modbus-Home-Assistant))
-- Any `weather.*` entity with hourly forecasts
+- Optionally, any `weather.*` entity with hourly forecasts (enables the
+  learned temperature response)
 
 ## Configuration
 
@@ -58,6 +59,12 @@ haircut) are stored as 0–1 fractions but displayed and edited as
 Point each option at your entity IDs. Amber Express's forecast attributes live on
 the price sensors themselves, so the two price entities are all Numbat needs for
 both live prices and forecasts.
+
+`weather` (optional) is any weather entity with hourly forecasts. It supplies
+the forecast temperatures the learned temperature response is applied to;
+without it, load planning is time-of-day only (`load_power` history and
+`outdoor_temp` learning still work — there's just no forecast to project the
+response onto).
 
 `pv_power` (optional) is your **actual** PV generation power sensor (W or kW,
 e.g. your inverter's total DC power) — distinct from the `pv_forecast_*`
@@ -226,13 +233,15 @@ buffer until learning is active. The goal state is always a learned forecast.
   low feed-in prices). Predbat uses ~1c.
 - `hold_value_scaling` (1.0) — multiplier on the auto hold value. `>1` makes the
   battery holdier (keeps charge longer), `<1` trades more freely.
-- `min_battery_export_spread` (0.0 = off) — automatic export **deadband**: the battery
-  only sells to the grid when the feed-in beats the value of holding
-  (`hold_value / efficiency_discharge + wear`) by at least this margin, so it
-  won't churn export for pennies on the 5-minute reprices. The automatic
-  counterpart to `grid.min_battery_export_price`. A cent or two is a sensible starting
-  point if you see marginal exports you'd rather not make.
-- `import_penalty_per_kwh` (0 = off; "Import reluctance" in the UI) — a
+- `min_battery_export_spread` (default 0.05; 0 = off) — automatic export
+  **deadband**: the battery only sells to the grid when the feed-in beats the
+  value of holding (`hold_value / efficiency_discharge + wear`) by at least
+  this margin, so it won't churn export for pennies on the 5-minute reprices.
+  The automatic counterpart to `grid.min_battery_export_price`. The 5c
+  default keeps a fresh install from cycling the battery for sub-wear-cost
+  margins; set 0 to sell whenever marginally profitable.
+- `import_penalty_per_kwh` (default 0.05; 0 = off; "Import reluctance" in the
+  UI) — a
   **virtual** toll added to every imported kWh in the objective, never in the
   displayed costs. A risk-preference knob, not economics: the optimizer is
   risk-neutral and happily imports now against a forecast sell later; the

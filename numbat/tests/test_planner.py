@@ -135,6 +135,17 @@ async def test_full_cycle_against_fixtures():
     assert any(iv.action == Action.DISCHARGE for iv in plan.intervals)
 
 
+async def test_cycle_without_weather_entity_skips_the_forecast_call():
+    # entities.weather is optional: no weather.get_forecasts call is made
+    # (no per-cycle warning spam) and planning proceeds without temps.
+    settings = make_settings(entities={**SETTINGS_DICT["entities"], "weather": ""})
+    fake = full_fake_ha()
+    async with fake_ha_client(fake) as client:
+        plan = await make_planner(client, settings).run_cycle(NOW)
+    assert plan.solver_status in ("optimal", "optimal_inaccurate")
+    assert not any(d == "weather" for d, _s, _data in fake.service_calls)
+
+
 async def test_absurd_load_forecast_is_clamped_not_infeasible():
     """Live failure 2026-07-16: a mislabeled load sensor produced a ~250 kW
     forecast and the MILP came back infeasible. Bad load data must clamp to
@@ -289,6 +300,9 @@ def test_hysteresis_keeps_near_degenerate_previous_action():
             "action_switch_threshold_dollars": 0.05,
             "forecast_haircut": 0.0,
             "terminal_soc_value": 0.245,
+            # the default import toll would kill this deliberately thin
+            # charge margin — this test is about hysteresis, not reluctance
+            "import_penalty_per_kwh": 0.0,
         }
     )
     planner = offline_planner(settings)
@@ -306,6 +320,7 @@ def test_hysteresis_disabled_switches_freely():
             "action_switch_threshold_dollars": 0.0,
             "forecast_haircut": 0.0,
             "terminal_soc_value": 0.245,
+            "import_penalty_per_kwh": 0.0,  # keep the thin charge margin alive
         }
     )
     planner = offline_planner(settings)

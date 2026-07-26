@@ -89,7 +89,10 @@ class Entities(BaseModel):
     pv_forecast_tomorrow: str
     battery_soc: str
     battery_power: str
-    weather: str
+    # Hourly-forecast weather entity feeding the temperature response.
+    # Optional: without it (or on forecast failure) load planning is
+    # time-of-day only — the learned temp response has nothing to apply to.
+    weather: str = ""
     # House load power sensor (W or kW) — the load forecast is learned from
     # its history (e.g. the mkaiser package's sensor.load_power). Optional but
     # strongly recommended: without it Numbat plans with ZERO house load and
@@ -204,14 +207,16 @@ class Optimizer(BaseModel):
     # Minimum arbitrage spread ($/kWh): the battery only sells to the grid when
     # the feed-in beats holding by this margin. Kills pennies-margin export
     # churn. 0 = off (export whenever marginally profitable). The automatic
-    # counterpart to grid.min_battery_export_price.
-    min_battery_export_spread: float = Field(default=0.0, ge=0)
+    # counterpart to grid.min_battery_export_price. Defaults to 5c: a fresh
+    # install shouldn't cycle the battery for sub-wear-cost margins.
+    min_battery_export_spread: float = Field(default=0.05, ge=0)
     # Import reluctance ($/kWh): a virtual toll on grid imports in the
     # objective (never in displayed costs) that biases the plan toward solar
     # and stored energy over importing — a risk-preference knob for people
     # who'd rather miss a forecast sell later than import now. Skipped at
-    # negative buy prices (paid-to-charge stays attractive). 0 = off.
-    import_penalty_per_kwh: float = Field(default=0.0, ge=0)
+    # negative buy prices (paid-to-charge stays attractive). 0 = off; the 5c
+    # default makes import-to-sell-later bets clear a real margin first.
+    import_penalty_per_kwh: float = Field(default=0.05, ge=0)
     # must stay below the 90s cycle timeout in main.py
     # Not exposed in the Settings UI (config-file only): a timeout is a
     # never-fires safety valve — solves take tens of ms — and on timeout the

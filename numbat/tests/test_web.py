@@ -139,12 +139,12 @@ def test_put_config_invalid_returns_per_field_errors(tmp_path):
 
     bad = json.loads(json.dumps(MINIMAL_CONFIG))
     bad["battery"]["capacity_kwh"] = -1
-    bad["entities"].pop("weather")
+    bad["entities"].pop("battery_soc")
     resp = client.put("/api/config", json=bad)
     assert resp.status_code == 422
     locs = {err["loc"] for err in resp.json()["errors"]}
     assert "battery.capacity_kwh" in locs
-    assert "entities.weather" in locs
+    assert "entities.battery_soc" in locs
     # nothing applied, nothing written
     assert controller.current.battery.capacity_kwh == 12.8
     assert not controller.changed.is_set()

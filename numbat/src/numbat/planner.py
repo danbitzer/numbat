@@ -209,12 +209,12 @@ class Planner:
             self._solar.get_pv(),
             self._battery.get_battery_state(),
         )
-        temps_series: Series | None
-        try:
-            temps_series = await self._weather.get_temperature_forecast()
-        except Exception as e:  # noqa: BLE001 - temps are optional, never fatal
-            log.warning("temperature forecast unavailable (%s); load rules disabled", e)
-            temps_series = None
+        temps_series: Series | None = None
+        if self._settings.entities.weather:  # optional — unset means no temp response
+            try:
+                temps_series = await self._weather.get_temperature_forecast()
+            except Exception as e:  # noqa: BLE001 - temps are optional, never fatal
+                log.warning("temperature forecast unavailable (%s); load rules disabled", e)
 
         if prices.updated_at and now - prices.updated_at > MAX_PRICE_AGE:
             raise InputsStale(f"prices last updated {prices.updated_at.isoformat()}")
