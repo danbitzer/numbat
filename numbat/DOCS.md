@@ -100,15 +100,16 @@ and surprise usage are worth nothing to it, so on a mild day it may stop at
 **held for `daily_target_hold_hours`** (default 4h) — a floor across the
 evening peak, not a single instant it can dump the moment after. Freed to
 discharge once the window ends. Soft means: the plan pays up to
-`daily_target_penalty_per_kwh` (default $0.10) per kWh-*hour* of shortfall —
+`daily_target_penalty_per_kwh` (default $0.05) per kWh-*hour* of shortfall —
 your insurance premium. Filling via forgone feed-in or a cheap grid window
 happens; sacrificing a genuinely better opportunity, like exporting into a
 real spike, does not.
 
 **Calibrate the penalty against your tariffs**: it is a maximum
-willingness-to-pay, so anything cheaper than it WILL be bought. Set it
-between your typical feed-in price and your typical grid buy price — e.g.
-$0.10 with ~$0.08 feed-in and ~$0.25 grid. If the battery still won't reach
+willingness-to-pay, so anything cheaper than it WILL be bought. Remember it
+accrues per hour of the hold window — the default $0.05 over a 4 h hold
+makes a kWh missing for the whole window worth up to $0.20 to avoid, above
+most evening import premiums. If the battery still won't reach
 the target on dear evenings, either raise it or set
 `daily_target_penalty_price_multiple` (0 = off). The multiple works **with**
 the fixed penalty, not instead of it: each solve uses whichever is higher —

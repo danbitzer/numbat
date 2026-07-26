@@ -249,10 +249,11 @@ export const SECTIONS: SectionSpec[] = [
         "battery.daily_target_penalty_per_kwh",
         "Daily target penalty",
         "Willingness-to-pay per kWh-HOUR of shortfall below the target floor — anything " +
-          "cheaper WILL be bought to fill it. Between your typical feed-in and grid buy " +
-          "price (e.g. $0.10 with ~$0.08 feed-in and ~$0.25 grid). Raise it, or use the " +
-          "price multiple below, if the battery still won't reach the target.",
-        { unit: "$/kWh·h", min: 0, max: 10, step: 0.01, default: "0.1" },
+          "cheaper WILL be bought to fill it. It accrues over the hold window: the " +
+          "default $0.05 over a 4 h hold makes a full-window missing kWh worth up to " +
+          "$0.20. Raise it, or use the price multiple below, if the battery still " +
+          "won't reach the target.",
+        { unit: "$/kWh·h", min: 0, max: 10, step: 0.01, default: "0.05" },
       ),
       number(
         "battery.daily_target_penalty_price_multiple",

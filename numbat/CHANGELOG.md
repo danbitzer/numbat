@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `battery.daily_target_penalty_per_kwh` default lowered **10c → 5c** per
+  kWh-hour of shortfall. Over the default 4 h hold that still values a
+  kWh missing for the whole window at 20c — above most evening import
+  premiums — without overbidding genuinely better opportunities. Saved
+  configs store the value explicitly and are unaffected.
+
 - Opinionated defaults for two optimizer knobs (fresh installs and cleared
   fields only — saved configs store their values explicitly):
   `optimizer.min_battery_export_spread` **0 → 5c** (no more cycling the

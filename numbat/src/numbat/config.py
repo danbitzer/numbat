@@ -135,7 +135,7 @@ class Battery(BaseModel):
     daily_target_soc: float = Field(default=0.0, ge=0, le=1)
     daily_target_time: dt_time = dt_time(15, 0)
     daily_target_hold_hours: float = Field(default=4.0, ge=0)
-    daily_target_penalty_per_kwh: float = Field(default=0.10, ge=0)
+    daily_target_penalty_per_kwh: float = Field(default=0.05, ge=0)
     # 0 = use the fixed penalty above. >0 = also enforce a penalty of at least
     # (multiple × median forward import price), so the target dominates the
     # tariff and actually gets filled. a few × is plenty.

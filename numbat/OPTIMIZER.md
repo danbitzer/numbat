@@ -183,16 +183,16 @@ full-charge target** (e.g. 100% at 3pm). Two things make it work:
 - **It's a floor held through the evening** (default 4 hours), not a single
   instant — so the battery is full *for* the evening peak, not just at one
   moment it could immediately sell out of.
-- **It's soft, with a price.** The penalty (default 10c per kWh, per hour of
+- **It's soft, with a price.** The penalty (default 5c per kWh, per hour of
   shortfall) is your maximum willingness-to-pay to be full. Anything cheaper
   than the penalty gets done (topping up from cheap solar or a cheap grid
   window); anything dearer doesn't. A genuine feed-in spike still outbids
   it — which is what you want.
 
 > **Pitfall — a penalty below your evening prices.** The penalty is paid
-> per hour short, so with the default 4-hour hold a 10c penalty means being
-> short is worth at most ~40c/kWh to avoid. If topping up the last few kWh
-> means importing at 50c, the battery will (correctly, by its lights) stop
+> per hour short, so with the default 4-hour hold a 5c penalty means being
+> short is worth at most ~20c/kWh to avoid. If topping up the last few kWh
+> means importing at 30c, the battery will (correctly, by its lights) stop
 > short of the target. Either raise the penalty, or set the
 > **daily target price multiple**, which
 > automatically keeps the penalty above the going price level (it uses
