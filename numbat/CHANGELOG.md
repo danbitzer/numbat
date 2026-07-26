@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Opinionated defaults for two optimizer knobs (fresh installs and cleared
+  fields only — saved configs store their values explicitly):
+  `optimizer.min_battery_export_spread` **0 → 5c** (no more cycling the
+  battery for sub-wear-cost export margins out of the box) and
+  `optimizer.import_penalty_per_kwh` (Import reluctance) **0 → 5c**
+  (import-to-sell-later bets must clear a real margin). Set either to an
+  explicit `0` to restore the old always-on behaviour.
+- The `weather` entity is now **optional**: without it Numbat simply plans
+  without the temperature response (load forecast is time-of-day only) and
+  skips the forecast call instead of warning every cycle.
+
 ## 0.11.0
 
 - **HEM is now Numbat — Energy Optimizer**: the **NUM**erical **BAT**tery

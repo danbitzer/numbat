@@ -101,8 +101,10 @@ export const SECTIONS: SectionSpec[] = [
       entity(
         "entities.weather",
         "Weather",
-        "Any weather entity with an hourly forecast — feeds the temperature response.",
+        "Any weather entity with an hourly forecast — feeds the temperature response. " +
+          "Without it, load planning is time-of-day only.",
         ["weather"],
+        { optional: true, default: "" },
       ),
       entity(
         "entities.load_power",
@@ -363,7 +365,7 @@ export const SECTIONS: SectionSpec[] = [
           "beats the value of holding by at least this margin, killing pennies-margin " +
           "churn. 0 = off (sell whenever marginally profitable). The automatic " +
           "counterpart to grid min battery export price.",
-        { unit: "$/kWh", min: 0, max: 10, step: 0.01, default: "0" },
+        { unit: "$/kWh", min: 0, max: 10, step: 0.01, default: "0.05" },
       ),
       number(
         "optimizer.import_penalty_per_kwh",
@@ -375,7 +377,7 @@ export const SECTIONS: SectionSpec[] = [
           "import now. Skipped when the buy price is negative (getting paid to " +
           "charge stays attractive). May need a higher daily-target penalty to " +
           "still fill via the grid. 0 = off.",
-        { unit: "$/kWh", min: 0, max: 10, step: 0.01, default: "0" },
+        { unit: "$/kWh", min: 0, max: 10, step: 0.01, default: "0.05" },
       ),
       number(
         "optimizer.action_switch_threshold_dollars",

@@ -49,11 +49,12 @@ async def main() -> None:
             amber.get_prices(), solar.get_pv(), sungrow.get_battery_state()
         )
         await load_forecaster.refresh(now)
-        try:
-            temps_series = await weather.get_temperature_forecast()
-        except WeatherParseError as e:
-            print(f"warning: no temperature forecast ({e}); temperature response disabled")
-            temps_series = None
+        temps_series = None
+        if settings.entities.weather:
+            try:
+                temps_series = await weather.get_temperature_forecast()
+            except WeatherParseError as e:
+                print(f"warning: no temperature forecast ({e}); temperature response disabled")
 
     horizon = timedelta(hours=settings.optimizer.horizon_hours)
     grid = TimeGrid.build(now, prices.sell.times, horizon)

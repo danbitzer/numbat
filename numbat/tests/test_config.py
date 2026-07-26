@@ -40,14 +40,24 @@ def test_minimal_config_defaults():
     assert settings.entities.load_power == ""
 
 
+def test_weather_entity_is_optional():
+    # without a weather entity the temp response is simply disabled
+    config = json.loads(json.dumps(MINIMAL_CONFIG))
+    del config["entities"]["weather"]
+    settings = Settings.model_validate(config)
+    assert settings.entities.weather == ""
+
+
 def test_redesign_defaults_and_overrides():
     """The optimizer-redesign knobs: hold-value anchor, deadband, windowed
     daily target, manual export floor."""
     s = make_settings()
     assert s.optimizer.hold_value_floor == 0.01
     assert s.optimizer.hold_value_scaling == 1.0
-    assert s.optimizer.min_battery_export_spread == 0.0
-    assert s.optimizer.import_penalty_per_kwh == 0.0
+    # 5c defaults: a fresh install shouldn't churn the battery for
+    # sub-wear-cost export margins or import on thin resale bets
+    assert s.optimizer.min_battery_export_spread == 0.05
+    assert s.optimizer.import_penalty_per_kwh == 0.05
     assert s.battery.daily_target_hold_hours == 4.0
     assert s.battery.daily_target_penalty_price_multiple == 0.0
     assert s.grid.min_battery_export_price is None
