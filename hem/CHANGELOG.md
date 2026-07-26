@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.0
 
 - **Settings backup**: a new **Backup** card at the bottom of Settings.
   **Export settings** downloads the saved config as a JSON file (the exact
