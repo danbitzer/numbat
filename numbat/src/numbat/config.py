@@ -120,8 +120,10 @@ class Battery(BaseModel):
     # The sell floor soc_min is not: battery→grid export may never take (or
     # leave) SoC below this fraction of capacity; serving the house still
     # may, down to soc_min. "Keep the bottom X% for the house." One-way — it
-    # blocks sales, never forces charging back above itself. 0 = off.
-    export_reserve_soc: float = Field(default=0.0, ge=0, le=1)
+    # blocks sales, never forces charging back above itself. 0 = off. Binds
+    # only while above soc_min, so the 10% default is inert until soc_min is
+    # lowered below it (at the default soc_min of 10% nothing changes).
+    export_reserve_soc: float = Field(default=0.10, ge=0, le=1)
     wear_cost_per_kwh: float = Field(default=0.03, ge=0)
     allow_grid_charge: bool = True
     # Sign of the battery power sensor. The mkaiser Sungrow package reports

@@ -10,9 +10,13 @@
   reserve it never defends itself with imports; below it the battery covers
   the house's uncovered load only (nothing reaches the grid, not even by
   displacing PV). Percent field in the Battery section, sandboxable in Test
-  mode, default 0 = off. The intended pairing: `soc_min` at the inverter's
+  mode. Default 10% — deliberately equal to the default `soc_min`, so it
+  binds only once `soc_min` is lowered toward the inverter's floor (0 =
+  off). The intended pairing: `soc_min` at the inverter's
   enforced minimum, the export reserve at your comfort level, `load.buffer`
   for hungry-day insurance.
+- The "Planning reserve (SoC min)" field is renamed simply **SoC min**
+  (docs updated to match).
 
 - `soc_min` guidance corrected (field help + docs): it hard-floors **all**
   planned discharge — including serving the house — so once a plan reaches

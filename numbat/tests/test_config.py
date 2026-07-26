@@ -100,8 +100,11 @@ def test_invalid_soc_bounds_rejected():
         Settings.model_validate(config)
 
 
-def test_export_reserve_default_off_and_bounded_by_soc_max():
-    assert make_settings().battery.export_reserve_soc == 0.0
+def test_export_reserve_default_and_bounded_by_soc_max():
+    # 10% — deliberately equal to the default soc_min, so it's inert until
+    # soc_min is lowered toward the inverter's floor (the gate needs
+    # reserve > floor). Explicit 0 turns it off.
+    assert make_settings().battery.export_reserve_soc == 0.10
     config = json.loads(json.dumps(MINIMAL_CONFIG))
     config["battery"]["soc_max"] = 0.9
     config["battery"]["export_reserve_soc"] = 0.95

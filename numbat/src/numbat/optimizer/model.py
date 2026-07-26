@@ -200,7 +200,7 @@ def solve(
     sell = np.minimum(inputs.sell, buy - SELL_BUY_MARGIN)
     # Start from the ACTUAL SoC, even below soc_min — clamping it up to the
     # floor invents energy that isn't there (seen live: a BMS recalibration
-    # dropped the real SoC below the planning reserve and the plan kept
+    # dropped the real SoC below soc_min and the plan kept
     # spending the phantom 4+ kWh). The hard floor relaxes to the actual
     # start, so a below-reserve battery can never be discharged further and
     # recovers above soc_min when prices make charging worthwhile. Clip only

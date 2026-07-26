@@ -162,14 +162,15 @@ Below it the battery never sells, full stop (it still runs the house, and
 solar still exports). Use it if you want a guarantee in dollars rather than
 a margin.
 
-And a state-of-charge one: the **export reserve** (default 0 = off).
+And a state-of-charge one: the **export reserve** (default 10%; 0 = off).
 Selling may never take — or leave — the battery below it, while serving
-your own house still may, down to the planning reserve. It's the "use the
+your own house still may, down to SoC min. It's the "use the
 top 75% for trading, keep the bottom 25% for the house" knob, and the
-partner the planning reserve needed: set the planning reserve at the
+partner SoC min needed: set SoC min at the
 inverter's enforced minimum, the export reserve wherever your comfort
-level sits. It's one-way — it blocks sales, never forces charging back
-above itself — so unlike a high planning reserve it never defends itself
+level sits (it binds only while SoC min is below it). It's one-way — it
+blocks sales, never forces charging back
+above itself — so unlike a high SoC min it never defends itself
 with imports.
 
 All three only restrict *selling stored energy*. Solar export, charging,
@@ -255,15 +256,15 @@ A few quieter mechanisms keep the plan sensible:
   changes if the new plan beats sticking with the old action by more than
   this, across the whole horizon — this stops the battery flip-flopping
   between near-identical plans every 5 minutes.
-- **Honest state of charge:** if the battery reports below its planning
-  reserve (e.g. after a sensor recalibration), the plan starts from the real
+- **Honest state of charge:** if the battery reports below SoC min
+  (e.g. after a sensor recalibration), the plan starts from the real
   number rather than pretending the reserve energy exists.
 - **Stale-data safety:** if prices stop updating, Numbat stops trusting them
   rather than planning on fiction, and your inverter's failsafe keeps it in
   plain self-consumption.
 
-> **Pitfall — a high planning reserve as forecast insurance.** The planning
-> reserve (SoC min) floors *all* planned discharge, including serving your
+> **Pitfall — a high SoC min as forecast insurance.** SoC min floors
+> *all* planned discharge, including serving your
 > own house: once the plan grinds down to it, remaining load is met by grid
 > imports — so every point above the inverter's own minimum is energy the
 > plan defends with imports rather than spends. Meanwhile the inverter's
@@ -336,4 +337,4 @@ make it a great time to fill the battery.
 | stop chasing forecast spikes it can't trust | Sell price forecast haircut |
 | keep something in the tank for possible spikes | Spike reserve settings |
 | plan for a hungrier house than the forecast | Load forecast buffer |
-| never plan to spend the bottom X% | Planning reserve (SoC min) — keep near the inverter's floor; see pitfalls |
+| never plan to spend the bottom X% | SoC min — keep near the inverter's floor; see pitfalls |
