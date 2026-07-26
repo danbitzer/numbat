@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0
 
 - **New: `battery.export_reserve_soc`** — the SoC-based sell floor. Selling
   stored energy to the grid may never take (or leave) the battery below it,
