@@ -78,11 +78,16 @@ settings panel) rather than in the live Entities section.
 Physical parameters of your battery. `wear_cost_per_kwh` is the degradation cost charged
 against every discharged kWh in the objective. It is a *throughput* cost only — it never
 lowers the value of stored energy (see the hold value under `optimizer`), so raising it
-makes the battery cycle **less**, as you'd expect. A reasonable value is replacement cost
-÷ lifetime throughput; realistic lithium is **~0.5–3c/kWh** (e.g. a $6,000 battery
-good for 300,000 kWh of lifetime throughput — 50 kWh usable × 6,000 cycles — is 2c/kWh;
-battery warranties often imply well under 1c). The default is 3c, the top of that
-range; much above ~4c is usually too high and will suppress genuine arbitrage.
+makes the battery cycle **less**, as you'd expect. A reasonable value is the *wearing
+part's* replacement cost ÷ its lifetime throughput — and where you draw that line is a
+judgment call, so know the bounds. Strictly the cells: a future cell-stack replacement
+at ever-falling cell prices (e.g. 32 kWh at ~$150/kWh ≈ $5,000, over 8,000 cycles ≈
+256,000 kWh → ~2c/kWh). Broadly the full installed price ÷ the same throughput →
+6–10c — but that charges cycling for the inverter, wiring and labour (which wear far
+slower, on their own clock) and ignores that at ~1 cycle/day the cells usually reach
+calendar end-of-life before they run out of cycles. Reality sits between — a cell swap
+needs labour too — and defensible answers land at **~0.5–3c/kWh**. The default is 3c,
+the cautious top of that range.
 
 Note that "every discharged kWh" **includes serving your own house**: the battery only
 covers the load when the buy price beats roughly `wear + hold value/efficiency`, so an

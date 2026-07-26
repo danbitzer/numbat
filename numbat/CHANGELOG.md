@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Wear-cost guidance reworked (docs + field help): the old worked example
+  priced 50 kWh of battery at $6,000 — raw-cell money, not an installable
+  system price. The docs now show the bounds of the maths — a cells-only
+  future replacement (~2c/kWh) vs full-installed-price ÷ throughput
+  (6–10c, which charges cycling for inverter/labour that wear on their own
+  clock and ignores calendar aging) — and treat where to draw the line as
+  a judgment call landing in the 0.5–3c range. They also spell out why
+  the number deserves care: wear sits directly in the import decision —
+  every cent of wear is a cent of import price the plan pays before
+  touching the battery. The 3c default is unchanged; the "warranties often
+  imply well under 1c" aside is gone.
 - `battery.daily_target_penalty_per_kwh` default lowered **10c → 5c** per
   kWh-hour of shortfall. Over the default 4 h hold that still values a
   kWh missing for the whole window at 20c — above most evening import
@@ -13,7 +24,6 @@
   hold window, so 100% of the median over a 4 h hold already values a
   full-window missing kWh at ~4× the going rate — 50–150% is plenty, and
   larger values only raise what an extreme-priced day may cost.
-
 - Opinionated defaults for two optimizer knobs (fresh installs and cleared
   fields only — saved configs store their values explicitly):
   `optimizer.min_battery_export_spread` **0 → 5c** (no more cycling the
