@@ -4,11 +4,14 @@
 
 - Wear-cost guidance reworked (docs + field help): the old worked example
   priced 50 kWh of battery at $6,000 — raw-cell money, not an installable
-  system price. The honest basis is now spelled out — the wearing
-  component (a future cell-stack replacement at falling cell prices) over
-  the cells' cycle throughput — with a warning that full-installed-price ÷
-  throughput maths suggests 6–10c/kWh and over-suppresses cycling. The
-  0.5–3c range and the 3c default are unchanged; the "warranties often
+  system price. The docs now show the bounds of the maths — a cells-only
+  future replacement (~2c/kWh) vs full-installed-price ÷ throughput
+  (6–10c, which charges cycling for inverter/labour that wear on their own
+  clock and ignores calendar aging) — and treat where to draw the line as
+  a judgment call landing in the 0.5–3c range. They also spell out why
+  the number deserves care: wear sits directly in the import decision —
+  every cent of wear is a cent of import price the plan pays before
+  touching the battery. The 3c default is unchanged; the "warranties often
   imply well under 1c" aside is gone.
 - Opinionated defaults for two optimizer knobs (fresh installs and cleared
   fields only — saved configs store their values explicitly):

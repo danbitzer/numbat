@@ -78,16 +78,16 @@ settings panel) rather than in the live Entities section.
 Physical parameters of your battery. `wear_cost_per_kwh` is the degradation cost charged
 against every discharged kWh in the objective. It is a *throughput* cost only — it never
 lowers the value of stored energy (see the hold value under `optimizer`), so raising it
-makes the battery cycle **less**, as you'd expect. A reasonable value is the **wearing
-component's** replacement cost ÷ its lifetime throughput — the cells, not the full
-installed price: inverter, wiring and labour don't wear with cycling, and at a typical
-cycle a day the cells usually reach calendar end-of-life before they run out of cycles.
-Priced honestly — a future cell-stack replacement at ever-falling cell prices, spread
-over the cells' cycle throughput (e.g. 32 kWh of cells at ~$150/kWh ≈ $5,000, over
-8,000 cycles ≈ 256,000 kWh → ~2c/kWh) — realistic lithium is **~0.5–3c/kWh**. Dividing
-a full installed price by the same throughput suggests 6–10c, which is too high and
-will suppress genuine arbitrage. The default is 3c, the cautious top of the honest
-range.
+makes the battery cycle **less**, as you'd expect. A reasonable value is the *wearing
+part's* replacement cost ÷ its lifetime throughput — and where you draw that line is a
+judgment call, so know the bounds. Strictly the cells: a future cell-stack replacement
+at ever-falling cell prices (e.g. 32 kWh at ~$150/kWh ≈ $5,000, over 8,000 cycles ≈
+256,000 kWh → ~2c/kWh). Broadly the full installed price ÷ the same throughput →
+6–10c — but that charges cycling for the inverter, wiring and labour (which wear far
+slower, on their own clock) and ignores that at ~1 cycle/day the cells usually reach
+calendar end-of-life before they run out of cycles. Reality sits between — a cell swap
+needs labour too — and defensible answers land at **~0.5–3c/kWh**. The default is 3c,
+the cautious top of that range.
 
 Note that "every discharged kWh" **includes serving your own house**: the battery only
 covers the load when the buy price beats roughly `wear + hold value/efficiency`, so an
