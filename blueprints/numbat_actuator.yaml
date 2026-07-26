@@ -38,7 +38,7 @@
 # "no_charge" is self-consumption with charging blocked.
 #
 # SAFETY, built in: every run first checks Numbat's heartbeat. If the add-on is
-# dead/stale (or reports degraded), uncurtail + idle actions run instead — so
+# dead/stale (or reports an error), uncurtail + idle actions run instead — so
 # a crashed Numbat can never leave your inverter stuck in forced mode or capped
 # at zero export. The failsafe check runs every 5 minutes even without sensor
 # changes, and also covers the sensors disappearing entirely (HA restart
@@ -53,7 +53,7 @@ blueprint:
   description: >-
     Applies sensor.numbat_action / sensor.numbat_power_setpoint to your inverter
     via action sequences you define, with a built-in heartbeat failsafe that
-    reverts to idle when Numbat is stale, degraded, or gone. Optional curtail
+    reverts to idle when Numbat is stale, errored, or gone. Optional curtail
     sequences cap export during negative feed-in; optional grid-connection
     sensors revert to idle during a grid outage.
   homeassistant:
@@ -114,7 +114,7 @@ blueprint:
       name: Idle / self-consumption actions
       description: >-
         Return the inverter to its normal behaviour. Also used as the
-        failsafe when Numbat is stale or degraded — keep it simple and robust.
+        failsafe when Numbat is stale or errored — keep it simple and robust.
       selector:
         action:
     no_charge_actions:
@@ -206,7 +206,7 @@ conditions:
   # The periodic sweep only needs to act when Numbat is NOT healthy or the grid
   # is down (failsafe re-assert); while healthy and on-grid, the state
   # triggers handle every real change. Keeps the write rate at "only when
-  # something changed" + one idle re-assert per 5min while degraded
+  # something changed" + one idle re-assert per 5min while Numbat is not ok
   # (idempotent by requirement on idle_actions).
   - condition: template
     value_template: >-
@@ -239,7 +239,7 @@ actions:
           # actions this is exactly idle
           - sequence: !input idle_actions
           - sequence: !input curtail_actions
-    # idle and the failsafe (stale/degraded/missing Numbat) land here; lifting
+    # idle and the failsafe (stale/errored/missing Numbat) land here; lifting
     # the export cap is part of failing safe
     default:
       - sequence: !input uncurtail_actions

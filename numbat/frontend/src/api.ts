@@ -206,11 +206,26 @@ export async function runHistorySimulation(req: {
   return postSimulation("./api/simulate/history", req);
 }
 
+// The /health payload — same body on 200 and 503 (unhealthy), so parse
+// without checking resp.ok. The dashboard polls this to surface failing
+// planning: /api/plan keeps serving the last good plan when cycles fail
+// (that's the point of the fallback), so plan polling alone can't tell.
+export const HealthResponseSchema = z.object({
+  healthy: z.boolean(),
+  lifecycle: z.string(),
+  last_success: z.string().nullable(),
+  last_error: z.string(),
+});
+export type HealthResponse = z.infer<typeof HealthResponseSchema>;
+
+export async function fetchHealth(): Promise<HealthResponse> {
+  const resp = await fetch("./health", { cache: "no-store" });
+  return HealthResponseSchema.parse(await resp.json());
+}
+
 export async function fetchHealthError(): Promise<string> {
   try {
-    const resp = await fetch("./health", { cache: "no-store" });
-    const body = (await resp.json()) as { last_error?: string };
-    return body.last_error ?? "";
+    return (await fetchHealth()).last_error;
   } catch {
     return "";
   }

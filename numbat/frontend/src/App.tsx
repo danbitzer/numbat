@@ -1,7 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, FlaskConical, Settings as SettingsIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { type ConfigResponse, fetchConfig, fetchPlanOrExplain, type PlanResponse } from "./api";
+import {
+  type ConfigResponse,
+  fetchConfig,
+  fetchHealth,
+  fetchPlanOrExplain,
+  type HealthResponse,
+  type PlanResponse,
+} from "./api";
 import { installIosScrollKick } from "./iosScrollKick";
 import { PLAN_REFRESHING_KEY } from "./planRefresh";
 import { PlanView } from "./PlanView";
@@ -297,6 +304,28 @@ function vacationBanner(plan: PlanResponse): string | null {
   return `🌴 Vacation mode — load forecast flattened to a ${v.baseline_kw} kW baseline ${until}.`;
 }
 
+/** Failing planning cycles are invisible in /api/plan — it keeps serving the
+ * last good plan by design — so the dashboard polls /health for them. Shown
+ * only while the loop is running: disabled/unconfigured have their own
+ * banner, and a stale last_error from before a disable must not resurface. */
+function planningErrorBanner(
+  health: HealthResponse | undefined,
+  plan: PlanResponse | undefined,
+): string | null {
+  if (!health || health.lifecycle !== "running") return null;
+  if (!health.last_error && health.healthy) return null;
+  const reason = health.last_error
+    ? `the last planning cycle failed: ${health.last_error}`
+    : "no planning cycle has succeeded recently";
+  const stale = plan
+    ? ` Showing the last good plan (computed ${new Date(plan.computed_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}).`
+    : "";
+  return (
+    `⚠ Planning error — ${reason}.` +
+    ` Your actuator's failsafe holds the inverter in self-consumption.${stale}`
+  );
+}
+
 function lifecycleBanner(config: ConfigResponse | undefined): string | null {
   if (!config || config.lifecycle === "running") return null;
   return config.lifecycle === "unconfigured"
@@ -324,6 +353,15 @@ function Dashboard({
       enabled: false,
       initialData: false,
     }).data === true;
+  // 503 (unhealthy) carries the same JSON body, so this succeeds either way;
+  // an unreachable add-on is already surfaced by the plan query's error.
+  const health = useQuery({
+    queryKey: ["health"],
+    queryFn: fetchHealth,
+    refetchInterval: 30_000,
+    retry: 1,
+  });
+  const planningError = planningErrorBanner(health.data, plan);
   const banner = lifecycleBanner(config);
   if (!plan) {
     return (
@@ -355,6 +393,7 @@ function Dashboard({
         </div>
       )}
       {error && <div className="text-xs text-destructive">{error}</div>}
+      {planningError && <Banner text={planningError} tone="error" />}
       {banner && <Banner text={banner} />}
       {vacationBanner(plan) && <Banner text={vacationBanner(plan) as string} />}
       {warningText(plan) && <Banner text={warningText(plan) as string} />}
@@ -363,9 +402,16 @@ function Dashboard({
   );
 }
 
-function Banner({ text }: { text: string }) {
+function Banner({ text, tone = "warn" }: { text: string; tone?: "warn" | "error" }) {
   return (
-    <div className="rounded-lg border border-[#efa63c] bg-[#efa63c]/10 px-3.5 py-2.5 text-[13px]">
+    <div
+      className={
+        "rounded-lg border px-3.5 py-2.5 text-[13px] " +
+        (tone === "error"
+          ? "border-destructive bg-destructive/10"
+          : "border-[#efa63c] bg-[#efa63c]/10")
+      }
+    >
       {text}
     </div>
   );
