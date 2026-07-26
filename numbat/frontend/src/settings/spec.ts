@@ -182,7 +182,7 @@ export const SECTIONS: SectionSpec[] = [
           "imports rather than spends. Keep it at (or just above) the inverter's " +
           "enforced minimum; for hungry-day insurance use the load forecast buffer " +
           "instead.",
-        { unit: "%", percent: true, min: 0, max: 100, step: 1, default: "10" },
+        { unit: "%", percent: true, min: 0, max: 100, step: 1, default: "5" },
       ),
       number("battery.soc_max", "SoC max", "Upper SoC bound as a percentage of capacity.", {
         unit: "%",

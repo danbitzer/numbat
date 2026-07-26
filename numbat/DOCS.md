@@ -153,8 +153,8 @@ reserve only when prices make that worthwhile.
 sell
 floor that `soc_min` is not: battery→grid export may never take — or leave —
 the battery below it, while serving your own house still may, down to
-`soc_min`. It binds only while `soc_min` sits below it, so the default is
-inert until you lower `soc_min` toward the inverter's floor. "Use the top 75% for trading, keep the bottom 25% for the house."
+`soc_min`. It binds only while `soc_min` sits below it; with the default
+`soc_min` of 5%, the 10% reserve is active out of the box. "Use the top 75% for trading, keep the bottom 25% for the house."
 It is one-way: it blocks sales, never forces charging back above itself, so
 it never defends itself with imports; below it the battery behaves exactly
 like the price-floored mode — covering the house's uncovered load, nothing
