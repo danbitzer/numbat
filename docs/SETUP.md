@@ -1,9 +1,9 @@
-# Setting up HEM from a fresh Home Assistant install
+# Setting up Numbat from a fresh Home Assistant install
 
-This walks from a clean Home Assistant OS install to HEM planning (dry-run),
+This walks from a clean Home Assistant OS install to Numbat planning (dry-run),
 and then — only after you've reviewed its plans for a while — to actual
 inverter control. Every
-step before "Install the HEM add-on" is an ordinary HA integration that HEM
+step before "Install the Numbat add-on" is an ordinary HA integration that Numbat
 merely reads, so if you already have some of them, skip ahead.
 
 What you'll end up with:
@@ -14,7 +14,7 @@ What you'll end up with:
 | Open-Meteo Solar Forecast | PV production forecast | HACS |
 | BOM weather (or any `weather.*` + outdoor temp sensor) | Hourly temperature forecast + observed outdoor temperature | HACS |
 | Battery integration | SoC %, battery power, house load (load learning) | e.g. mkaiser Sungrow |
-| **HEM add-on** | The optimizer + recommendation sensors + dashboard | this repo |
+| **Numbat add-on** | The optimizer + recommendation sensors + dashboard | this repo |
 | Actuator automation | Turns recommendations into inverter control | blueprint, later |
 
 ## 1. Prerequisites
@@ -28,7 +28,7 @@ What you'll end up with:
 
 ## 2. Amber Express (prices)
 
-HEM supports [Amber Express](https://github.com/hass-energy/amber-express)
+Numbat supports [Amber Express](https://github.com/hass-energy/amber-express)
 only — the core `amberelectric` integration's forecasts have 1c resolution and
 no advanced-price mode, which is not good enough to optimize against.
 
@@ -40,7 +40,7 @@ no advanced-price mode, which is not good enough to optimize against.
 3. **Set the pricing mode to "advanced price"** in the integration options.
    This makes the `forecast` attribute carry Amber's own SmartShift price
    prediction instead of raw AEMO forecasts, which over-predict spike duration
-   by hours. HEM assumes this mode.
+   by hours. Numbat assumes this mode.
 4. Note the entities it created — you'll need:
    - `sensor.amber_express_<site>_general_price` (buy)
    - `sensor.amber_express_<site>_feed_in_price` (sell)
@@ -54,13 +54,13 @@ no advanced-price mode, which is not good enough to optimize against.
 2. Add the integration with your latitude/longitude, panel declination (tilt),
    azimuth, and total DC kWp. If your array has multiple orientations, prefer
    one config entry that models the whole array (or sum per-plane sensors into
-   template sensors) — HEM reads a single pair of entities.
-3. Note `sensor.<name>_energy_production_today` and `..._tomorrow`. HEM uses
+   template sensors) — Numbat reads a single pair of entities.
+3. Note `sensor.<name>_energy_production_today` and `..._tomorrow`. Numbat uses
    their `watts` attribute (15-min resolution), not the state value.
 
 ## 4. Weather — BOM (forecast + outdoor temperature)
 
-HEM wants two temperature entities:
+Numbat wants two temperature entities:
 
 - a **`weather.*` entity** with hourly forecasts (`entities.weather`) — the
   *forecast* temperatures that the learned temperature response is applied to;
@@ -81,12 +81,12 @@ provides both in one install:
 Any other combination works too — e.g. the built-in Met.no entity for the
 forecast plus a physical outdoor sensor — as long as the weather entity
 answers `weather.get_forecasts` hourly and the temperature sensor has
-`state_class: measurement`. If either is missing, HEM still plans; it just
+`state_class: measurement`. If either is missing, Numbat still plans; it just
 loses the temperature response.
 
 ## 5. Battery and inverter sensors
 
-HEM needs two sensors from whatever integrates your battery:
+Numbat needs two sensors from whatever integrates your battery:
 
 - **SoC** in % (or 0–1)
 - **battery power** in W or kW (units must be on the entity)
@@ -101,24 +101,24 @@ use later.
 Two things to check:
 
 - **Sign convention**: watch `sensor.battery_power` while the battery charges.
-  If it reads *negative* while charging (mkaiser default), HEM's default
+  If it reads *negative* while charging (mkaiser default), Numbat's default
   `power_convention: charge_negative` is correct; if positive, set
   `charge_positive`.
-- **House load sensor** (e.g. mkaiser's `sensor.load_power`): HEM learns your
+- **House load sensor** (e.g. mkaiser's `sensor.load_power`): Numbat learns your
   hourly load profile from its history — there is no manual profile to type
   in. Together with the outdoor temperature sensor from step 4
-  (`entities.outdoor_temp`), HEM also learns your house's temperature
+  (`entities.outdoor_temp`), Numbat also learns your house's temperature
   response — how much load heatwaves and cold snaps add — and applies it to
-  forecast temperatures. Without a load sensor HEM still plans, but assumes
+  forecast temperatures. Without a load sensor Numbat still plans, but assumes
   **zero house load** and shows a warning on the dashboard; raise
   `battery.soc_min` to keep a comfort buffer until you can provide one.
 
-## 6. Install the HEM add-on
+## 6. Install the Numbat add-on
 
 1. Settings → Add-ons → Add-on store → ⋮ → Repositories → add
-   `https://github.com/danbitzer/hem` → install **Home Energy Manager**.
+   `https://github.com/danbitzer/numbat` → install **Numbat — Energy Optimizer**.
 2. Start the add-on. It boots **unconfigured and disabled** — no planning
-   runs yet. Open the **Energy Manager** sidebar item (ingress) → **Settings**
+   runs yet. Open the **Numbat** sidebar item (ingress) → **Settings**
    and fill in (every field has inline help; entity fields are searchable
    pickers):
    - **Entities** — the entities from steps 2–5.
@@ -128,14 +128,14 @@ Two things to check:
      SoC bounds, wear cost.
    - **Grid connection** — your connection's import limit and DNSP export limit.
    - **Spike strategy** — the spike-reserve hedge; defaults are sane.
-3. Flip **HEM enabled** on, save, and watch the add-on log: you should see
+3. Flip **Numbat enabled** on, save, and watch the add-on log: you should see
    `cycle ok: action=...` within a minute. The Dashboard view shows the plan
    — prices, PV/load forecast, SoC trajectory.
-4. Check Developer tools → States for `sensor.hem_action`,
-   `sensor.hem_power_setpoint`, `sensor.hem_soc_target`,
-   `sensor.hem_horizon_cost`, `sensor.hem_status`.
+4. Check Developer tools → States for `sensor.numbat_action`,
+   `sensor.numbat_power_setpoint`, `sensor.numbat_soc_target`,
+   `sensor.numbat_horizon_cost`, `sensor.numbat_status`.
 
-At this point HEM is a pure **recommendation engine** — it writes nothing to
+At this point Numbat is a pure **recommendation engine** — it writes nothing to
 the inverter, ever. Run it like this for at least a few days: watch the
 dashboard and compare its recommendations against the Amber app and what your
 inverter would have done on its own. Only wire up actuation once the plans
@@ -144,13 +144,13 @@ chasing, a load forecast that matches your household).
 
 ## 7. Actuation
 
-Import [`blueprints/hem_actuator.yaml`](../blueprints/hem_actuator.yaml)
+Import [`blueprints/numbat_actuator.yaml`](../blueprints/numbat_actuator.yaml)
 (Settings → Automations → Blueprints → Import), create an automation from it,
 and fill in the three action sequences — charge / discharge / idle (plus
 optional curtail/un-curtail export-limit sequences for negative feed-in) — for your
 hardware; a complete Sungrow (mkaiser) example lives in the add-on
-Documentation tab ([hem/DOCS.md](../hem/DOCS.md)). The blueprint has a
-heartbeat failsafe built in: if HEM stops publishing or reports degraded, your
+Documentation tab ([numbat/DOCS.md](../numbat/DOCS.md)). The blueprint has a
+heartbeat failsafe built in: if Numbat stops publishing or reports degraded, your
 idle sequence runs and the inverter returns to self-consumption.
 
 Bench-test before trusting it: watch a charge → discharge → idle transition,

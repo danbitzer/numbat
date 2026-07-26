@@ -1,6 +1,0 @@
-configuration:
-  log_level:
-    name: Log level
-    description: >-
-      Logging verbosity. Everything else is configured in the web UI: open
-      the Energy Manager panel and go to Settings.
