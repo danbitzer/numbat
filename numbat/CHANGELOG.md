@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- `soc_min` guidance corrected (field help + docs): it hard-floors **all**
+  planned discharge — including serving the house — so once a plan reaches
+  it, remaining load is met by grid imports, while during `idle` the
+  inverter's self-consumption drains below it anyway (the plan budgets
+  imports reality never draws). The old advice to raise it above the
+  inverter's floor "as insurance against forecast error" is withdrawn:
+  keep it at/near the inverter's enforced minimum and use `load.buffer`
+  for hungry-day insurance. Spotted via a time-travel replay importing at
+  5:30am to defend a 25% reserve.
+
 - Wear-cost guidance reworked (docs + field help): the old worked example
   priced 50 kWh of battery at $6,000 — raw-cell money, not an installable
   system price. The docs now show the bounds of the maths — a cells-only
