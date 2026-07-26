@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Wear-cost guidance reworked (docs + field help): the old worked example
+  priced 50 kWh of battery at $6,000 — raw-cell money, not an installable
+  system price. The honest basis is now spelled out — the wearing
+  component (a future cell-stack replacement at falling cell prices) over
+  the cells' cycle throughput — with a warning that full-installed-price ÷
+  throughput maths suggests 6–10c/kWh and over-suppresses cycling. The
+  0.5–3c range and the 3c default are unchanged; the "warranties often
+  imply well under 1c" aside is gone.
 - Opinionated defaults for two optimizer knobs (fresh installs and cleared
   fields only — saved configs store their values explicitly):
   `optimizer.min_battery_export_spread` **0 → 5c** (no more cycling the

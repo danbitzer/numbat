@@ -109,13 +109,19 @@ the battery holds charge more stubbornly; below 100% it trades more freely.
 Every kWh the battery discharges shortens its life a little. The wear cost
 prices that: it's charged against **every discharged kWh** in the plan.
 
-A realistic number is your battery's replacement cost divided by its
-lifetime throughput (all the energy it will ever deliver). For most lithium
-batteries that's **half a cent to 3 cents per kWh** — e.g. a $6,000 battery
-good for 300,000 kWh over its life (say 50 kWh of usable capacity × 6,000
-cycles) works out to 2c/kWh. Numbat ships with a default of 3c — the top of
-that realistic range — so compute your own number and lower it if yours is
-smaller.
+A realistic number is the cost of the *wearing part* divided by the energy
+it will deliver — and it's easy to overstate. Dividing a full installed
+price by cycle throughput (say $16,000 for 32 kWh with 8,000-cycle cells:
+16,000 ÷ 256,000 kWh ≈ 6c) charges cycling for the inverter, wiring and
+labour, which don't wear — and at a typical cycle a day the cells reach
+calendar end-of-life years before they run out of cycles, so extra cycling
+mostly consumes life the calendar was going to take anyway. The honest
+basis is a future **cell-stack replacement**, at cell prices that keep
+falling, spread over the cells' cycle throughput: ~$150 per kWh of cells
+over 8,000 cycles is about 2c/kWh. Priced that way, most lithium systems
+land around **half a cent to 3 cents per kWh**. Numbat ships with a default
+of 3c — the cautious top of that range — so compute your own number and
+lower it if yours is smaller.
 
 > **Pitfall — using wear cost to stop cheap exports.** It's tempting to
 > raise the wear cost to mean "don't cycle the battery unless it's really

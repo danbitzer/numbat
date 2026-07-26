@@ -195,9 +195,10 @@ export const SECTIONS: SectionSpec[] = [
         "Wear cost",
         "Degradation cost charged against EVERY discharged kWh — including serving " +
           "your own house: set it too high and the battery sits idle while you import " +
-          "at prices it should be beating. Keep it the honest physical number " +
-          "(replacement cost ÷ lifetime throughput; realistic lithium ~0.5–3c — " +
-          "battery warranties often imply well under 1c) and use the min battery " +
+          "at prices it should be beating. Keep it the honest physical number: cell " +
+          "replacement cost ÷ cell cycle throughput — cells only, NOT the full " +
+          "installed price (inverters and labour don't wear, and calendar aging " +
+          "usually binds first). Realistic lithium ~0.5–3c. Use the min battery " +
           "export spread for " +
           "\"only sell when it's worth it\" selectivity instead.",
         { unit: "$/kWh", min: 0, step: 0.01, default: "0.03" },
