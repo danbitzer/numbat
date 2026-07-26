@@ -117,6 +117,11 @@ class Battery(BaseModel):
     efficiency_discharge: float = Field(default=0.95, gt=0.5, le=1)
     soc_min: float = Field(default=0.10, ge=0, le=1)
     soc_max: float = Field(default=1.0, ge=0, le=1)
+    # The sell floor soc_min is not: battery→grid export may never take (or
+    # leave) SoC below this fraction of capacity; serving the house still
+    # may, down to soc_min. "Keep the bottom X% for the house." One-way — it
+    # blocks sales, never forces charging back above itself. 0 = off.
+    export_reserve_soc: float = Field(default=0.0, ge=0, le=1)
     wear_cost_per_kwh: float = Field(default=0.03, ge=0)
     allow_grid_charge: bool = True
     # Sign of the battery power sensor. The mkaiser Sungrow package reports
@@ -148,6 +153,8 @@ class Battery(BaseModel):
     def _soc_bounds_ordered(self) -> Self:
         if self.soc_min >= self.soc_max:
             raise ValueError("battery.soc_min must be < battery.soc_max")
+        if self.export_reserve_soc > self.soc_max:
+            raise ValueError("battery.export_reserve_soc must be <= battery.soc_max")
         if self.daily_target_time.tzinfo is not None:
             raise ValueError("battery.daily_target_time must be a plain local time (no offset)")
         return self

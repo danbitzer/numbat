@@ -52,6 +52,9 @@ class BatteryParams:
     soc_max_kwh: float
     wear_cost_per_kwh: float
     allow_grid_charge: bool
+    # Battery→grid sales may never take (or leave) SoC below this; serving
+    # the house's uncovered load still may, down to soc_min_kwh. 0 = off.
+    export_reserve_kwh: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -264,6 +267,34 @@ def solve(
         if below.size:
             residual_load = np.maximum(0.0, inputs.load - inputs.pv)
             constraints.append(pd[below] <= residual_load[below])
+    # Export reserve: the SoC-based counterpart to the price floors above.
+    # Battery→grid sales may never take (or leave) SoC below the reserve;
+    # serving the house's uncovered load still may, down to the hard floor.
+    # One-way: it blocks sales, never forces charging back above itself.
+    # The price floors' condition is on prices (input data, precomputable);
+    # this one is on SoC — a decision variable — so it needs a binary: w[t]=1
+    # permits selling at step t and requires that step to END at or above the
+    # reserve (sell down TO it, never through it). With w[t]=0 the discharge
+    # cap is the same residual-load trick as above, so stored energy can't
+    # reach the grid even by displacing PV. Created only when the reserve is
+    # active and above the hard floor — zero extra binaries otherwise.
+    if battery.export_reserve_kwh > soc_floor:
+        sell_ok = cp.Variable(T, boolean=True)
+        pd_sell = cp.Variable(T, nonneg=True)
+        residual = np.maximum(0.0, inputs.load - inputs.pv)
+        pd_cap = (
+            inputs.max_discharge_kw_step
+            if inputs.max_discharge_kw_step is not None
+            else np.full(T, battery.max_discharge_kw)
+        )
+        constraints += [
+            pd_sell <= pd,
+            pd - pd_sell <= residual,
+            pd_sell <= cp.multiply(pd_cap, sell_ok),
+            soc[1:]
+            >= battery.export_reserve_kwh
+            - (battery.export_reserve_kwh - soc_floor) * (1 - sell_ok),
+        ]
     # The self-consumption envelope: charge from PV only, export only PV
     # leftovers (no battery export); serving load from the battery is free.
     self_consumption = [pc[0] <= pv_u[0], ge[0] <= pv_u[0] - pc[0]]

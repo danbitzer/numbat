@@ -100,6 +100,15 @@ def test_invalid_soc_bounds_rejected():
         Settings.model_validate(config)
 
 
+def test_export_reserve_default_off_and_bounded_by_soc_max():
+    assert make_settings().battery.export_reserve_soc == 0.0
+    config = json.loads(json.dumps(MINIMAL_CONFIG))
+    config["battery"]["soc_max"] = 0.9
+    config["battery"]["export_reserve_soc"] = 0.95
+    with pytest.raises(ValueError, match="export_reserve_soc"):
+        Settings.model_validate(config)
+
+
 def test_store_roundtrip_and_backup(tmp_path: Path):
     store = ConfigStore(tmp_path / "numbat-config.json")
     assert store.load() is None  # unconfigured

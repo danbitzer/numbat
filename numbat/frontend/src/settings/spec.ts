@@ -193,6 +193,15 @@ export const SECTIONS: SectionSpec[] = [
         default: "100",
       }),
       number(
+        "battery.export_reserve_soc",
+        "Export reserve (SoC)",
+        "Selling stored energy to the grid may never take the battery below this — " +
+          "serving your own house still may, down to the planning reserve. The " +
+          "\"keep the bottom X% for the house\" knob: it blocks sales, never forces " +
+          "charging back above itself. 0 = off.",
+        { unit: "%", percent: true, min: 0, max: 100, step: 1, default: "0" },
+      ),
+      number(
         "battery.wear_cost_per_kwh",
         "Wear cost",
         "Degradation cost charged against EVERY discharged kWh — including serving " +
