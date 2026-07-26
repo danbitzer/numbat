@@ -1,0 +1,250 @@
+# Numbat actuator: turn Numbat's recommendation sensors into inverter control.
+#
+# Numbat itself never writes to your inverter — this automation (which YOU own,
+# can read, edit, trace, and disable) is the only thing that does. You supply
+# three action sequences for your hardware (plus two optional ones for
+# curtailment):
+#
+#   charge_actions        — put the inverter into forced charge at `power_w` W
+#   discharge_actions     — forced discharge at `power_w` W
+#   idle_actions          — return to normal/self-consumption behaviour
+#   no_charge_actions     — (optional) self-consumption but battery may NOT
+#                           charge (Sungrow: self-consumption + max charge
+#                           power 0). Numbat publishes "no_charge" to defer
+#                           storing PV to a cheaper window while the battery
+#                           still covers load dips.
+#   restore_actions       — (optional) battery max charge power back to full;
+#                           runs first, before every branch, so a lingering 0
+#                           from no_charge can't cap a later charge/idle.
+#                           Required if you use no_charge.
+#   curtail_actions       — (optional) cap export/PV for negative feed-in;
+#                           runs AFTER idle_actions puts the battery to normal
+#   uncurtail_actions     — (optional) restore your normal export limit; runs
+#                           before every non-curtail branch (idempotent), so
+#                           leaving curtailment — or the failsafe firing —
+#                           always lifts the cap
+#
+# Leave the optional inputs empty and those actions simply behave as idle.
+#
+# Inside your sequences these variables are available:
+#   power_kw  — signed battery setpoint (+charge / −discharge), float
+#   power_w   — magnitude in watts (int), handy for number.set_value
+#   action    — "charge" | "discharge" | "idle" | "no_charge" | "curtail"
+#
+# Actions are grid-coupled: "charge" = charging FROM THE GRID, "discharge" =
+# exporting stored energy TO THE GRID. Battery-serves-the-house and
+# charge-from-PV-surplus arrive as "idle" — your inverter's normal
+# self-consumption mode already does those better than a forced setpoint.
+# "no_charge" is self-consumption with charging blocked.
+#
+# SAFETY, built in: every run first checks Numbat's heartbeat. If the add-on is
+# dead/stale (or reports degraded), uncurtail + idle actions run instead — so
+# a crashed Numbat can never leave your inverter stuck in forced mode or capped
+# at zero export. The failsafe check runs every 5 minutes even without sensor
+# changes, and also covers the sensors disappearing entirely (HA restart
+# while Numbat is down). Optionally supply a grid-connection sensor: during a
+# grid outage the inverter likewise reverts to idle/self-consumption —
+# forced grid moves make no sense islanded.
+#
+# Disabling this automation is the master off-switch: Numbat goes back to being
+# a pure recommendation engine.
+blueprint:
+  name: Numbat actuator — follow Numbat's battery plan
+  description: >-
+    Applies sensor.numbat_action / sensor.numbat_power_setpoint to your inverter
+    via action sequences you define, with a built-in heartbeat failsafe that
+    reverts to idle when Numbat is stale, degraded, or gone. Optional curtail
+    sequences cap export during negative feed-in; optional grid-connection
+    sensors revert to idle during a grid outage.
+  homeassistant:
+    min_version: 2024.10.0  # the `sequence:` grouping action
+  domain: automation
+  input:
+    action_sensor:
+      name: Numbat action sensor
+      selector:
+        entity:
+          domain: sensor
+      default: sensor.numbat_action
+    setpoint_sensor:
+      name: Numbat power setpoint sensor
+      selector:
+        entity:
+          domain: sensor
+      default: sensor.numbat_power_setpoint
+    status_sensor:
+      name: Numbat status sensor
+      selector:
+        entity:
+          domain: sensor
+      default: sensor.numbat_status
+    max_heartbeat_age_minutes:
+      name: Maximum heartbeat age (minutes)
+      description: Older than this and the failsafe (idle) runs.
+      selector:
+        number:
+          min: 5
+          max: 60
+          unit_of_measurement: min
+      default: 10
+    grid_sensor:
+      name: Grid connection sensor (optional)
+      description: >-
+        A binary sensor that is ON while the grid is up. When it reads OFF
+        (grid outage / islanded), the inverter reverts to idle /
+        self-consumption to protect the battery — forced modes make no sense
+        off-grid. Unavailable/unknown is treated as connected, so a flaky
+        sensor can't idle your plan. Leave at the default (a nonexistent
+        entity) to disable the check.
+      default: binary_sensor.none
+      selector:
+        entity:
+          domain: binary_sensor
+    charge_actions:
+      name: Charge actions
+      description: Put the inverter into forced charge at power_w watts.
+      selector:
+        action:
+    discharge_actions:
+      name: Discharge actions
+      description: Put the inverter into forced discharge at power_w watts.
+      selector:
+        action:
+    idle_actions:
+      name: Idle / self-consumption actions
+      description: >-
+        Return the inverter to its normal behaviour. Also used as the
+        failsafe when Numbat is stale or degraded — keep it simple and robust.
+      selector:
+        action:
+    no_charge_actions:
+      name: No-charge actions (optional)
+      description: >-
+        Self-consumption, but stop the battery CHARGING — it still covers load
+        dips (Sungrow: self-consumption mode + battery max charge power 0).
+        Numbat publishes "no_charge" to defer storing PV to a cheaper window.
+        Leave empty to treat no_charge as idle.
+      default: []
+      selector:
+        action:
+    curtail_actions:
+      name: Curtail actions (optional)
+      description: >-
+        Cap export/PV output for negative feed-in prices (e.g. set the
+        inverter's export power limit to 0). Runs after the idle actions.
+        Leave empty to treat curtail as idle.
+      default: []
+      selector:
+        action:
+    uncurtail_actions:
+      name: Un-curtail actions (optional)
+      description: >-
+        Restore your normal export limit. Runs before every charge,
+        discharge, idle, and failsafe branch — must be idempotent. Required
+        if you set curtail actions, else curtailment would stick.
+      default: []
+      selector:
+        action:
+    restore_actions:
+      name: Restore battery-limit actions (optional)
+      description: >-
+        Return the battery max charge power to full (your battery's rating in
+        watts). Runs first, before every branch, so a lingering 0 from
+        no_charge can't cap a later charge or self-consumption. Required if
+        you use no_charge; must be idempotent (guard the write).
+      default: []
+      selector:
+        action:
+
+triggers:
+  # to: null -> fire on state VALUE changes only; the sensors' attributes are
+  # republished every cycle and must not re-run the actions
+  - trigger: state
+    entity_id: !input action_sensor
+    to: null
+  - trigger: state
+    entity_id: !input setpoint_sensor
+    to: null
+  # grid drops (or returns): react immediately, not at the next plan change
+  # (the default binary_sensor.none doesn't exist, so this never fires)
+  - trigger: state
+    entity_id: !input grid_sensor
+    to: null
+  # failsafe sweep: catches a dead/stale Numbat even when no sensor ever changes
+  # again (including the sensors disappearing after an HA restart)
+  - trigger: time_pattern
+    minutes: "/5"
+
+variables:
+  action_sensor: !input action_sensor
+  setpoint_sensor: !input setpoint_sensor
+  status_sensor: !input status_sensor
+  max_heartbeat_age_minutes: !input max_heartbeat_age_minutes
+  grid_sensor: !input grid_sensor
+  numbat_alive: >-
+    {% set s = states(status_sensor) %}
+    {% set hb = state_attr(status_sensor, 'heartbeat') %}
+    {{ s == 'ok' and hb is not none
+       and (now() - (hb | as_datetime)) < timedelta(minutes=max_heartbeat_age_minutes | int) }}
+  # connected unless the sensor explicitly says OFF (unavailable/unknown/
+  # nonexistent != outage)
+  grid_connected: "{{ states(grid_sensor) != 'off' }}"
+  action: >-
+    {{ states(action_sensor) if numbat_alive and grid_connected else 'idle' }}
+  # power is read from the ACTION sensor's attributes (published atomically
+  # with the action, so they can never disagree); the setpoint sensor is the
+  # fallback for older Numbat versions
+  power_kw: >-
+    {% set p = state_attr(action_sensor, 'power_kw') %}
+    {{ (p if p is not none else states(setpoint_sensor)) | float(0) if numbat_alive else 0 }}
+  power_w: >-
+    {% set p = state_attr(action_sensor, 'power_w') %}
+    {{ (p if p is not none else state_attr(setpoint_sensor, 'power_w')) | int(0)
+       if numbat_alive else 0 }}
+
+conditions:
+  # The periodic sweep only needs to act when Numbat is NOT healthy or the grid
+  # is down (failsafe re-assert); while healthy and on-grid, the state
+  # triggers handle every real change. Keeps the write rate at "only when
+  # something changed" + one idle re-assert per 5min while degraded
+  # (idempotent by requirement on idle_actions).
+  - condition: template
+    value_template: >-
+      {{ trigger.platform != 'time_pattern' or not numbat_alive or not grid_connected }}
+
+actions:
+  # Always undo the sticky battery-limit override first: no_charge sets max
+  # charge power to 0, which would otherwise cap a later charge or idle. A
+  # guarded restore is a no-op when limits are already full.
+  - sequence: !input restore_actions
+  - choose:
+      - conditions: "{{ action == 'charge' }}"
+        sequence:
+          - sequence: !input uncurtail_actions
+          - sequence: !input charge_actions
+      - conditions: "{{ action == 'discharge' }}"
+        sequence:
+          - sequence: !input uncurtail_actions
+          - sequence: !input discharge_actions
+      - conditions: "{{ action == 'no_charge' }}"
+        sequence:
+          # idle first as the safe baseline (an empty input must never leave a
+          # previous forced mode running), then block charging
+          - sequence: !input uncurtail_actions
+          - sequence: !input idle_actions
+          - sequence: !input no_charge_actions
+      - conditions: "{{ action == 'curtail' }}"
+        sequence:
+          # battery to normal first, then cap export — with empty curtail
+          # actions this is exactly idle
+          - sequence: !input idle_actions
+          - sequence: !input curtail_actions
+    # idle and the failsafe (stale/degraded/missing Numbat) land here; lifting
+    # the export cap is part of failing safe
+    default:
+      - sequence: !input uncurtail_actions
+      - sequence: !input idle_actions
+
+# restart: a fresh recommendation mid-sequence supersedes the old one
+mode: restart
+max_exceeded: silent

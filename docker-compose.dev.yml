@@ -1,16 +1,16 @@
 services:
-  hem:
-    build: ./hem
+  numbat:
+    build: ./numbat
     environment:
-      HEM_HA_URL: ${HEM_HA_URL:-http://homeassistant.local:8123}
-      HEM_HA_TOKEN: ${HEM_HA_TOKEN:?set in .env or environment}
-      HEM_CONFIG_FILE: /data/hem-config.json
-      HEM_LOG_LEVEL: ${HEM_LOG_LEVEL:-debug}
+      NUMBAT_HA_URL: ${NUMBAT_HA_URL:-http://homeassistant.local:8123}
+      NUMBAT_HA_TOKEN: ${NUMBAT_HA_TOKEN:?set in .env or environment}
+      NUMBAT_CONFIG_FILE: /data/numbat-config.json
+      NUMBAT_LOG_LEVEL: ${NUMBAT_LOG_LEVEL:-debug}
     volumes:
-      # /data mirrors the Supervisor layout; hem-config.json is created and
+      # /data mirrors the Supervisor layout; numbat-config.json is created and
       # edited via the web UI (Settings view). A directory mount, not a file
       # mount — atomic config writes replace the file by rename.
-      - ./hem/data:/data
+      - ./numbat/data:/data
     ports:
       - "8099:8099"
     restart: unless-stopped

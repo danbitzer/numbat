@@ -1,0 +1,6 @@
+configuration:
+  log_level:
+    name: Log level
+    description: >-
+      Logging verbosity. Everything else is configured in the web UI: open
+      the Numbat panel and go to Settings.

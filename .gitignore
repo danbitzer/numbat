@@ -9,20 +9,20 @@ wheels/
 # Virtual environments
 .venv
 
-# Local dev secrets/config (hem-config.json is written by the web UI;
+# Local dev secrets/config (numbat-config.json is written by the web UI;
 # dev-options.json is the pre-0.2 config kept ignored so a lingering local
 # copy with real entity IDs can't be committed by accident)
-hem-config.json
-hem-config.json.bak
-hem-config.json.tmp
+numbat-config.json
+numbat-config.json.bak
+numbat-config.json.tmp
 dev-options.json
 .env
 
 # Claude Code local settings
 .claude/settings.local.json
 
-# Standalone dev history recordings (hem/data/)
-hem/data/
+# Standalone dev history recordings (numbat/data/)
+numbat/data/
 
 # Frontend
 node_modules/

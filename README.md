@@ -1,4 +1,7 @@
-# HEM — Home Energy Manager
+# Numbat — Energy Optimizer
+
+**Numbat** — the **NUM**erical **BAT**tery optimizer for Home Assistant.
+(Also an endangered little striped marsupial from Western Australia.)
 
 A Home Assistant add-on that optimizes home battery charge/discharge and
 solar-export decisions against Amber Electric's 5-minute wholesale pricing.
@@ -7,20 +10,20 @@ next ~36 hours and publishes what the battery should do *right now* — classic
 receding-horizon MPC, tuned for one job: **capture price spikes without
 trusting price forecasts too much**.
 
-HEM is a **recommendation engine**. It never touches your inverter: it
+Numbat is a **recommendation engine**. It never touches your inverter: it
 publishes sensors, and actuation happens through a Home Assistant automation
 you own (built from a shipped blueprint, with a heartbeat failsafe). That
 makes it inverter-agnostic — anything HA can control can follow the plan.
 
 **[→ Setup guide from a fresh HA install](docs/SETUP.md)** ·
-**[→ Add-on docs / option reference](hem/DOCS.md)**
+**[→ Add-on docs / option reference](numbat/DOCS.md)**
 
 ## Inputs
 
 All via existing HA integrations — no glue automations needed:
 
 - **Prices**: [Amber Express](https://github.com/hass-energy/amber-express) in
-  advanced-price mode — HEM parses its `forecast` attribute (Amber's own
+  advanced-price mode — Numbat parses its `forecast` attribute (Amber's own
   SmartShift prediction) and the live price-spike binary sensor. The core
   `amberelectric` integration is not supported.
 - **Solar forecast**: [Open-Meteo Solar Forecast](https://github.com/rany2/ha-open-meteo-solar-forecast)
@@ -31,7 +34,7 @@ All via existing HA integrations — no glue automations needed:
   from months of long-term statistics of a house-load sensor, plus an
   optional learned temperature response (kW per degree of cooling/heating)
   applied to the forecast temps from any hourly `weather.*` entity. No load
-  sensor → HEM plans with zero load and warns on the dashboard.
+  sensor → Numbat plans with zero load and warns on the dashboard.
 
 ## How the optimizer works
 
@@ -79,18 +82,18 @@ the plan honest:
 
 ## Outputs
 
-Published every cycle (REST sensors): `sensor.hem_action`
-(charge/discharge/idle/curtail), `sensor.hem_power_setpoint` (signed kW, with
-`power_w` attribute), `sensor.hem_soc_target`, `sensor.hem_horizon_cost`,
-and `sensor.hem_status` (heartbeat).
+Published every cycle (REST sensors): `sensor.numbat_action`
+(charge/discharge/idle/curtail), `sensor.numbat_power_setpoint` (signed kW, with
+`power_w` attribute), `sensor.numbat_soc_target`, `sensor.numbat_horizon_cost`,
+and `sensor.numbat_status` (heartbeat).
 An ingress dashboard charts the plan: prices, PV/load forecasts, planned
 battery power, and the SoC trajectory.
 
 Actuation = your automation from
-[blueprints/hem_actuator.yaml](blueprints/hem_actuator.yaml): it maps
+[blueprints/numbat_actuator.yaml](blueprints/numbat_actuator.yaml): it maps
 action + setpoint onto your inverter's controls, and reverts to
-self-consumption when HEM's heartbeat goes stale. See
-[hem/DOCS.md](hem/DOCS.md) for a complete Sungrow example.
+self-consumption when Numbat's heartbeat goes stale. See
+[numbat/DOCS.md](numbat/DOCS.md) for a complete Sungrow example.
 
 ## Under the hood
 
@@ -99,12 +102,12 @@ self-consumption when HEM's heartbeat goes stale. See
 | Optimization | [CVXPY](https://www.cvxpy.org/) (`cvxpy-base`) + [HiGHS](https://highs.dev/) (`highspy`) — ~70 binaries/solve, tens of ms |
 | Numerics | numpy (no pandas; the time-grid resampler is ~50 lines) |
 | HA I/O | aiohttp — REST for states/publishing, WebSocket for event-triggered re-solves |
-| Config | pydantic + pydantic-settings — edited in the web UI's Settings view, persisted to a HEM-owned `hem-config.json` (`HEM_*` env for connection/dev) |
+| Config | pydantic + pydantic-settings — edited in the web UI's Settings view, persisted to a Numbat-owned `numbat-config.json` (`NUMBAT_*` env for connection/dev) |
 | Dashboard | React 19 (+ React Compiler) + Recharts + Tailwind, built with Vite/Bun into a fully offline bundle; served by FastAPI + uvicorn behind HA ingress |
 | Packaging | uv-locked deps; Debian-based image (cvxpy has no musl wheels); multi-arch (amd64/aarch64) prebuilt via GitHub Actions → GHCR |
 
 Layout: the repo root is an HA add-on repository; the add-on and all Python
-lives in [hem/](hem/) (`src/hem/` — adapters, timegrid, optimizer, planner,
+lives in [numbat/](numbat/) (`src/numbat/` — adapters, timegrid, optimizer, planner,
 publisher, web; the React dashboard sources in `frontend/`), with the actuator
 blueprint in
 [blueprints/](blueprints/).
@@ -112,8 +115,8 @@ blueprint in
 ## Install (HA OS / Supervised)
 
 Settings → Add-ons → Add-on store → ⋮ → Repositories → add this repo's URL,
-then install **Home Energy Manager**. Prebuilt images are pulled from GHCR
-(maintainer note: after the first CI publish, the `hem-amd64`/`hem-aarch64`
+then install **Numbat — Energy Optimizer**. Prebuilt images are pulled from GHCR
+(maintainer note: after the first CI publish, the `numbat-amd64`/`numbat-aarch64`
 packages must be set to public on GitHub or installs can't pull them).
 Full walkthrough including the input integrations: [docs/SETUP.md](docs/SETUP.md).
 
@@ -122,21 +125,21 @@ Full walkthrough including the input integrations: [docs/SETUP.md](docs/SETUP.md
 Run directly against any HA instance with a long-lived access token:
 
 ```sh
-cd hem
+cd numbat
 uv sync
-HEM_HA_URL=http://homeassistant.local:8123 \
-HEM_HA_TOKEN=<long-lived token> \
-uv run python -m hem
+NUMBAT_HA_URL=http://homeassistant.local:8123 \
+NUMBAT_HA_TOKEN=<long-lived token> \
+uv run python -m numbat
 ```
 
 or via Docker, from the **repo root**: `docker compose -f docker-compose.dev.yml up --build`
-(reads `HEM_HA_URL`/`HEM_HA_TOKEN` from your shell environment or a repo-root
-`.env`; note the standalone run above uses `hem/.env` instead).
+(reads `NUMBAT_HA_URL`/`NUMBAT_HA_TOKEN` from your shell environment or a repo-root
+`.env`; note the standalone run above uses `numbat/.env` instead).
 
 The local timezone anchors the learned load buckets, the daily SoC target
 and vacation end times. Under the Supervisor it comes from the `TZ` env var
-automatically; in dev set `HEM_TZ=Australia/Adelaide` (env or `hem/.env` —
-copy [hem/.env.example](hem/.env.example) to get started) or HEM falls back
+automatically; in dev set `NUMBAT_TZ=Australia/Adelaide` (env or `numbat/.env` —
+copy [numbat/.env.example](numbat/.env.example) to get started) or Numbat falls back
 to UTC. The resolved zone is logged at startup.
 
 Configure via the web UI at `http://localhost:8099` (Settings). Note the dev
@@ -144,4 +147,4 @@ server has **no authentication** — anyone on your LAN who can reach :8099 can
 read and edit the config. Under the Supervisor this doesn't apply (ingress
 only, HA-session-authenticated, no host port).
 
-Tests: `cd hem && uv run pytest`
+Tests: `cd numbat && uv run pytest`

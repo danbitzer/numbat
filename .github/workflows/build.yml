@@ -7,7 +7,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "hem/**"
+      - "numbat/**"
       - ".github/workflows/build.yml"
 
 jobs:
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: hem
+        working-directory: numbat
     steps:
       - uses: actions/checkout@v7
 
@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: hem/frontend
+        working-directory: numbat/frontend
     steps:
       - uses: actions/checkout@v7
 
@@ -46,7 +46,7 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      # Builds into hem/src/hem/web/dist, where the add-on serves it from.
+      # Builds into numbat/src/numbat/web/dist, where the add-on serves it from.
       # Built once here (amd64) — it's arch-independent — so the per-arch
       # image builds under QEMU never run Node.
       - name: Build
@@ -55,7 +55,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: dashboard-dist
-          path: hem/src/hem/web/dist
+          path: numbat/src/numbat/web/dist
           if-no-files-found: error
 
   build:
@@ -74,7 +74,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: dashboard-dist
-          path: hem/src/hem/web/dist
+          path: numbat/src/numbat/web/dist
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
@@ -92,7 +92,7 @@ jobs:
           args: |
             ${{ github.event_name == 'pull_request' && '--test' || '' }} \
             --${{ matrix.arch }} \
-            --target /data/hem \
-            --image "hem-{arch}" \
+            --target /data/numbat \
+            --image "numbat-{arch}" \
             --docker-hub "ghcr.io/${{ github.repository_owner }}" \
             --addon
