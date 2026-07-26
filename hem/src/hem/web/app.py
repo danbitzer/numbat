@@ -26,7 +26,7 @@ from pydantic import ValidationError
 
 from hem import __version__
 from hem.config import EnvSettings, Settings
-from hem.config_store import ConfigController
+from hem.config_store import SCHEMA_VERSION, ConfigController
 from hem.forecast.load import default_timezone
 from hem.ha.client import HaClient
 from hem.models import Plan
@@ -193,6 +193,22 @@ def create_app(
                     "lifecycle": state.lifecycle,
                     "config": current.model_dump(mode="json") if current else None,
                 }
+            )
+
+        @app.get("/api/config/export")
+        async def export_config() -> JSONResponse:
+            """The saved config as a file download — the exact document shape
+            of the on-disk hem-config.json, so an exported file, a filesystem
+            backup, and the .bak are all interchangeable for import."""
+            current = controller.current
+            if current is None:
+                return JSONResponse({"error": "configure HEM first"}, status_code=409)
+            stamp = datetime.now(_resolve_tz()).strftime("%Y-%m-%d")
+            return JSONResponse(
+                {"schema_version": SCHEMA_VERSION, "config": current.model_dump(mode="json")},
+                headers={
+                    "Content-Disposition": f'attachment; filename="hem-config-{stamp}.json"'
+                },
             )
 
         @app.put("/api/config")

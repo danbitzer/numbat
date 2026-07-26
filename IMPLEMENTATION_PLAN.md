@@ -4,7 +4,7 @@
 
 - **Phase 0–3 complete** (scaffold, ingestion, optimizer + dry-run publishing, backtester), 80 tests green, multi-arch image verified.
 - **Phase 4 redesigned (2026-07-16, Dan's call)**: HEM never writes to the inverter. Actuation is a user-owned HA automation built from `blueprints/hem_actuator.yaml` (heartbeat failsafe built in), making HEM inverter-agnostic. The in-process `SungrowExecutor` was removed (git history has it). Remaining: backtest gate, then bench-test the actuator automation.
-- **Phase 5 complete (2026-07-16)**: ingress dashboard shipped; `.github/workflows/build.yml` (test → `home-assistant/builder` matrix) publishes `ghcr.io/danielbitzer/hem-{aarch64,amd64}` on pushes to main, and `config.yaml` has the `image:` key so Supervisor pulls instead of building on-device. One-time step after the first publish: make both GHCR packages public.
+- **Phase 5 complete (2026-07-16)**: ingress dashboard shipped; `.github/workflows/build.yml` (test → `home-assistant/builder` matrix) publishes `ghcr.io/danbitzer/hem-{aarch64,amd64}` on pushes to main, and `config.yaml` has the `image:` key so Supervisor pulls instead of building on-device. One-time step after the first publish: make both GHCR packages public.
 - **Live status**: Dan's dry-run loop is running against his HA (Tailscale), recording history to `hem/data/history/` for the backtest gate.
 - **Load forecasting v2 (2026-07-16)**: optional `load_profile.source: history` learns the hourly baseline from recorder history of `entities.load_power` (time-weighted hour-of-day × weekday/weekend, configured profile as per-hour fallback, never fatal). Docs: `docs/SETUP.md` (fresh-install guide) + expanded README shipped.
 

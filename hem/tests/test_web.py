@@ -150,6 +150,28 @@ def test_put_config_invalid_returns_per_field_errors(tmp_path):
     assert not controller.changed.is_set()
 
 
+def test_export_config_downloads_the_store_document(tmp_path):
+    client = TestClient(create_app(AppState(), make_controller(tmp_path, make_settings())))
+
+    resp = client.get("/api/config/export")
+    assert resp.status_code == 200
+    disposition = resp.headers["content-disposition"]
+    assert disposition.startswith('attachment; filename="hem-config-')
+    assert disposition.endswith('.json"')
+    body = resp.json()
+    assert body["schema_version"] == 1
+    assert body["config"]["battery"]["capacity_kwh"] == 12.8
+
+    # the roundtrip the Backup card relies on: an exported document's config
+    # imports cleanly through the normal PUT validation path
+    assert client.put("/api/config", json=body["config"]).status_code == 200
+
+
+def test_export_config_unconfigured_is_409(tmp_path):
+    client = TestClient(create_app(AppState(), make_controller(tmp_path)))
+    assert client.get("/api/config/export").status_code == 409
+
+
 class FakeStatesClient:
     async def list_states(self):
         from hem.ha.client import State
