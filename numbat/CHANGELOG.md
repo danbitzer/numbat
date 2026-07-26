@@ -12,12 +12,18 @@
 - The `weather` entity is now **optional**: without it Numbat simply plans
   without the temperature response (load forecast is time-of-day only) and
   skips the forecast call instead of warning every cycle.
-- **Degraded planning is now visible on the dashboard.** When cycles fail
+- **Failing planning is now visible on the dashboard.** When cycles fail
   (e.g. the Amber price entities go unavailable), `sensor.numbat_status`
-  already flipped to `degraded` — tripping the actuator failsafe — but the
-  dashboard silently kept showing the last good plan. It now polls
+  already flipped to its failure value — tripping the actuator failsafe —
+  but the dashboard silently kept showing the last good plan. It now polls
   `/health` and shows a red banner with the failing cycle's error and the
   timestamp of the plan on screen; it clears on the next successful cycle.
+- `sensor.numbat_status`'s failure value is renamed **`degraded` → `error`**:
+  cycles failing outright is an error, while "degraded" suggested Numbat was
+  still planning sub-optimally (genuinely degraded situations — solver
+  fallback to the previous plan, zero-load forecasts — publish `ok` with
+  warning attributes). The actuator blueprint is value-agnostic (anything
+  other than `ok` fails safe), so existing automations need no change.
 
 ## 0.11.0
 

@@ -308,7 +308,7 @@ function vacationBanner(plan: PlanResponse): string | null {
  * last good plan by design — so the dashboard polls /health for them. Shown
  * only while the loop is running: disabled/unconfigured have their own
  * banner, and a stale last_error from before a disable must not resurface. */
-function degradedBanner(
+function planningErrorBanner(
   health: HealthResponse | undefined,
   plan: PlanResponse | undefined,
 ): string | null {
@@ -321,9 +321,8 @@ function degradedBanner(
     ? ` Showing the last good plan (computed ${new Date(plan.computed_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}).`
     : "";
   return (
-    `⚠ Planning degraded — ${reason}.` +
-    ` sensor.numbat_status is not "ok", so your actuator's failsafe holds the inverter` +
-    ` in self-consumption.${stale}`
+    `⚠ Planning error — ${reason}.` +
+    ` Your actuator's failsafe holds the inverter in self-consumption.${stale}`
   );
 }
 
@@ -362,7 +361,7 @@ function Dashboard({
     refetchInterval: 30_000,
     retry: 1,
   });
-  const degraded = degradedBanner(health.data, plan);
+  const planningError = planningErrorBanner(health.data, plan);
   const banner = lifecycleBanner(config);
   if (!plan) {
     return (
@@ -394,7 +393,7 @@ function Dashboard({
         </div>
       )}
       {error && <div className="text-xs text-destructive">{error}</div>}
-      {degraded && <Banner text={degraded} tone="error" />}
+      {planningError && <Banner text={planningError} tone="error" />}
       {banner && <Banner text={banner} />}
       {vacationBanner(plan) && <Banner text={vacationBanner(plan) as string} />}
       {warningText(plan) && <Banner text={warningText(plan) as string} />}

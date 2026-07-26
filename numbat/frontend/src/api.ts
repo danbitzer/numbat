@@ -207,7 +207,7 @@ export async function runHistorySimulation(req: {
 }
 
 // The /health payload — same body on 200 and 503 (unhealthy), so parse
-// without checking resp.ok. The dashboard polls this to surface degraded
+// without checking resp.ok. The dashboard polls this to surface failing
 // planning: /api/plan keeps serving the last good plan when cycles fail
 // (that's the point of the fallback), so plan polling alone can't tell.
 export const HealthResponseSchema = z.object({

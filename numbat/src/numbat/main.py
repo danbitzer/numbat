@@ -124,7 +124,7 @@ async def cycle(
         plan = await asyncio.to_thread(planner.optimize, data, now)
     except SolverError as e:
         # a re-raise here means no previous plan to reuse either — that IS a
-        # failed cycle (degraded status via the caller's handler)
+        # failed cycle (error status via the caller's handler)
         log.error("solver failed: %s; falling back to the previous plan", e)
         plan = planner.fallback(now)
         fallback = True
@@ -225,15 +225,15 @@ async def _run_planner(
             except asyncio.CancelledError:
                 raise
             except InputsStale as e:
-                log.warning("degraded: %s", e)
+                log.warning("cycle error (stale inputs): %s", e)
                 app_state.health.mark_error(str(e))
                 with contextlib.suppress(Exception):
-                    await publisher.publish_status("degraded", detail=str(e))
+                    await publisher.publish_status("error", detail=str(e))
             except Exception as e:  # noqa: BLE001 - cycle must never kill the loop
                 log.exception("cycle failed")
                 app_state.health.mark_error(str(e))
                 with contextlib.suppress(Exception):
-                    await publisher.publish_status("degraded", detail=str(e))
+                    await publisher.publish_status("error", detail=str(e))
 
             # Wake on: the 5-min boundary, any price change, or a config
             # change from the Settings UI — whichever comes first.

@@ -282,7 +282,7 @@ reaches the grid if `grid.export_limit_kw` allows it.
 
 | Entity | Meaning |
 |---|---|
-| `sensor.numbat_status` | `ok` / `degraded` / `disabled` / `unconfigured`; heartbeat with solve stats and `load_forecast`. Anything other than `ok` makes the actuator blueprint fail safe to self-consumption |
+| `sensor.numbat_status` | `ok` / `error` / `disabled` / `unconfigured`; heartbeat with solve stats and `load_forecast`. Anything other than `ok` makes the actuator blueprint fail safe to self-consumption |
 | `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / curtail (carries `power_kw`/`power_w` attributes, atomic with the action) |
 
 Actions are **grid-coupled**: `charge` means charging *from the grid*, and
@@ -363,7 +363,8 @@ Blueprints → Import), then create an automation from it. You supply three
 action sequences for your hardware — plus two optional ones for curtailment —
 and inside them the variables `power_kw` (signed, +charge/−discharge),
 `power_w` (magnitude in watts), and `action` are available. The blueprint has
-the failsafe built in: if Numbat's heartbeat is stale, degraded, or the sensors
+the failsafe built in: if Numbat's heartbeat is stale, its status reports an
+error, or the sensors
 are missing (HA restarted while Numbat was down), your *idle* actions run (after
 lifting any export cap) — so a dead add-on can never leave the inverter stuck
 in forced mode or curtailed. Keep the idle sequence simple and idempotent.

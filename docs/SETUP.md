@@ -150,7 +150,7 @@ and fill in the three action sequences — charge / discharge / idle (plus
 optional curtail/un-curtail export-limit sequences for negative feed-in) — for your
 hardware; a complete Sungrow (mkaiser) example lives in the add-on
 Documentation tab ([numbat/DOCS.md](../numbat/DOCS.md)). The blueprint has a
-heartbeat failsafe built in: if Numbat stops publishing or reports degraded, your
+heartbeat failsafe built in: if Numbat stops publishing or reports an error, your
 idle sequence runs and the inverter returns to self-consumption.
 
 Bench-test before trusting it: watch a charge → discharge → idle transition,
