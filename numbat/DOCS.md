@@ -130,16 +130,24 @@ Note that a single-instant fill cannot survive a *negative* feed-in
 tomorrow (refilling is then free, so the battery may dump tonight and still 
 hit the target) — that is what the export floor / deadband below is for.
 
-`soc_min` is **Numbat's planning reserve, not the inverter's minimum SoC** — set
-it above the inverter's own floor as insurance against forecast error. Numbat's
-deliberate moves (forced discharge/export) respect it: every 5-minute
-re-solve reads the real SoC and stops discharging at the reserve. What it
-cannot stop is the inverter's self-consumption mode serving *house load*
-below it during `idle` — that drains to the inverter's own minimum, which is
-what the reserve is insurance for. If the battery is found below `soc_min`
-(overnight load, a BMS recalibration), the plan starts from the real SoC,
-never discharges it further, and charges back above the reserve when prices
-make that worthwhile.
+`soc_min` is the hard floor for **all planned discharge — including serving
+your own house**. Once a plan grinds down to it, remaining load is met by
+grid imports: every point above the inverter's own minimum is energy the
+plan *defends with imports* rather than spends. That makes it poor insurance
+against forecast error — for hungry-day insurance use `load.buffer`, which
+holds extra energy the plan can still spend when the day needs it. Keep
+`soc_min` at, or just above, the inverter's enforced minimum; anything
+higher should be energy you deliberately never want planned away (e.g. a
+blackout reserve).
+
+Two mechanics worth knowing. The floor binds the *plan*, not the inverter:
+during `idle`, self-consumption serves house load from the battery below the
+floor regardless (down to the inverter's own minimum) — so a floor set well
+above it also makes plans budget imports that reality never draws, quietly
+distorting the economics upstream. And if the battery is *found* below
+`soc_min` (overnight load, a BMS recalibration), the floor relaxes to the
+real SoC: the plan never discharges it further and charges back above the
+reserve only when prices make that worthwhile.
 
 ### `grid`
 

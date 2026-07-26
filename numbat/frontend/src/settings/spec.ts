@@ -176,10 +176,12 @@ export const SECTIONS: SectionSpec[] = [
       number(
         "battery.soc_min",
         "Planning reserve (SoC min)",
-        "Numbat's planning reserve, NOT the inverter's minimum SoC — set it above the " +
-          "inverter's own floor as insurance against forecast error. Deliberate " +
-          "discharges stop here; idle self-consumption can still drain below it, which " +
-          "is what the reserve insures against.",
+        "The hard floor for ALL planned discharge — including serving your own house: " +
+          "once the plan reaches it, remaining load is met by grid imports, so every " +
+          "point above the inverter's own minimum is energy the plan defends with " +
+          "imports rather than spends. Keep it at (or just above) the inverter's " +
+          "enforced minimum; for hungry-day insurance use the load forecast buffer " +
+          "instead.",
         { unit: "%", percent: true, min: 0, max: 100, step: 1, default: "10" },
       ),
       number("battery.soc_max", "SoC max", "Upper SoC bound as a percentage of capacity.", {

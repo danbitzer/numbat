@@ -252,6 +252,17 @@ A few quieter mechanisms keep the plan sensible:
   rather than planning on fiction, and your inverter's failsafe keeps it in
   plain self-consumption.
 
+> **Pitfall — a high planning reserve as forecast insurance.** The planning
+> reserve (SoC min) floors *all* planned discharge, including serving your
+> own house: once the plan grinds down to it, remaining load is met by grid
+> imports — so every point above the inverter's own minimum is energy the
+> plan defends with imports rather than spends. Meanwhile the inverter's
+> self-consumption (during `idle`) drains below the floor regardless, so
+> those budgeted imports may never happen in reality — the plan's economics
+> quietly diverge. Keep the reserve at (or just above) the inverter's
+> enforced minimum, and use the **load forecast buffer** for hungry-day
+> insurance: it holds extra energy the plan can still spend.
+
 ## Worked examples
 
 Round numbers throughout; your prices will differ.
@@ -314,3 +325,4 @@ make it a great time to fill the battery.
 | stop chasing forecast spikes it can't trust | Sell price forecast haircut |
 | keep something in the tank for possible spikes | Spike reserve settings |
 | plan for a hungrier house than the forecast | Load forecast buffer |
+| never plan to spend the bottom X% | Planning reserve (SoC min) — keep near the inverter's floor; see pitfalls |
