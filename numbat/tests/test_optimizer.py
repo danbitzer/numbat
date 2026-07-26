@@ -107,6 +107,32 @@ def test_scenario_negative_feed_in_curtails_solar():
     assert sol.grid_import_kw.max() < 0.01  # load still served by PV
 
 
+def test_export_reserve_sells_down_to_it_never_through_it():
+    """Fat feed-in all day: without a reserve the battery sells to the hard
+    floor; with one, sales stop exactly at the reserve (the top half still
+    sells at full value)."""
+    inputs = make_inputs(sell=0.60, buy=0.65, load=0.0, soc0=9.6)
+    base = solve(inputs, BATTERY, GRID, config(terminal_value=0.10))
+    assert base.soc_kwh[-1] == pytest.approx(BATTERY.soc_min_kwh, abs=0.05)
+
+    reserved = BatteryParams(**{**BATTERY.__dict__, "export_reserve_kwh": 6.4})
+    sol = solve(inputs, reserved, GRID, config(terminal_value=0.10))
+    assert sol.soc_kwh.min() >= 6.4 - 0.05  # never below the reserve
+    assert sol.grid_export_kw.sum() * 0.5 > 2.5  # the top ~3 kWh still sold
+
+
+def test_export_reserve_house_serving_continues_below_it():
+    """Starting BELOW the reserve with dear imports: the battery still runs
+    the house down toward the hard floor — no sales, no forced imports to
+    defend the reserve, and no forced recharge back above it."""
+    inputs = make_inputs(sell=0.28, buy=0.30, load=1.0, soc0=3.0)
+    reserved = BatteryParams(**{**BATTERY.__dict__, "export_reserve_kwh": 6.4})
+    sol = solve(inputs, reserved, GRID, config(terminal_value=0.05))
+    assert sol.grid_export_kw.max() < 0.01  # can't sell below the reserve
+    assert sol.discharge_kw.sum() * 0.5 > 1.0  # house served from the battery
+    assert sol.soc_kwh[-1] < 6.4  # allowed to stay below; nothing forces a refill
+
+
 def test_scenario_flat_prices_no_arbitrage_churn():
     """Flat prices -> no grid charging, no export; at most self-consumption."""
     inputs = make_inputs(buy=0.30, sell=0.10, load=1.0, soc0=6.4)

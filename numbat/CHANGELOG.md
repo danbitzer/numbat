@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- **New: `battery.export_reserve_soc`** — the SoC-based sell floor. Selling
+  stored energy to the grid may never take (or leave) the battery below it,
+  while serving your own house still may, down to `soc_min`: "use the top
+  75% for trading, keep the bottom 25% for the house". One-way — it blocks
+  sales, never forces charging back above itself, so unlike a high planning
+  reserve it never defends itself with imports; below it the battery covers
+  the house's uncovered load only (nothing reaches the grid, not even by
+  displacing PV). Percent field in the Battery section, sandboxable in Test
+  mode. Default 10% (0 = off). The intended pairing: `soc_min` at the
+  inverter's
+  enforced minimum, the export reserve at your comfort level, `load.buffer`
+  for hungry-day insurance.
+- `battery.soc_min` default lowered **10% → 5%**, in line with the new
+  guidance (keep it at, or just above, the inverter's enforced minimum —
+  a high value defends itself with imports). With the 10% export reserve
+  default, a fresh install gets the sell floor active out of the box:
+  sales stop at 10%, the house may draw down to 5%. Saved configs store
+  their values explicitly and are unaffected.
+- The "Planning reserve (SoC min)" field is renamed simply **SoC min**
+  (docs updated to match).
+
 - `soc_min` guidance corrected (field help + docs): it hard-floors **all**
   planned discharge — including serving the house — so once a plan reaches
   it, remaining load is met by grid imports, while during `idle` the

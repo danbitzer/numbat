@@ -175,14 +175,14 @@ export const SECTIONS: SectionSpec[] = [
       ),
       number(
         "battery.soc_min",
-        "Planning reserve (SoC min)",
+        "SoC min",
         "The hard floor for ALL planned discharge — including serving your own house: " +
           "once the plan reaches it, remaining load is met by grid imports, so every " +
           "point above the inverter's own minimum is energy the plan defends with " +
           "imports rather than spends. Keep it at (or just above) the inverter's " +
           "enforced minimum; for hungry-day insurance use the load forecast buffer " +
           "instead.",
-        { unit: "%", percent: true, min: 0, max: 100, step: 1, default: "10" },
+        { unit: "%", percent: true, min: 0, max: 100, step: 1, default: "5" },
       ),
       number("battery.soc_max", "SoC max", "Upper SoC bound as a percentage of capacity.", {
         unit: "%",
@@ -192,6 +192,15 @@ export const SECTIONS: SectionSpec[] = [
         step: 1,
         default: "100",
       }),
+      number(
+        "battery.export_reserve_soc",
+        "Export reserve (SoC)",
+        "Selling stored energy to the grid may never take the battery below this — " +
+          "serving your own house still may, down to SoC min. The " +
+          "\"keep the bottom X% for the house\" knob: it blocks sales, never forces " +
+          "charging back above itself. Binds only while SoC min sits below it; 0 = off.",
+        { unit: "%", percent: true, min: 0, max: 100, step: 1, default: "10" },
+      ),
       number(
         "battery.wear_cost_per_kwh",
         "Wear cost",

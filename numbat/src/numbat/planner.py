@@ -559,4 +559,5 @@ def battery_params(settings: Settings) -> BatteryParams:
         soc_max_kwh=b.soc_max * b.capacity_kwh,
         wear_cost_per_kwh=b.wear_cost_per_kwh,
         allow_grid_charge=b.allow_grid_charge,
+        export_reserve_kwh=b.export_reserve_soc * b.capacity_kwh,
     )

@@ -28,7 +28,10 @@ def make_settings(**overrides) -> Settings:
 def test_minimal_config_defaults():
     settings = make_settings()
     assert settings.optimizer.horizon_hours == 36
-    assert settings.battery.soc_min == 0.10
+    # 5%: at (or just above) a typical inverter's enforced minimum — soc_min
+    # floors ALL planned discharge, so a high value defends itself with
+    # imports (see DOCS); hungry-day insurance belongs to load.buffer
+    assert settings.battery.soc_min == 0.05
     # 3c = top of the honest lithium wear range the field help quotes
     assert settings.battery.wear_cost_per_kwh == 0.03
     # haircut defaults OFF: Amber's advanced predicted pricing already tempers
@@ -97,6 +100,17 @@ def test_invalid_soc_bounds_rejected():
     config["battery"]["soc_min"] = 0.9
     config["battery"]["soc_max"] = 0.5
     with pytest.raises(ValueError, match="soc_min"):
+        Settings.model_validate(config)
+
+
+def test_export_reserve_default_and_bounded_by_soc_max():
+    # 10% over the 5% soc_min default: the sell floor is active out of the
+    # box (the gate binds only while reserve > soc_min). Explicit 0 = off.
+    assert make_settings().battery.export_reserve_soc == 0.10
+    config = json.loads(json.dumps(MINIMAL_CONFIG))
+    config["battery"]["soc_max"] = 0.9
+    config["battery"]["export_reserve_soc"] = 0.95
+    with pytest.raises(ValueError, match="export_reserve_soc"):
         Settings.model_validate(config)
 
 
