@@ -153,10 +153,10 @@ battery covering your house are never blocked by them.
 
 **Example — the thin-margin sell.** Feed-in is 12.7c. The hold value is
 8.4c (cheap power coming tonight), wear is 2c. Selling nets roughly
-12.7 − 8.8 − 2 ≈ 1.9c per kWh — real profit, so with no spread configured
-Numbat will take it. If shuffling ~40 kWh through your battery for a dollar or
-two sounds silly, that's not the optimizer being wrong — it's the spread
-knob waiting to be told your time has value.
+12.7 − 8.8 − 2 ≈ 1.9c per kWh — real profit, and with the spread set to 0
+Numbat would take it, shuffling ~40 kWh through your battery for a dollar
+or two. The default 5c spread lets this one pass: 1.9c is under the bar,
+so the charge stays put until a fatter margin comes along.
 
 ## Import reluctance (optional)
 
