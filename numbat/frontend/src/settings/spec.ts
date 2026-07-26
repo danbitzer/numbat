@@ -249,20 +249,24 @@ export const SECTIONS: SectionSpec[] = [
         "battery.daily_target_penalty_per_kwh",
         "Daily target penalty",
         "Willingness-to-pay per kWh-HOUR of shortfall below the target floor — anything " +
-          "cheaper WILL be bought to fill it. Between your typical feed-in and grid buy " +
-          "price (e.g. $0.10 with ~$0.08 feed-in and ~$0.25 grid). Raise it, or use the " +
-          "price multiple below, if the battery still won't reach the target.",
-        { unit: "$/kWh·h", min: 0, max: 10, step: 0.01, default: "0.1" },
+          "cheaper WILL be bought to fill it. It accrues over the hold window: the " +
+          "default $0.05 over a 4 h hold makes a full-window missing kWh worth up to " +
+          "$0.20. Raise it, or use the price multiple below, if the battery still " +
+          "won't reach the target.",
+        { unit: "$/kWh·h", min: 0, max: 10, step: 0.01, default: "0.05" },
       ),
       number(
         "battery.daily_target_penalty_price_multiple",
         "Daily target price multiple",
         "Works WITH the fixed penalty above, not instead of it: each solve uses " +
-          "whichever is higher — the fixed penalty, or this multiple × the median " +
+          "whichever is higher — the fixed penalty, or this percentage of the median " +
           "forward import price. Lets the penalty track the tariff so the target " +
           "still gets filled on dear days. 0 disables the scaling (fixed penalty " +
-          "only); a few × is plenty.",
-        { min: 0, max: 100, step: 0.5, default: "0" },
+          "only). It accrues per hour of the hold window, so modest values dominate: " +
+          "100% over a 4 h hold makes a full-window missing kWh worth ~4× the going " +
+          "rate — 50–150% is plenty, and larger values only raise what an " +
+          "extreme-priced day may cost.",
+        { unit: "%", percent: true, min: 0, max: 1000, step: 5, default: "0" },
       ),
     ],
   },

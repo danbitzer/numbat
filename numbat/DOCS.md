@@ -50,9 +50,9 @@ or to seed a fresh install.
 
 The sections below document what each setting means in depth. Values quoted
 here are what the config **document** stores; ratio-type settings (SoC
-bounds, the daily target, the load buffer, hold value scaling, the forecast
-haircut) are stored as 0–1 fractions but displayed and edited as
-**percentages** in the Settings UI.
+bounds, the daily target, the load buffer, hold value scaling, the daily
+target price multiple, the forecast haircut) are stored as fractions but
+displayed and edited as **percentages** in the Settings UI.
 
 ### `entities`
 
@@ -100,21 +100,28 @@ and surprise usage are worth nothing to it, so on a mild day it may stop at
 **held for `daily_target_hold_hours`** (default 4h) — a floor across the
 evening peak, not a single instant it can dump the moment after. Freed to
 discharge once the window ends. Soft means: the plan pays up to
-`daily_target_penalty_per_kwh` (default $0.10) per kWh-*hour* of shortfall —
+`daily_target_penalty_per_kwh` (default $0.05) per kWh-*hour* of shortfall —
 your insurance premium. Filling via forgone feed-in or a cheap grid window
 happens; sacrificing a genuinely better opportunity, like exporting into a
 real spike, does not.
 
 **Calibrate the penalty against your tariffs**: it is a maximum
-willingness-to-pay, so anything cheaper than it WILL be bought. Set it
-between your typical feed-in price and your typical grid buy price — e.g.
-$0.10 with ~$0.08 feed-in and ~$0.25 grid. If the battery still won't reach
+willingness-to-pay, so anything cheaper than it WILL be bought. Remember it
+accrues per hour of the hold window — the default $0.05 over a 4 h hold
+makes a kWh missing for the whole window worth up to $0.20 to avoid, above
+most evening import premiums. If the battery still won't reach
 the target on dear evenings, either raise it or set
-`daily_target_penalty_price_multiple` (0 = off). The multiple works **with**
+`daily_target_penalty_price_multiple` (0 = off; edited as a **percentage**
+in the UI, stored as a fraction like the other ratio settings). The multiple
+works **with**
 the fixed penalty, not instead of it: each solve uses whichever is higher —
 the fixed penalty, or the multiple × the median forward import price — so the
-penalty tracks the tariff and the target dominates dear days too (a few × is
-plenty). Note that a single-instant fill cannot survive a *negative* feed-in 
+penalty tracks the tariff and the target dominates dear days too. Because the
+penalty accrues per hour of the hold window, modest values dominate: 100% of
+the median over a 4 h hold already makes a full-window missing kWh worth ~4×
+the going rate. 50–150% is plenty; larger values only raise what an
+extreme-priced day may cost you.
+Note that a single-instant fill cannot survive a *negative* feed-in 
 tomorrow (refilling is then free, so the battery may dump tonight and still 
 hit the target) — that is what the export floor / deadband below is for.
 

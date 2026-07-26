@@ -59,6 +59,8 @@ def test_redesign_defaults_and_overrides():
     assert s.optimizer.min_battery_export_spread == 0.05
     assert s.optimizer.import_penalty_per_kwh == 0.05
     assert s.battery.daily_target_hold_hours == 4.0
+    # 5c/kWh·h × the 4 h hold still values a full-window missing kWh at 20c
+    assert s.battery.daily_target_penalty_per_kwh == 0.05
     assert s.battery.daily_target_penalty_price_multiple == 0.0
     assert s.grid.min_battery_export_price is None
 
