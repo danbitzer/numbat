@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0
 
 - **HEM is now Numbat — Energy Optimizer**: the **NUM**erical **BAT**tery
   optimizer (and an endangered striped marsupial from WA). Renamed end to
