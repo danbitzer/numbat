@@ -163,7 +163,7 @@ const server = Bun.serve({
 // doesn't scroll the body), and content height is ~1625px with this mock
 // plan — 1650 frames the full dashboard with its natural bottom padding.
 // If the dashboard gains a card, bump the height.
-const SIZE = "1296,1650";
+const SIZE = "1100,1650";
 
 async function capture(theme: string, out: string) {
   const profile = mkdtempSync(join(tmpdir(), "numbat-shot-"));
