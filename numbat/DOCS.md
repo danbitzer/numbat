@@ -453,14 +453,12 @@ option strings against your install — they vary between package versions):
 # discharge_actions — as above with option: "Forced discharge" (in the write
 # and in its guard)
 
-# idle_actions (also the failsafe — keep robust). Writing the command
-# register back to Stop matters: it disarms the forced setpoint rather than
-# leaving it primed behind self-consumption mode.
-- if: ["{{ not is_state('select.sungrow_battery_forced_charge_discharge_cmd', 'Stop (default)') }}"]
-  then:
-    - action: select.select_option
-      target: {entity_id: select.sungrow_battery_forced_charge_discharge_cmd}
-      data: {option: "Stop (default)"}
+# idle_actions (also the failsafe — keep robust). One guarded write, on
+# purpose: do NOT write "Stop (default)" to the command register here — on
+# Sungrow, Stop halts the battery entirely (it stops serving your own house
+# load), so a stuck Stop is worse than what it disarms. The forced
+# command/power registers left behind are inert while EMS mode is
+# self-consumption, and the blueprint's re-asserts guard the EMS revert.
 - if: ["{{ not is_state('select.sungrow_ems_mode', 'Self-consumption mode (default)') }}"]
   then:
     - action: select.select_option
