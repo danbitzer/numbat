@@ -46,6 +46,15 @@
 # grid outage the inverter likewise reverts to idle/self-consumption —
 # forced grid moves make no sense islanded.
 #
+# SELF-HEALING: a single inverter write can be lost (a Modbus hiccup at the
+# wrong instant) — and a lost *revert* used to persist until the next plan
+# change, leaving the inverter in forced mode long after the recommendation
+# ended. The 5-minute sweep therefore re-asserts the current action for
+# 15 minutes after every recommendation change, then goes quiet. Keep your
+# action sequences idempotent and guard each write (skip when the register
+# already matches — see the DOCS examples) so re-asserts are Modbus-silent
+# when nothing is wrong.
+#
 # Disabling this automation is the master off-switch: Numbat goes back to being
 # a pure recommendation engine.
 blueprint:
@@ -53,9 +62,11 @@ blueprint:
   description: >-
     Applies sensor.numbat_action / sensor.numbat_power_setpoint to your inverter
     via action sequences you define, with a built-in heartbeat failsafe that
-    reverts to idle when Numbat is stale, errored, or gone. Optional curtail
-    sequences cap export during negative feed-in; optional grid-connection
-    sensors revert to idle during a grid outage.
+    reverts to idle when Numbat is stale, errored, or gone, and a self-healing
+    sweep that re-asserts the current action for 15 minutes after each change
+    so a lost inverter write can't stick. Optional curtail sequences cap
+    export during negative feed-in; optional grid-connection sensors revert
+    to idle during a grid outage.
   homeassistant:
     min_version: 2024.10.0  # the `sequence:` grouping action
   domain: automation
@@ -203,16 +214,33 @@ variables:
        if numbat_alive else 0 }}
 
 conditions:
-  # The periodic sweep only needs to act when Numbat is NOT healthy or the grid
-  # is down (failsafe re-assert); while healthy and on-grid, the state
-  # triggers handle every real change. Keeps the write rate at "only when
-  # something changed" + one idle re-assert per 5min while Numbat is not ok
-  # (idempotent by requirement on idle_actions).
+  # The periodic sweep acts when Numbat is NOT healthy or the grid is down
+  # (failsafe re-assert), and — self-healing — for 15 minutes after the last
+  # recommendation change, re-asserting the current action so a single lost
+  # inverter write (Modbus hiccup) is repaired within 5 minutes instead of
+  # persisting until the next plan change. Beyond that window, while healthy
+  # and on-grid, the sweep stands down and the state triggers handle every
+  # real change — guarded (idempotent) action sequences keep the re-asserts
+  # write-free when the registers already match.
   - condition: template
     value_template: >-
-      {{ trigger.platform != 'time_pattern' or not numbat_alive or not grid_connected }}
+      {{ trigger.platform != 'time_pattern'
+         or not numbat_alive or not grid_connected
+         or (states[action_sensor] is not none
+             and now() - states[action_sensor].last_changed < timedelta(minutes=15)) }}
 
 actions:
+  # Settle delay: Numbat publishes the setpoint and action sensors as two
+  # separate updates ~50 ms apart, so every plan change fires this automation
+  # twice — and with mode: restart, the second trigger used to cancel the
+  # first run MID-INVERTER-WRITE while it was still acting on the not-yet-
+  # updated action sensor (seen live 2026-07-29: the cancelled write burst
+  # disturbed Modbus, the replacement run's revert died, and the inverter
+  # stayed in forced discharge for 35 minutes). The restart lands here in the
+  # delay instead: the double-fire coalesces into one run that reads settled
+  # sensors and writes once.
+  - delay:
+      milliseconds: 1000
   # Always undo the sticky battery-limit override first: no_charge sets max
   # charge power to 0, which would otherwise cap a later charge or idle. A
   # guarded restore is a no-op when limits are already full.
