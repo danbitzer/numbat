@@ -13,7 +13,8 @@ you own (built from a shipped blueprint, with a heartbeat failsafe). That
 makes it inverter-agnostic — anything HA can control can follow the plan.
 
 **[→ Setup guide from a fresh HA install](docs/SETUP.md)** ·
-**[→ Add-on docs / option reference](numbat/DOCS.md)**
+**[→ Add-on docs / option reference](numbat/DOCS.md)** ·
+**[→ How the optimizer thinks](numbat/OPTIMIZER.md)**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
@@ -63,27 +64,18 @@ isn't dumped at any positive price just because the horizon ends). Spike
 capture, curtailment under negative feed-in, and charging on negative prices
 all fall out of the economics rather than hand-written rules.
 
-Because Amber forecasts are routinely wrong about spikes, several layers keep
-the plan honest:
+Because price forecasts are routinely wrong about spikes, several layers keep
+the plan honest: a soft **spike reserve** holds energy ready while a forecast
+spike sits within the lookahead, an **event-triggered re-solve** reacts within
+seconds of any live price change (a confirmed spike gets its full-power
+discharge decision immediately — and never a grid charge), **hysteresis**
+stops near-identical plans chattering the inverter, and solver failures or
+stale inputs **fall back** to the previous plan or idle recommendations —
+never silent garbage.
 
-- **Spike reserve**: while a high forecast price sits within the lookahead
-  window, a soft SoC floor holds energy ready to sell — soft, so a genuinely
-  better opportunity can still break it. It triggers on raw forecast prices.
-- **Forecast haircut**: above-median sell prices beyond ~6h are discounted
-  toward the median in the objective, so phantom distant spikes don't distort
-  near-term decisions.
-- **Event-triggered re-solve**: a WebSocket watcher re-solves within seconds
-  of ANY live price change — including Amber confirming an interval's
-  estimated price — so the plan always reflects the real price. A confirmed
-  spike gets a full-power discharge decision immediately, optionally at a
-  raised spike-only discharge cap (`spike.discharge_kw`).
-- **Never grid-charge during a confirmed spike**, as a hard guard on top of
-  the economics.
-- **Hysteresis**: the current action only switches if the switch improves the
-  full horizon objective by more than a threshold (solved pin-and-compare), so
-  near-degenerate solutions don't chatter the inverter.
-- **Fallback**: solver failure reuses the previous plan shifted forward;
-  stale inputs degrade to idle recommendations, never silent garbage.
+**[OPTIMIZER.md](numbat/OPTIMIZER.md)** explains the *why* behind all of it
+in plain language — the hold value, wear cost, when it sells, every knob and
+its pitfalls — and is the doc to read when a plan surprises you.
 
 ## Outputs
 
