@@ -88,10 +88,6 @@ function makePlan() {
     });
   }
   const s0 = intervals[0];
-  // Honest ranks: the "More info" panel is collapsed in the captures, but its
-  // numbers shouldn't contradict the series if it's ever opened.
-  const sellRank = intervals.filter((iv) => iv.sell > s0.sell).length + 1;
-  const buyRank = intervals.filter((iv) => iv.buy > s0.buy).length + 1;
   return {
     computed_at: T0.toISOString(),
     solver_status: "optimal",
@@ -106,10 +102,6 @@ function makePlan() {
         cool_kw_per_deg: 0.2, buffer: 0.1,
       },
       explanation: {
-        reason:
-          "Exporting stored energy — the $0.77/kWh feed-in price is among the best in " +
-          "the forecast, well above the $0.21/kWh value of keeping it stored — so " +
-          "selling now beats holding.",
         values: {
           buy: s0.buy, sell: s0.sell, pv_kw: s0.pv_kw, load_kw: s0.load_kw,
           soc_start_kwh: s0.soc_start, soc_end_kwh: s0.soc_end,
@@ -118,7 +110,7 @@ function makePlan() {
           battery_kw: s0.power_kw, grid_import_kw: s0.grid_import_kw,
           grid_export_kw: s0.grid_export_kw, interval_cost: s0.interval_cost,
         },
-        context: { sell_rank: sellRank, buy_rank: buyRank, horizon_steps: 72, hold_value: 0.21, flat: false, hysteresis: false },
+        context: { hold_value: 0.21, hysteresis: false },
         levers: { spike_reserve: null, daily_target: false, live_spike: false, prices_estimated: false },
       },
     },

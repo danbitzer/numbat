@@ -48,11 +48,12 @@ export const VacationInfoSchema = z.object({
 });
 export type VacationInfo = z.infer<typeof VacationInfoSchema>;
 
-// "Why this action" — a plain-language explanation of the current interval
-// plus the numbers behind it (see numbat/explain.py). Loose sub-objects: the
-// backend may add fields, and the fallback path omits context/levers.
+// "More info" — the step-0 numbers behind the current action plus the armed
+// levers (see numbat/explain.py; no prose — the decision weighs the whole
+// horizon, so any one-line reason would be a lie of omission). Loose
+// sub-objects: the backend may add fields, and the fallback path omits
+// context/levers.
 export const ExplanationSchema = z.object({
-  reason: z.string(),
   values: z.looseObject({
     buy: z.number(),
     sell: z.number(),
@@ -69,11 +70,7 @@ export const ExplanationSchema = z.object({
   }),
   context: z
     .looseObject({
-      sell_rank: z.number().optional(),
-      buy_rank: z.number().optional(),
-      horizon_steps: z.number().optional(),
       hold_value: z.number().optional(),
-      flat: z.boolean().optional(),
       hysteresis: z.boolean().optional(),
     })
     .optional(),

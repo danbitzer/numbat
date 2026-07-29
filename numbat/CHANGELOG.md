@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Dropped the "why this action" sentence** from the More info panel. The
+  optimizer weighs the whole horizon — refill routes, reserves, targets, the
+  dynamic export spread — so any one-line reason compares against a single
+  quantity and misleads precisely on the interesting days (e.g. quoting the
+  hold value while the real alternative was a solar refill). The panel keeps
+  the step-0 numbers, hold value, and armed-lever chips; OPTIMIZER.md,
+  the per-setting help, and Test mode carry the "why".
 - Settings: the daily target time field no longer renders as the browser's
   empty "--:-- --" skeleton when the value is unset or equals the default.
   Native time inputs can't show placeholder text (the mechanism every other

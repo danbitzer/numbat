@@ -289,7 +289,6 @@ def simulate_solve(
     plan.explanation = build_explanation(
         plan,
         hold_value=terminal,
-        price_forecast_end=grid.end,
         spike_reserve=(
             {"kwh": float(reserve[0]), "until": None} if reserve is not None else None
         ),
@@ -297,7 +296,6 @@ def simulate_solve(
         live_spike=False,
         prices_estimated=False,
         capacity_kwh=bp.capacity_kwh,
-        tz=tz,
     )
 
     return {
