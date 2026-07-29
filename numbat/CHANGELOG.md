@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **The export spread is now dynamic.** `optimizer.min_battery_export_spread`
+  was a static price gate (`hold value/η + wear + spread`, precomputed per
+  solve), which blocked good sales on solar-refill days: live on 2026-07-29
+  a 28c feed-in blip was refused because the hold value read 20c (no cheap
+  grid window in the horizon) — but the sold kWh would have been replaced
+  within hours by solar otherwise exporting at ~10c, a true margin of
+  ~+12c/kWh. The spread is now a **penalty per sold kWh inside the
+  objective**, so a sale must beat the plan's *own* best alternative use of
+  the energy — tonight's peak, a cheaper rebuy, or forgone feed-in —
+  whatever the horizon actually offers. Pennies-margin churn is still
+  refused; the semantics finally match the field's description ("minimum
+  profit per sold kWh"). `grid.min_battery_export_price` deliberately stays
+  a static dollar floor. No config change — same field, same default.
+
 ## 0.12.0
 
 - **New: `battery.export_reserve_soc`** — the SoC-based sell floor. Selling

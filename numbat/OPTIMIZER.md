@@ -146,13 +146,23 @@ The battery sends stored energy to the grid only when the feed-in price
 beats the value of keeping it. Roughly:
 
 ```
-sell when:   feed-in price  >  hold value (+ losses)  +  wear cost  +  your margin
+sell when:   feed-in price  >  best alternative use (+ losses)  +  wear cost  +  your margin
 ```
 
-That last term is the **minimum battery export spread** (default 5c; 0 = off).
-It's your personal "worth getting off the couch for" threshold — the minimum
-*profit* per exported kWh, after wear is paid and the energy is valued at
-its rebuy cost. If cycling your battery for less than 5c/kWh profit isn't
+The "best alternative use" is priced by the plan itself, and it changes
+with the day: tonight's peak imports when the charge will be needed, the
+cheapest upcoming rebuy when the grid will refill the battery, or merely
+the forgone feed-in when **solar** will refill it anyway. That last case
+matters: on a sunny day a stored kWh sold this afternoon is replaced by
+solar that would otherwise have exported at a few cents — so a 28c sale can
+be excellent even when the hold value reads 20c. (The hold value only
+prices energy still stored at the *end* of the horizon; within it, the plan
+knows better.)
+
+That last term is the **minimum battery export spread** (default 5c;
+0 = off) — your personal "worth getting off the couch for" threshold, the
+minimum *profit* per sold kWh over that best alternative, after wear. If
+cycling your battery for less than 5c/kWh profit isn't
 worth it to you, that's the default; set 0 to sell whenever marginally
 profitable. Feed-in spikes sail over any sensible spread, so spike revenue
 is unaffected.
@@ -176,8 +186,9 @@ with imports.
 All three only restrict *selling stored energy*. Solar export, charging,
 and the battery covering your house are never blocked by them.
 
-**Example — the thin-margin sell.** Feed-in is 12.7c. The hold value is
-8.4c (cheap power coming tonight), wear is 2c. Selling nets roughly
+**Example — the thin-margin sell.** Feed-in is 12.7c. The best alternative
+is a cheap rebuy tonight, worth
+8.4c, wear is 2c. Selling nets roughly
 12.7 − 8.8 − 2 ≈ 1.9c per kWh — real profit, and with the spread set to 0
 Numbat would take it, shuffling ~40 kWh through your battery for a dollar
 or two. The default 5c spread lets this one pass: 1.9c is under the bar,
@@ -231,8 +242,9 @@ full-charge target** (e.g. 100% at 3pm). Two things make it work:
 > **Pitfall — expecting the target to stop cheap dumping.** If tomorrow's
 > feed-in goes negative (a solar glut), refilling tomorrow is nearly free —
 > so the battery can dump tonight *and still meet* tomorrow's target. The
-> target can't prevent that; the export spread or price floor is the right
-> tool there.
+> target can't prevent that, and the dynamic spread only asks the dump to
+> clear wear + your margin over the near-free refill; the **minimum battery
+> export price** is the firm tool there.
 
 ## The spike reserve
 

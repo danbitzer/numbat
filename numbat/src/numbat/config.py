@@ -168,7 +168,7 @@ class Grid(BaseModel):
     # Lowest feed-in price ($/kWh) at which Numbat will discharge the battery to
     # the grid. Below it the battery still covers the house but won't export;
     # PV surplus can still export. None (blank) = no manual floor (the
-    # automatic optimizer.min_battery_export_spread deadband may still apply).
+    # optimizer.min_battery_export_spread margin still applies dynamically).
     min_battery_export_price: float | None = Field(default=None)
 
 
@@ -216,11 +216,13 @@ class Optimizer(BaseModel):
     terminal_soc_value: Literal["auto"] | float = "auto"
     hold_value_floor: float = Field(default=0.01, ge=0)
     hold_value_scaling: float = Field(default=1.0, ge=0)
-    # Minimum arbitrage spread ($/kWh): the battery only sells to the grid when
-    # the feed-in beats holding by this margin. Kills pennies-margin export
-    # churn. 0 = off (export whenever marginally profitable). The automatic
-    # counterpart to grid.min_battery_export_price. Defaults to 5c: a fresh
-    # install shouldn't cycle the battery for sub-wear-cost margins.
+    # Minimum profit per sold kWh ($/kWh): a penalty per battery-sourced
+    # exported kWh in the objective, so a sale must beat the plan's own best
+    # alternative use of that energy (tonight's load, a cheaper rebuy, or
+    # solar that would otherwise export) by this margin. Kills pennies-margin
+    # export churn. 0 = off (sell whenever marginally profitable). The
+    # dynamic counterpart to grid.min_battery_export_price. Defaults to 5c: a
+    # fresh install shouldn't cycle the battery for sub-wear-cost margins.
     min_battery_export_spread: float = Field(default=0.05, ge=0)
     # Import reluctance ($/kWh): a virtual toll on grid imports in the
     # objective (never in displayed costs) that biases the plan toward solar

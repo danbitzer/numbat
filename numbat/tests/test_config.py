@@ -52,7 +52,7 @@ def test_weather_entity_is_optional():
 
 
 def test_redesign_defaults_and_overrides():
-    """The optimizer-redesign knobs: hold-value anchor, deadband, windowed
+    """The optimizer-redesign knobs: hold-value anchor, export margin, windowed
     daily target, manual export floor."""
     s = make_settings()
     assert s.optimizer.hold_value_floor == 0.01
