@@ -404,7 +404,6 @@ class Planner:
         plan.explanation = build_explanation(
             plan,
             hold_value=terminal,
-            price_forecast_end=data.price_forecast_end,
             spike_reserve=self._reserve_info(data),
             daily_target_active=(
                 data.inputs.soc_target_kwh is not None
@@ -413,7 +412,6 @@ class Planner:
             live_spike=data.prices.live_spike,
             prices_estimated=data.prices.current_estimate,
             capacity_kwh=self._battery_params.capacity_kwh,
-            tz=self._tz,
         )
         return plan
 
@@ -524,12 +522,8 @@ class Planner:
             # truthful while a fallback plan is in effect
             live_spike=prev.live_spike,
             # The full context is gone with the failed solve; give the panel the
-            # step-0 values and an honest note rather than a stale reason.
+            # step-0 values — the "reusing previous plan" chip (stale) says why.
             explanation={
-                "reason": (
-                    "Reusing the previous plan — the latest solve failed, so Numbat shifted "
-                    "the last good plan forward. Values are from that plan."
-                ),
                 "values": {
                     "buy": s0.buy,
                     "sell": s0.sell,

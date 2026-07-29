@@ -199,7 +199,7 @@ function Chip({ children }: { children: ReactNode }) {
 
 function MoreInfo({ explanation, plan }: { explanation: Explanation; plan?: PlanResponse }) {
   const [open, setOpen] = useState(false);
-  const { reason, values: v, context: c, levers: l, stale } = explanation;
+  const { values: v, context: c, levers: l, stale } = explanation;
   const bat = batteryText(v.battery_kw);
   const grid = gridMetric(v);
   const meter = meterText(v.interval_cost);
@@ -229,7 +229,6 @@ function MoreInfo({ explanation, plan }: { explanation: Explanation; plan?: Plan
       </button>
       {open && (
         <div className="mt-3 space-y-3">
-          <p className="text-[13px] leading-relaxed text-foreground">{reason}</p>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3">
             <Metric label="Buy" value={money(v.buy)} sub="/kWh" />
             <Metric label="Feed-in" value={money(v.sell)} sub="/kWh" />
