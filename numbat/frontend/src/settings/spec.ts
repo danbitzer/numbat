@@ -309,8 +309,8 @@ export const SECTIONS: SectionSpec[] = [
         "Min battery export price",
         "Lowest feed-in price at which Numbat will discharge the battery to the grid. " +
           "Below it the battery still covers the house but won't sell stored energy; " +
-          "PV surplus can still export. Blank = no manual floor (the automatic export " +
-          "deadband under Optimizer may still apply).",
+          "PV surplus can still export. Blank = no manual floor (the export spread " +
+          "under Optimizer still applies dynamically).",
         { unit: "$/kWh", step: 0.01 },
       ),
     ],

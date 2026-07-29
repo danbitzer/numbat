@@ -128,7 +128,9 @@ the going rate. 50–150% is plenty; larger values only raise what an
 extreme-priced day may cost you.
 Note that a single-instant fill cannot survive a *negative* feed-in 
 tomorrow (refilling is then free, so the battery may dump tonight and still 
-hit the target) — that is what the export floor / deadband below is for.
+hit the target) — the manual export price floor below is the firm tool
+there (the dynamic spread correctly prices a near-free refill as a cheap
+alternative, so it only bars sub-margin dumping).
 
 `soc_min` is the hard floor for **all planned discharge — including serving
 your own house**. Once a plan grinds down to it, remaining load is met by

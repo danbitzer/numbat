@@ -64,8 +64,8 @@ class GridParams:
     export_limit_kw: float
     # Below this feed-in price ($/kWh), forbid BATTERY-sourced grid export —
     # the battery still covers the house, but never sells stored energy this
-    # cheap. PV surplus can still export. None = no manual floor (the automatic
-    # deadband in OptimizerConfig may still apply).
+    # cheap. PV surplus can still export. None = no manual floor (the dynamic
+    # spread in OptimizerConfig still applies).
     min_battery_export_price: float | None = None
 
 

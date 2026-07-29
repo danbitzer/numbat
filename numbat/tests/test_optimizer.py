@@ -463,7 +463,7 @@ def test_export_spread_is_dynamic_solar_refill_day_still_sells():
     assert sol.soc_kwh[-1] > 9.0
 
 
-def test_min_battery_export_spread_deadband_suppresses_thin_export():
+def test_min_battery_export_spread_suppresses_thin_export():
     """The margin bar: a feed-in that only just beats holding is not
     worth the cycle. A 0.02 spread outweighs the thin margin and the plan
     holds instead of selling."""
@@ -475,8 +475,36 @@ def test_min_battery_export_spread_deadband_suppresses_thin_export():
     guarded = solve(inputs, BATTERY, GRID,
                     OptimizerConfig(terminal_value=hv, reserve_penalty_per_kwh=0.5,
                                     solver_timeout_s=30, min_battery_export_spread=0.02))
-    assert thin.grid_export_kw.max() > 1.0  # would export without the deadband
-    assert guarded.grid_export_kw.max() < 0.01  # deadband holds it
+    assert thin.grid_export_kw.max() > 1.0  # would export without the margin bar
+    assert guarded.grid_export_kw.max() < 0.01  # the margin bar holds it
+
+
+def test_export_spread_never_taxes_serving_the_house():
+    """The penalty must sit on pd_sell only: an absurd 5 $/kWh spread may not
+    stop the battery running the house at night. (Mutation-verified: a
+    penalty applied to total pd survives the rest of the suite but freezes
+    self-consumption here.)"""
+    inputs = make_inputs(buy=0.40, sell=0.05, pv=0.0, load=2.0, soc0=6.4)
+    sol = solve(inputs, BATTERY, GRID,
+                OptimizerConfig(terminal_value=0.05, reserve_penalty_per_kwh=0.5,
+                                solver_timeout_s=30, min_battery_export_spread=5.0))
+    assert sol.discharge_kw.sum() * 0.5 > 1.0  # house still served from battery
+    assert sol.grid_export_kw.max() < 0.01
+
+
+def test_export_spread_is_per_kwh_not_per_step():
+    """dt-weighting probe: with sell 15.5c the true bar (hold 8.4c grossed +
+    wear + 2c spread) is ~14.9c -> sells; a penalty missing the dt multiply
+    doubles the effective spread at 0.5 h steps (~16.9c bar) and flips the
+    decision. (Mutation-verified discriminator.)"""
+    buy = np.full(24, 0.30)
+    buy[:6] = 0.08
+    inputs = make_inputs(buy=buy, sell=0.155, pv=0.0, load=0.5, soc0=10.0)
+    hv = auto_terminal_value(buy, BATTERY)
+    sol = solve(inputs, BATTERY, GRID,
+                OptimizerConfig(terminal_value=hv, reserve_penalty_per_kwh=0.5,
+                                solver_timeout_s=30, min_battery_export_spread=0.02))
+    assert sol.grid_export_kw.max() > 1.0  # the ~+0.6c margin clears a true 2c bar
 
 
 def test_min_battery_export_price_blocks_indirect_export_via_pv_displacement():

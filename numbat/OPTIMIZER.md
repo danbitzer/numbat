@@ -242,8 +242,9 @@ full-charge target** (e.g. 100% at 3pm). Two things make it work:
 > **Pitfall — expecting the target to stop cheap dumping.** If tomorrow's
 > feed-in goes negative (a solar glut), refilling tomorrow is nearly free —
 > so the battery can dump tonight *and still meet* tomorrow's target. The
-> target can't prevent that; the export spread or price floor is the right
-> tool there.
+> target can't prevent that, and the dynamic spread only asks the dump to
+> clear wear + your margin over the near-free refill; the **minimum battery
+> export price** is the firm tool there.
 
 ## The spike reserve
 
