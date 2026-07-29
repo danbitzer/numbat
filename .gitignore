@@ -26,3 +26,6 @@ numbat/data/
 
 # Frontend
 node_modules/
+
+# macOS Finder junk
+.DS_Store
