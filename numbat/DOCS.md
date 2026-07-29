@@ -408,6 +408,19 @@ are missing (HA restarted while Numbat was down), your *idle* actions run (after
 lifting any export cap) — so a dead add-on can never leave the inverter stuck
 in forced mode or curtailed. Keep the idle sequence simple and idempotent.
 
+It is also **self-healing**: inverter writes can occasionally be lost (a
+Modbus hiccup at the wrong instant), so for 15 minutes after every
+recommendation change the blueprint re-asserts the current action on its
+5-minute sweep — a lost write is repaired within 5 minutes instead of
+sticking until the next plan change. That's why every write in the examples
+below is **guarded** (skipped when the register already matches): guarded
+sequences make the re-asserts free, touching Modbus only when something is
+actually wrong. When a release updates the blueprint, re-download it
+(Settings → Automations → Blueprints → ⋮ on the Numbat actuator →
+Re-download) — imported blueprints don't update themselves. For debuggable
+history, consider raising the automation's stored traces (three-dot menu →
+Edit in YAML, add top-level `trace: {stored_traces: 25}`).
+
 Optionally point the blueprint at a **grid-connection binary sensor** (ON
 while the grid is up — most inverter integrations expose one). During a grid
 outage the automation immediately reverts to idle/self-consumption and
@@ -419,52 +432,72 @@ Example sequences for the mkaiser Sungrow package (verify entity IDs and
 option strings against your install — they vary between package versions):
 
 ```yaml
-# charge_actions
-- action: number.set_value
-  target: {entity_id: number.sungrow_battery_forced_charge_discharge_power}
-  data: {value: "{{ power_w }}"}
-- action: select.select_option
-  target: {entity_id: select.sungrow_battery_forced_charge_discharge_cmd}
-  data: {option: "Forced charge"}
-- action: select.select_option
-  target: {entity_id: select.sungrow_ems_mode}
-  data: {option: "Forced mode"}
+# charge_actions — every write guarded: skipped when the register already
+# matches, so the blueprint's re-asserts are Modbus-silent
+- if: ["{{ states('number.sungrow_battery_forced_charge_discharge_power') | float(0) != power_w }}"]
+  then:
+    - action: number.set_value
+      target: {entity_id: number.sungrow_battery_forced_charge_discharge_power}
+      data: {value: "{{ power_w }}"}
+- if: ["{{ not is_state('select.sungrow_battery_forced_charge_discharge_cmd', 'Forced charge') }}"]
+  then:
+    - action: select.select_option
+      target: {entity_id: select.sungrow_battery_forced_charge_discharge_cmd}
+      data: {option: "Forced charge"}
+- if: ["{{ not is_state('select.sungrow_ems_mode', 'Forced mode') }}"]
+  then:
+    - action: select.select_option
+      target: {entity_id: select.sungrow_ems_mode}
+      data: {option: "Forced mode"}
 
-# discharge_actions — as above with option: "Forced discharge"
+# discharge_actions — as above with option: "Forced discharge" (in the write
+# and in its guard)
 
-# idle_actions (also the failsafe — keep robust)
-- action: select.select_option
-  target: {entity_id: select.sungrow_battery_forced_charge_discharge_cmd}
-  data: {option: "Stop (default)"}
-- action: select.select_option
-  target: {entity_id: select.sungrow_ems_mode}
-  data: {option: "Self-consumption mode (default)"}
+# idle_actions (also the failsafe — keep robust). One guarded write, on
+# purpose: do NOT write "Stop (default)" to the command register here — on
+# Sungrow, Stop halts the battery entirely (it stops serving your own house
+# load), so a stuck Stop is worse than what it disarms. The forced
+# command/power registers left behind are inert while EMS mode is
+# self-consumption, and the blueprint's re-asserts guard the EMS revert.
+- if: ["{{ not is_state('select.sungrow_ems_mode', 'Self-consumption mode (default)') }}"]
+  then:
+    - action: select.select_option
+      target: {entity_id: select.sungrow_ems_mode}
+      data: {option: "Self-consumption mode (default)"}
 
 # no_charge_actions (optional) — self-consumption with charging blocked; the
 # blueprint runs idle_actions first, so EMS mode is already self-consumption
-- action: number.set_value
-  target: {entity_id: number.sungrow_battery_max_charge_power}
-  data: {value: 0}
+- if: ["{{ states('number.sungrow_battery_max_charge_power') | float(0) > 0 }}"]
+  then:
+    - action: number.set_value
+      target: {entity_id: number.sungrow_battery_max_charge_power}
+      data: {value: 0}
 
 # restore_actions (optional, required with no_charge) — max charge power back
 # to full (your battery's rating); runs before every branch so no_charge's 0
 # can't cap a later charge or idle
-- action: number.set_value
-  target: {entity_id: number.sungrow_battery_max_charge_power}
-  data: {value: 12000}
+- if: ["{{ states('number.sungrow_battery_max_charge_power') | float(0) < 12000 }}"]
+  then:
+    - action: number.set_value
+      target: {entity_id: number.sungrow_battery_max_charge_power}
+      data: {value: 12000}
 
 # curtail_actions (optional) — cap export while feed-in is negative; the
 # blueprint runs idle_actions first, so the battery is already back to normal
-- action: number.set_value
-  target: {entity_id: number.sungrow_export_power_limit}
-  data: {value: 0}
+- if: ["{{ states('number.sungrow_export_power_limit') | float(0) > 0 }}"]
+  then:
+    - action: number.set_value
+      target: {entity_id: number.sungrow_export_power_limit}
+      data: {value: 0}
 
 # uncurtail_actions (required if you set curtail_actions) — restore your
 # normal export limit; runs before every non-curtail branch, so it must be
 # idempotent. Use your DNSP limit in watts.
-- action: number.set_value
-  target: {entity_id: number.sungrow_export_power_limit}
-  data: {value: 12000}
+- if: ["{{ states('number.sungrow_export_power_limit') | float(0) < 12000 }}"]
+  then:
+    - action: number.set_value
+      target: {entity_id: number.sungrow_export_power_limit}
+      data: {value: 12000}
 ```
 
 Set the power register **before** engaging forced mode (as above), so a

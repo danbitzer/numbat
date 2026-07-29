@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **Actuator blueprint: settle delay + self-healing re-assert** (after the
+  2026-07-29 stuck-discharge incident: a spike sell ended at 17:25 but the
+  inverter stayed in forced discharge until 18:00). Two causes, two fixes.
+  Numbat publishes the setpoint and action sensors ~50 ms apart, so every
+  plan change fired the automation twice and `mode: restart` could cancel
+  the first run mid-inverter-write — a 1 s settle delay now coalesces the
+  double-fire into one run on settled sensors. And a lost revert write had
+  no retry while Numbat was healthy — the 5-minute sweep now re-asserts the
+  current action for 15 minutes after every recommendation change, so a
+  single lost write heals within 5 minutes. Root cause confirmed in the HA
+  system log: cancelling the in-flight Modbus write desynced pymodbus
+  transaction IDs, and the revert write's response was skipped. DOCS example
+  sequences are now fully guarded (write only when the register differs) to
+  keep re-asserts Modbus-silent, and the Sungrow idle example no longer
+  writes "Stop" — on Sungrow, Stop halts the battery entirely, including
+  serving the house, so a stuck Stop would be worse than the inert armed
+  registers it clears. **Re-download the blueprint in HA** (Blueprints → ⋮ →
+  Re-download) to pick this up.
+
 - **The export spread is now dynamic.** `optimizer.min_battery_export_spread`
   was a static price gate (`hold value/η + wear + spread`, precomputed per
   solve), which blocked good sales on solar-refill days: live on 2026-07-29
