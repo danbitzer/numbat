@@ -365,6 +365,24 @@ def test_spike_reserve_vector_lookahead_and_trigger():
     )
 
 
+async def test_gather_haircuts_solve_prices_and_keeps_raw_for_display():
+    """The wiring, not the maths: gather must hand the solver the trimmed
+    series AND stash the raw one for the published plan. (A dropped
+    sell_raw= or a raw inputs.sell would silently pass every other test —
+    they run with the haircut off.)"""
+    settings = make_settings(optimizer={"forecast_haircut": 0.5})
+    fake = full_fake_ha()
+    async with fake_ha_client(fake) as client:
+        data = await make_planner(client, settings).gather(NOW)
+    assert data.sell_raw is not None
+    assert data.inputs.sell[0] == data.sell_raw[0]  # live price exempt
+    median = float(np.median(data.sell_raw))
+    above = data.sell_raw[1:] > median
+    assert above.any()  # fixture sanity: something to trim
+    assert np.all(data.inputs.sell[1:][above] < data.sell_raw[1:][above])
+    assert np.array_equal(data.inputs.sell[1:][~above], data.sell_raw[1:][~above])
+
+
 def test_haircut_trims_forecast_above_median_but_never_step0():
     """The haircut is a flat trim on every FORECAST interval's excess above
     the median; the live step-0 price is confirmed and never cut, biasing

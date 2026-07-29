@@ -11,8 +11,10 @@
   above the median (simple to reason about); 5–10% is plenty. Also fixed:
   the published plan now reports raw prices — the haircut shapes the solve
   only, so the dashboard's price chart and revenue figures always match the
-  real forecast (same philosophy as import reluctance). Default unchanged
-  (off).
+  real forecast (same philosophy as import reluctance). Test mode (scenarios
+  and time travel) now applies the haircut too — previously the sandbox
+  exposed the knob but silently ignored it, so A/B runs lied. Default
+  unchanged (off).
 - **Dropped the "why this action" sentence** from the More info panel. The
   optimizer weighs the whole horizon — refill routes, reserves, targets, the
   dynamic export spread — so any one-line reason compares against a single

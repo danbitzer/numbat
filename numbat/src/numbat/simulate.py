@@ -9,7 +9,7 @@ sensors, touches /data, or mutates the live planner — safe to call anytime.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -28,6 +28,7 @@ from numbat.optimizer.result import solution_to_plan
 from numbat.planner import (
     battery_params,
     daily_soc_target_vector,
+    haircut_sell,
     spike_reserve_vector,
 )
 from numbat.timegrid import TimeGrid
@@ -252,9 +253,16 @@ def simulate_solve(
         soc_max_kwh=bp.soc_max_kwh,
     )
 
+    # Same forecast skepticism as the live planner: the haircut shapes the
+    # solve (step 0 — the scenario's "current" price, or the recorded instant
+    # in time travel — is exempt), while the reported plan quotes the raw
+    # prices. Without this the sandbox's haircut knob would silently do
+    # nothing, making test-mode A/B runs lie.
+    sell_solve = haircut_sell(sell, settings.optimizer.forecast_haircut)
+
     inputs = OptimizerInputs(
         dt_hours=grid.dt_hours,
-        buy=buy, sell=sell, pv=pv, load=load,
+        buy=buy, sell=sell_solve, pv=pv, load=load,
         soc0_kwh=float(np.clip(soc_frac, 0.0, 1.0)) * bp.capacity_kwh,
         reserve_kwh=reserve,
         soc_target_kwh=target,
@@ -285,7 +293,7 @@ def simulate_solve(
     )
 
     solution = solve(inputs, bp, grid_params, opt_config)
-    plan = solution_to_plan(solution, grid, inputs, computed_at=now)
+    plan = solution_to_plan(solution, grid, replace(inputs, sell=sell), computed_at=now)
     plan.explanation = build_explanation(
         plan,
         hold_value=terminal,

@@ -52,6 +52,24 @@ class InputsStale(Exception):
     pass
 
 
+def haircut_sell(sell: np.ndarray, haircut: float) -> np.ndarray:
+    """Shave `haircut` (a fraction) off every FORECAST sell price's excess
+    above the median. Forecasts run optimistic even one interval out — around
+    spikes especially — so only step 0 (the live, confirmed price) is trusted
+    in full. Flat by design: one rule, easy to reason about. Below-median
+    prices are untouched, and the spike reserve keys off the raw series, so
+    hedging potential spikes is unaffected. Shared by the live planner and
+    test mode (scenarios + time travel), so the sandbox knob behaves exactly
+    like the live one."""
+    if haircut <= 0 or len(sell) < 2:
+        return sell
+    median = float(np.median(sell))
+    out = sell.copy()
+    tail = out[1:]
+    out[1:] = np.where(tail > median, median + (tail - median) * (1 - haircut), tail)
+    return out
+
+
 def spike_reserve_vector(
     sell: np.ndarray,
     dt_hours: np.ndarray,
@@ -343,20 +361,7 @@ class Planner:
         return caps
 
     def _haircut_sell(self, sell: np.ndarray) -> np.ndarray:
-        """Shave the configured share off every FORECAST sell price's excess
-        above the median. Forecasts run optimistic even one interval out —
-        around spikes especially — so only step 0 (the live, confirmed price)
-        is trusted in full. Flat by design: one rule, easy to reason about.
-        Below-median prices are untouched, and the spike reserve keys off the
-        raw series, so hedging potential spikes is unaffected."""
-        h = self._settings.optimizer.forecast_haircut
-        if h <= 0 or len(sell) < 2:
-            return sell
-        median = float(np.median(sell))
-        out = sell.copy()
-        tail = out[1:]
-        out[1:] = np.where(tail > median, median + (tail - median) * (1 - h), tail)
-        return out
+        return haircut_sell(sell, self._settings.optimizer.forecast_haircut)
 
     def _spike_reserve(
         self, sell: np.ndarray, grid: TimeGrid, now: datetime, prices: PriceForecast
