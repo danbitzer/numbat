@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Settings: the daily target time field no longer renders as the browser's
+  empty "--:-- --" skeleton when the value is unset or equals the default.
+  Native time inputs can't show placeholder text (the mechanism every other
+  field uses to display its default), so the time field now always carries a
+  concrete value — the stored time, or the default.
+
 ## 0.13.0
 
 - **Actuator blueprint: settle delay + self-healing re-assert** (after the
