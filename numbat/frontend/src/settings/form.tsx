@@ -58,13 +58,18 @@ export function buildDefaults(config: Record<string, unknown> | null): FormValue
       v = raw === undefined ? f.default === true : raw === true;
     } else if (f.kind === "select") {
       v = raw === undefined ? String(f.default ?? "") : String(raw);
+    } else if (f.kind === "time") {
+      // Native time inputs can't render placeholders — empty shows the
+      // browser's broken-looking "--:-- --" skeleton instead — so unlike the
+      // fields below, time fields always carry a concrete value: the stored
+      // time (pydantic dumps "15:00:00") or the default.
+      v = raw === undefined ? String(f.default ?? "") : String(raw).slice(0, 5);
     } else {
       // Defaults are shown as grey placeholders, not pre-filled values: an
       // empty input means "use the default" (a stored value EQUAL to the
       // default also renders as the placeholder — same semantics, and it
       // keeps default-vs-customized visually distinct after reloads).
       v = raw === undefined ? "" : String(raw);
-      if (f.kind === "time") v = v.slice(0, 5); // pydantic dumps "15:00:00"
       // Percent fields store fractions but display ×100 (spec defaults are
       // already in display units). Round away float artifacts (0.07*100).
       if (f.percent && typeof raw === "number") {
