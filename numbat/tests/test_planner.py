@@ -383,6 +383,32 @@ async def test_gather_haircuts_solve_prices_and_keeps_raw_for_display():
     assert np.array_equal(data.inputs.sell[1:][~above], data.sell_raw[1:][~above])
 
 
+async def test_spike_reserve_triggers_on_trimmed_not_raw_prices():
+    """The reserve shares the objective's skepticism: a forecast spike that
+    only clears the threshold before the haircut isn't reserved for. Uses a
+    threshold set strictly between the fixture's trimmed and raw forecast
+    peaks, so this fails if the reserve is ever wired back to sell_raw."""
+    def spike_settings(threshold: float, haircut: float) -> Settings:
+        return make_settings(
+            spike={"lookahead_hours": 48, "reserve_kwh": 6.0, "high_price_threshold": threshold},
+            optimizer={"forecast_haircut": haircut},
+        )
+
+    fake = full_fake_ha()
+    async with fake_ha_client(fake) as client:
+        # threshold 999 arms nothing; this gather just measures the fixture
+        probe = await make_planner(client, spike_settings(999.0, 0.5)).gather(NOW)
+        raw_peak = float(probe.sell_raw[1:].max())
+        trimmed_peak = float(probe.inputs.sell[1:].max())
+        assert trimmed_peak < raw_peak  # fixture sanity: the trim bites
+        threshold = (trimmed_peak + raw_peak) / 2
+
+        armed = await make_planner(client, spike_settings(threshold, 0.0)).gather(NOW)
+        assert armed.inputs.reserve_kwh is not None  # raw peak clears it...
+        skeptical = await make_planner(client, spike_settings(threshold, 0.5)).gather(NOW)
+        assert skeptical.inputs.reserve_kwh is None  # ...the trimmed one doesn't
+
+
 def test_haircut_trims_forecast_above_median_but_never_step0():
     """The haircut is a flat trim on every FORECAST interval's excess above
     the median; the live step-0 price is confirmed and never cut, biasing

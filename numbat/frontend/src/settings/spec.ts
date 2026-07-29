@@ -409,9 +409,9 @@ export const SECTIONS: SectionSpec[] = [
         "Sell price forecast haircut",
         "Shaves this share of the above-median excess off every FORECAST sell price — " +
           "the live confirmed price is never cut, so a confirmed good price beats " +
-          "holding for a forecast better one. Forecasts run optimistic around spikes, " +
-          "even one interval out; 5–10% is plenty. The spike reserve and the dashboard " +
-          "show raw prices — this only tempers the plan's trust.",
+          "holding for a forecast better one. Applies to spike prices and the spike " +
+          "reserve trigger too (a real spike clears the threshold even after the cut); " +
+          "5–10% is plenty. The dashboard always shows raw prices.",
         { unit: "%", percent: true, min: 0, max: 100, step: 5, default: "0" },
       ),
     ],

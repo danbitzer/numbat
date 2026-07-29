@@ -304,9 +304,12 @@ buffer until learning is active. The goal state is always a learned forecast.
   one — sell forecasts run optimistic around spikes, even one interval out
   (yes, including Amber's advanced predicted pricing). Flat across the
   horizon for predictability; a low setting (5–10%) is plenty, since it
-  compounds every hold-for-later decision. The spike reserve reads raw
-  prices and the dashboard displays raw prices — the haircut only tempers
-  the plan's internal trust, never a dollar figure you see.
+  compounds every hold-for-later decision. It applies to spike-level prices
+  too — including the spike-reserve trigger, so a marginal forecast spike
+  the trim drops below your threshold isn't reserved for, while a real
+  spike clears the threshold even after the cut. The dashboard always
+  displays raw prices — the haircut only tempers the plan's internal
+  trust, never a dollar figure you see.
 
 ### `spike`
 

@@ -245,20 +245,20 @@ def simulate_solve(
         capacity_kwh=bp.capacity_kwh,
         soc_max_kwh=bp.soc_max_kwh,
     )
+    # Same forecast skepticism as the live planner: the haircut shapes the
+    # solve and the spike-reserve trigger (step 0 — the scenario's "current"
+    # price, or the recorded instant in time travel — is exempt), while the
+    # reported plan quotes the raw prices. Without this the sandbox's
+    # haircut knob would silently do nothing, making test-mode A/B runs lie.
+    sell_solve = haircut_sell(sell, settings.optimizer.forecast_haircut)
+
     reserve = spike_reserve_vector(
-        sell, grid.dt_hours,
+        sell_solve, grid.dt_hours,
         lookahead_hours=settings.spike.lookahead_hours,
         high_price_threshold=settings.spike.high_price_threshold,
         reserve_kwh=settings.spike.reserve_kwh,
         soc_max_kwh=bp.soc_max_kwh,
     )
-
-    # Same forecast skepticism as the live planner: the haircut shapes the
-    # solve (step 0 — the scenario's "current" price, or the recorded instant
-    # in time travel — is exempt), while the reported plan quotes the raw
-    # prices. Without this the sandbox's haircut knob would silently do
-    # nothing, making test-mode A/B runs lie.
-    sell_solve = haircut_sell(sell, settings.optimizer.forecast_haircut)
 
     inputs = OptimizerInputs(
         dt_hours=grid.dt_hours,

@@ -57,8 +57,10 @@ def haircut_sell(sell: np.ndarray, haircut: float) -> np.ndarray:
     above the median. Forecasts run optimistic even one interval out — around
     spikes especially — so only step 0 (the live, confirmed price) is trusted
     in full. Flat by design: one rule, easy to reason about. Below-median
-    prices are untouched, and the spike reserve keys off the raw series, so
-    hedging potential spikes is unaffected. Shared by the live planner and
+    prices are untouched. The trimmed series feeds every forecast-trusting
+    decision, spike-reserve trigger included: a marginal forecast spike the
+    trim drops below the threshold isn't reserved for, and a real spike
+    clears the threshold even after the cut. Shared by the live planner and
     test mode (scenarios + time travel), so the sandbox knob behaves exactly
     like the live one."""
     if haircut <= 0 or len(sell) < 2:
@@ -255,10 +257,11 @@ class Planner:
         buy = resample_previous(prices.buy, grid)
         sell_raw = resample_previous(prices.sell, grid)
         buy[0], sell_raw[0] = prices.current_buy, prices.current_sell
-        # The haircut tempers the objective's trust in forecast prices (the
-        # live step-0 price is exempt); the spike reserve triggers on the RAW
-        # forecast — it exists precisely to hedge prices the haircut would
-        # discount. The published plan also shows raw prices: the haircut is
+        # The haircut tempers every use of forecast trust (the live step-0
+        # price is exempt) — including the spike-reserve trigger: a marginal
+        # forecast spike the trim drops below the threshold isn't worth
+        # reserving for, while a real spike clears the threshold even after
+        # the cut. The published plan still shows raw prices: the haircut is
         # planning maths, not a dollar the meter will see.
         sell = self._haircut_sell(sell_raw)
 
@@ -308,7 +311,7 @@ class Planner:
             pv=pv_kw,
             load=load_kw,
             soc0_kwh=battery.soc_frac * self._battery_params.capacity_kwh,
-            reserve_kwh=self._spike_reserve(sell_raw, grid, now, prices),
+            reserve_kwh=self._spike_reserve(sell, grid, now, prices),
             max_discharge_kw_step=self._discharge_caps(len(grid), prices.live_spike),
             soc_target_kwh=daily_soc_target_vector(
                 grid,

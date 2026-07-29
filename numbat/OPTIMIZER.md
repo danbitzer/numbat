@@ -266,8 +266,11 @@ A few quieter mechanisms keep the plan sensible:
   confirmed price to chase a forecast better one that often never
   eventuates (sell forecasts run optimistic around spikes, even one
   interval out). A small haircut — 5–10% is plenty — tips those calls
-  toward the bird in hand. The spike reserve and every displayed price
-  use raw forecasts; only the plan's internal trust is tempered.
+  toward the bird in hand. Spike-level prices get the same trim, spike
+  reserve trigger included: a marginal forecast spike cut below your
+  threshold isn't reserved for, while a real one clears the threshold even
+  after the cut (10% off $1.88 still leaves $1.69). Displayed prices are
+  always raw; only the plan's internal trust is tempered.
 - **Action switch threshold** (default $0.02): the current action only
   changes if the new plan beats sticking with the old action by more than
   this, across the whole horizon — this stops the battery flip-flopping

@@ -8,7 +8,10 @@
   even one interval ahead, so the optimizer would hold stored energy through
   a good confirmed price chasing a forecast better one that never
   eventuated. The haircut is a flat trim on every forecast interval's excess
-  above the median (simple to reason about); 5–10% is plenty. Also fixed:
+  above the median (simple to reason about) — spike-level prices and the
+  spike-reserve trigger included, so a marginal forecast spike trimmed
+  below the threshold isn't reserved for while a real spike still clears
+  it comfortably; 5–10% is plenty. Also fixed:
   the published plan now reports raw prices — the haircut shapes the solve
   only, so the dashboard's price chart and revenue figures always match the
   real forecast (same philosophy as import reluctance). Test mode (scenarios
