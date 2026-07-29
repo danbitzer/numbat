@@ -11,7 +11,11 @@
 import { file } from "bun";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
+
+// The hour-of-day rules below AND the rendered clock labels must not drift
+// with the host timezone: the money shot is 17:00 Adelaide time everywhere.
+process.env.TZ = "Australia/Adelaide";
 
 const FRONTEND = resolve(import.meta.dir, "..");
 const REPO_ROOT = resolve(FRONTEND, "../..");
@@ -22,6 +26,10 @@ const FIREFOX =
 
 if (!(await file(join(DIST, "index.html")).exists())) {
   console.error(`no build at ${DIST} — run this via \`bun run screenshot\``);
+  process.exit(1);
+}
+if (!(await file(FIREFOX).exists())) {
+  console.error(`no Firefox at ${FIREFOX} — point FIREFOX_BIN at the binary`);
   process.exit(1);
 }
 
@@ -80,6 +88,10 @@ function makePlan() {
     });
   }
   const s0 = intervals[0];
+  // Honest ranks: the "More info" panel is collapsed in the captures, but its
+  // numbers shouldn't contradict the series if it's ever opened.
+  const sellRank = intervals.filter((iv) => iv.sell > s0.sell).length + 1;
+  const buyRank = intervals.filter((iv) => iv.buy > s0.buy).length + 1;
   return {
     computed_at: T0.toISOString(),
     solver_status: "optimal",
@@ -95,9 +107,9 @@ function makePlan() {
       },
       explanation: {
         reason:
-          "Exporting stored energy — the $0.77/kWh feed-in price is the highest in the " +
-          "forecast, well above the $0.21/kWh value of keeping it stored — so selling " +
-          "now beats holding.",
+          "Exporting stored energy — the $0.77/kWh feed-in price is among the best in " +
+          "the forecast, well above the $0.21/kWh value of keeping it stored — so " +
+          "selling now beats holding.",
         values: {
           buy: s0.buy, sell: s0.sell, pv_kw: s0.pv_kw, load_kw: s0.load_kw,
           soc_start_kwh: s0.soc_start, soc_end_kwh: s0.soc_end,
@@ -106,7 +118,7 @@ function makePlan() {
           battery_kw: s0.power_kw, grid_import_kw: s0.grid_import_kw,
           grid_export_kw: s0.grid_export_kw, interval_cost: s0.interval_cost,
         },
-        context: { sell_rank: 1, buy_rank: 40, horizon_steps: 72, hold_value: 0.21, flat: false, hysteresis: false },
+        context: { sell_rank: sellRank, buy_rank: buyRank, horizon_steps: 72, hold_value: 0.21, flat: false, hysteresis: false },
         levers: { spike_reserve: null, daily_target: false, live_spike: false, prices_estimated: false },
       },
     },
@@ -155,7 +167,11 @@ const server = Bun.serve({
       );
       return new Response(html, { headers: { "content-type": "text/html" } });
     }
-    const f = file(join(DIST, p));
+    // WHATWG URL normalization already removes ../ segments; this makes the
+    // containment local and explicit rather than a property of the parser.
+    const fp = resolve(join(DIST, p));
+    if (!fp.startsWith(DIST + sep)) return new Response("nope", { status: 404 });
+    const f = file(fp);
     if (await f.exists()) return new Response(f);
     return new Response("nope", { status: 404 });
   },
@@ -169,18 +185,28 @@ const SIZE = "1100,1650";
 
 async function capture(theme: string, out: string) {
   const profile = mkdtempSync(join(tmpdir(), "numbat-shot-"));
-  const proc = Bun.spawn(
-    [FIREFOX, "-headless", "-no-remote", "--profile", profile,
-     `--window-size=${SIZE}`, "--screenshot", out,
-     `http://localhost:${server.port}/?theme=${theme}`],
-    { stdout: "ignore", stderr: "ignore" },
-  );
-  const timeout = setTimeout(() => proc.kill(), 60000);
-  await proc.exited;
-  clearTimeout(timeout);
-  rmSync(profile, { recursive: true, force: true });
-  if (!(await file(out).exists())) throw new Error(`no screenshot produced for ${theme}`);
-  console.log(`wrote ${out}`);
+  // Capture into the fresh profile dir first: `out` is committed, so its mere
+  // existence proves nothing — a failed run must never pass off the old PNG.
+  const shot = join(profile, "shot.png");
+  try {
+    const proc = Bun.spawn(
+      [FIREFOX, "-headless", "-no-remote", "--profile", profile,
+       `--window-size=${SIZE}`, "--screenshot", shot,
+       `http://127.0.0.1:${server.port}/?theme=${theme}`],
+      { stdout: "ignore", stderr: "pipe" },
+    );
+    const timeout = setTimeout(() => proc.kill(), 60000);
+    const code = await proc.exited;
+    clearTimeout(timeout);
+    if (code !== 0 || !(await file(shot).exists())) {
+      const err = (await new Response(proc.stderr).text()).trim();
+      throw new Error(`capture failed for ${theme} (firefox exit ${code})${err ? `:\n${err}` : ""}`);
+    }
+    await Bun.write(out, file(shot));
+    console.log(`wrote ${out}`);
+  } finally {
+    rmSync(profile, { recursive: true, force: true });
+  }
 }
 
 await capture("light", join(OUT_DIR, "dashboard-light.png"));
