@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
 from typing import cast
@@ -362,6 +363,43 @@ def test_spike_reserve_vector_lookahead_and_trigger():
         )
         is None
     )
+
+
+def test_haircut_trims_forecast_above_median_but_never_step0():
+    """The haircut is a flat trim on every FORECAST interval's excess above
+    the median; the live step-0 price is confirmed and never cut, biasing
+    the plan toward selling at a good confirmed price over holding for a
+    forecast better one."""
+    settings = make_settings(optimizer={"forecast_haircut": 0.10})
+    planner = offline_planner(settings)
+    sell = np.array([0.90, 0.90, 0.30, 0.20, 0.10])  # median 0.30
+    out = planner._haircut_sell(sell)
+    assert out[0] == 0.90  # step 0: confirmed, untouched
+    assert out[1] == pytest.approx(0.30 + 0.60 * 0.9)  # forecast spike trimmed
+    assert out[2] == 0.30  # at the median: no excess to trim
+    assert out[3] == 0.20  # below median: untouched
+    assert out[4] == 0.10
+
+
+def test_haircut_off_is_identity():
+    settings = make_settings(optimizer={"forecast_haircut": 0.0})
+    planner = offline_planner(settings)
+    sell = np.array([0.90, 0.80, 0.10])
+    assert np.array_equal(planner._haircut_sell(sell), sell)
+
+
+def test_plan_reports_raw_prices_not_haircut_ones():
+    """The haircut shapes the solve only — the published plan (dashboard
+    chart, interval costs) must quote the real forecast prices."""
+    settings = make_settings(optimizer={"forecast_haircut": 0.50})
+    planner = offline_planner(settings)
+    data = synthetic_cycle_data(settings)
+    raw = data.inputs.sell.copy()
+    raw[3] = 0.80  # a forecast blip the haircut would halve toward the median
+    data = replace(data, sell_raw=raw, inputs=replace(data.inputs, sell=planner._haircut_sell(raw)))
+    assert data.inputs.sell[3] < 0.80  # sanity: the solve really saw a trim
+    plan = planner.optimize(data, NOW)
+    assert plan.intervals[3].sell == pytest.approx(0.80)
 
 
 def test_fallback_shifts_previous_plan():

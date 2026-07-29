@@ -259,11 +259,15 @@ actually confirms, Numbat re-plans within seconds and discharges into it.
 
 A few quieter mechanisms keep the plan sensible:
 
-- **Sell price forecast haircut** (default off): optionally discounts
-  above-average feed-in forecasts more than 6 hours away, for price feeds
-  that habitually over-promise distant spikes. Leave it off if your price
-  source already provides tempered predictions (Amber's advanced predicted
-  pricing does).
+- **Sell price forecast haircut** (default off): discounts every *forecast*
+  sell price's excess above the median by this share — the live confirmed
+  price is never cut. The optimizer otherwise treats forecast and confirmed
+  prices as equally real, so it will hold stored energy through a good
+  confirmed price to chase a forecast better one that often never
+  eventuates (sell forecasts run optimistic around spikes, even one
+  interval out). A small haircut — 5–10% is plenty — tips those calls
+  toward the bird in hand. The spike reserve and every displayed price
+  use raw forecasts; only the plan's internal trust is tempered.
 - **Action switch threshold** (default $0.02): the current action only
   changes if the new plan beats sticking with the old action by more than
   this, across the whole horizon — this stops the battery flip-flopping

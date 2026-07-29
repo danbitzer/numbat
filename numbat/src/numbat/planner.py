@@ -3,7 +3,8 @@
 Also owns the judgment calls around the raw MILP:
 - staleness policy (degraded inputs must never silently produce a plan)
 - step-0 price override with the live 5-min prices
-- forecast haircut (distant sell prices discounted toward the median)
+- forecast haircut (forecast sell prices discounted toward the median — only
+  the live, confirmed price is trusted in full)
 - spike reserve trigger (soft SoC floor while a potential spike is ahead)
 - hysteresis (pin-and-compare before switching the current action)
 - live-spike guard (never grid-charge during a confirmed spike)
@@ -14,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
 from zoneinfo import ZoneInfo
@@ -45,7 +46,6 @@ log = logging.getLogger(__name__)
 
 MAX_PRICE_AGE = timedelta(minutes=15)
 MAX_SOC_AGE = timedelta(minutes=10)
-HAIRCUT_START = timedelta(hours=6)
 
 
 class InputsStale(Exception):
@@ -160,6 +160,9 @@ class CycleData:
     prices: PriceForecast
     battery: BatteryState
     temps: np.ndarray | None
+    # inputs.sell with the forecast haircut undone — what the plan/dashboard
+    # reports, so displayed prices and revenue match the real forecast
+    sell_raw: np.ndarray | None = None
     # Where the real price forecast ends; steps beyond this hold the last
     # value (padding) and should be read with appropriate suspicion.
     price_forecast_end: datetime | None = None
@@ -234,10 +237,12 @@ class Planner:
         buy = resample_previous(prices.buy, grid)
         sell_raw = resample_previous(prices.sell, grid)
         buy[0], sell_raw[0] = prices.current_buy, prices.current_sell
-        # The haircut tempers the objective's trust in distant prices; the
-        # spike reserve triggers on the RAW forecast — it exists precisely to
-        # hedge prices the haircut would discount.
-        sell = self._haircut_sell(sell_raw, grid, now)
+        # The haircut tempers the objective's trust in forecast prices (the
+        # live step-0 price is exempt); the spike reserve triggers on the RAW
+        # forecast — it exists precisely to hedge prices the haircut would
+        # discount. The published plan also shows raw prices: the haircut is
+        # planning maths, not a dollar the meter will see.
+        sell = self._haircut_sell(sell_raw)
 
         pv_kw = resample_mean(pv, grid)
         temps = resample_previous(temps_series, grid) if temps_series else None
@@ -314,6 +319,7 @@ class Planner:
             prices=prices,
             battery=battery,
             temps=temps,
+            sell_raw=sell_raw,
             price_forecast_end=min(prices.buy.end, prices.sell.end),
             coverage=cov,
             load_forecast_status=self._load_forecaster.status,
@@ -336,17 +342,20 @@ class Planner:
             log.info("confirmed spike: step-0 discharge cap raised to %.1f kW", caps[0])
         return caps
 
-    def _haircut_sell(self, sell: np.ndarray, grid: TimeGrid, now: datetime) -> np.ndarray:
-        """Discount above-median sell prices beyond HAIRCUT_START toward the
-        median: distant forecast spikes shouldn't distort near-term decisions."""
+    def _haircut_sell(self, sell: np.ndarray) -> np.ndarray:
+        """Shave the configured share off every FORECAST sell price's excess
+        above the median. Forecasts run optimistic even one interval out —
+        around spikes especially — so only step 0 (the live, confirmed price)
+        is trusted in full. Flat by design: one rule, easy to reason about.
+        Below-median prices are untouched, and the spike reserve keys off the
+        raw series, so hedging potential spikes is unaffected."""
         h = self._settings.optimizer.forecast_haircut
-        if h <= 0:
+        if h <= 0 or len(sell) < 2:
             return sell
         median = float(np.median(sell))
         out = sell.copy()
-        for i, step in enumerate(grid.steps):
-            if step.start - now >= HAIRCUT_START and out[i] > median:
-                out[i] = median + (out[i] - median) * (1 - h)
+        tail = out[1:]
+        out[1:] = np.where(tail > median, median + (tail - median) * (1 - h), tail)
         return out
 
     def _spike_reserve(
@@ -396,7 +405,13 @@ class Planner:
         )
         solution = solve(data.inputs, self._battery_params, self._grid_params, opt_config)
         solution = self._apply_hysteresis(solution, data, opt_config)
-        plan = solution_to_plan(solution, data.grid, data.inputs, computed_at=now)
+        # Report raw prices: the haircut shapes the solve, but displayed
+        # prices/revenue must match the real forecast (same philosophy as the
+        # import-reluctance toll — planning maths only).
+        display_inputs = (
+            replace(data.inputs, sell=data.sell_raw) if data.sell_raw is not None else data.inputs
+        )
+        plan = solution_to_plan(solution, data.grid, display_inputs, computed_at=now)
         if solution.status.endswith("(hysteresis)"):
             plan.solver_status = solution.status
         plan.live_spike = data.prices.live_spike

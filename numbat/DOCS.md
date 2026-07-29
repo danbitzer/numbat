@@ -298,12 +298,15 @@ buffer until learning is active. The goal state is always a learned forecast.
 - `action_switch_threshold_dollars` (0.02) — hysteresis: the current action
   only changes if switching improves the horizon objective by more than this.
 - `forecast_haircut` (0 = off; "Sell price forecast haircut" in the UI) — the
-  share of the above-median excess shaved off sell prices more than 6 h out,
-  so distant phantom spikes don't distort near-term decisions. Off by
-  default: Amber's advanced predicted pricing (the recommended sensor mode)
-  already tempers over-forecast spikes, so a second haircut double-discounts
-  them — turn it up only if your price sensor carries raw AEMO-style
-  forecasts. The spike reserve reads raw prices, unaffected.
+  share of the above-median excess shaved off every *forecast* sell price.
+  The live confirmed price is never cut, so the plan is biased toward
+  selling at a good confirmed price now over holding for a forecast better
+  one — sell forecasts run optimistic around spikes, even one interval out
+  (yes, including Amber's advanced predicted pricing). Flat across the
+  horizon for predictability; a low setting (5–10%) is plenty, since it
+  compounds every hold-for-later decision. The spike reserve reads raw
+  prices and the dashboard displays raw prices — the haircut only tempers
+  the plan's internal trust, never a dollar figure you see.
 
 ### `spike`
 
