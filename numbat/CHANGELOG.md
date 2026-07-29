@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0
 
 - **Actuator blueprint: settle delay + self-healing re-assert** (after the
   2026-07-29 stuck-discharge incident: a spike sell ended at 17:25 but the
