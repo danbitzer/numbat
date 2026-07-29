@@ -177,9 +177,10 @@ Limits of your **grid connection**, distinct from the battery's power limits:
   lowest feed-in price ($/kWh) at which Numbat will discharge the *battery* to the
   grid. Below it the battery still runs the house but won't sell stored energy;
   surplus PV can still export, and charging is untouched. Use it if you'd
-  rather keep charge than sell it cheap. The automatic
-  `optimizer.min_battery_export_spread` deadband does the same thing relative to the
-  hold value; this is the fixed-dollar manual override.
+  rather keep charge than sell it cheap. The
+  `optimizer.min_battery_export_spread` margin does the same job dynamically,
+  relative to the plan's own valuation; this is the fixed-dollar manual
+  override.
 
 `battery.max_charge_kw` / `max_discharge_kw` limit the *battery* (cell wear,
 inverter DC side); the grid limits cap the *net AC flow at the meter*. The
@@ -266,13 +267,16 @@ buffer until learning is active. The goal state is always a learned forecast.
   low feed-in prices). Predbat uses ~1c.
 - `hold_value_scaling` (1.0) — multiplier on the auto hold value. `>1` makes the
   battery holdier (keeps charge longer), `<1` trades more freely.
-- `min_battery_export_spread` (default 0.05; 0 = off) — automatic export
-  **deadband**: the battery only sells to the grid when the feed-in beats the
-  value of holding (`hold_value / efficiency_discharge + wear`) by at least
-  this margin, so it won't churn export for pennies on the 5-minute reprices.
-  The automatic counterpart to `grid.min_battery_export_price`. The 5c
-  default keeps a fresh install from cycling the battery for sub-wear-cost
-  margins; set 0 to sell whenever marginally profitable.
+- `min_battery_export_spread` (default 0.05; 0 = off) — the minimum
+  **profit per sold kWh**, applied inside the optimization: a sale must beat
+  the plan's own best alternative use of that energy by this margin. The
+  alternative is whatever the horizon actually offers — tonight's peak when
+  the charge is needed, a cheaper grid rebuy when one is coming, or the
+  forgone feed-in when solar will refill the battery anyway — so a 28c sale
+  on a solar-refill day goes through even when the hold value is 20c, while
+  pennies-margin churn on the 5-minute reprices still doesn't. The dynamic
+  counterpart to `grid.min_battery_export_price`; set 0 to sell whenever
+  marginally profitable.
 - `import_penalty_per_kwh` (default 0.05; 0 = off; "Import reluctance" in the
   UI) — a
   **virtual** toll added to every imported kWh in the objective, never in the

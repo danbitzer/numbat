@@ -4,6 +4,7 @@ Formulation (see IMPLEMENTATION_PLAN.md §3):
 
     min  Σ (buy·gi − sell·ge)·Δt            energy cost/revenue
        + wear · Σ pd·Δt                      battery wear on discharge
+       + spread · Σ pd_sell·Δt               margin bar on battery-sourced export
        + ε · Σ (pc + pd)·Δt                  anti-chatter tiebreak
        + reserve_penalty · Σ slack·Δt        soft spike-reserve violations
        + target_penalty · Σ tslack           soft daily-SoC-target shortfall
@@ -99,11 +100,13 @@ class OptimizerConfig:
     # $/kWh PER HOUR of shortfall below the (windowed) daily SoC target floor —
     # the insurance premium for not being full through the target window.
     soc_target_penalty_per_kwh: float = 0.0
-    # Minimum arbitrage spread ($/kWh): the battery only sells to the grid when
-    # the feed-in beats the value of holding by at least this margin. 0 = off
-    # (export whenever marginally profitable). The AUTOMATIC counterpart to
-    # grid.min_battery_export_price — it moves with the hold value instead of a fixed
-    # dollar floor, killing pennies-margin export churn on the 5-min reprices.
+    # Minimum arbitrage spread ($/kWh): a penalty per battery-sourced exported
+    # kWh in the objective, so a sale must beat the plan's own best
+    # alternative use of that energy (tonight's load, a cheaper rebuy, or
+    # solar that would otherwise export) by this margin. 0 = off. The DYNAMIC
+    # counterpart to grid.min_battery_export_price's fixed dollar floor —
+    # kills pennies-margin export churn without blocking good sales above
+    # cheap replacement.
     min_battery_export_spread: float = 0.0
     # Self-sufficiency bias ($/kWh): a VIRTUAL toll added to every imported kWh
     # in the objective only — never in displayed costs (those are recomputed
@@ -238,58 +241,58 @@ def solve(
     ]
     if not battery.allow_grid_charge:
         constraints.append(pc <= pv_u)
-    # Export floor: below it, cap the battery's DISCHARGE at the house load NOT
-    # already covered by PV, so stored energy covers the house but never routes
-    # to the grid — not even indirectly by displacing PV that then exports.
-    # Grid import/charging and PV export are untouched. Two sources, whichever
-    # is stricter:
-    #   * grid.min_battery_export_price   — a fixed manual floor ($/kWh feed-in).
-    #   * config.min_battery_export_spread — the automatic deadband: sell must beat the
-    #     value of holding (hold_value/eff_discharge + wear) by this margin, or
-    #     holding wins. Moves with the hold value instead of a fixed dollar.
+    # Manual export price floor: below this feed-in price, cap the battery's
+    # DISCHARGE at the house load NOT already covered by PV, so stored energy
+    # covers the house but never routes to the grid — not even indirectly by
+    # displacing PV that then exports. Grid import/charging and PV export are
+    # untouched. A fixed dollar guarantee, deliberately static — that is its
+    # documented job; the automatic spread is dynamic (see pd_sell below).
     # NB cap pd at the RESIDUAL load (load - pv), not the full load: capping at
     # full load lets the battery serve the whole house while PV exports below
     # the floor — the stored kWh reaching the grid by substitution. And do NOT
     # bound `ge <= pv_u - pc` instead: with ge >= 0 that forces pc <= pv_u,
     # forbidding grid charging overnight (pv_u = 0) at exactly the cheap,
     # low-feed-in windows you want to charge in. Uses the raw forecast sell.
-    export_floors: list[float] = []
+    residual_load = np.maximum(0.0, inputs.load - inputs.pv)
     if grid.min_battery_export_price is not None:
-        export_floors.append(grid.min_battery_export_price)
-    if config.min_battery_export_spread > 0:
-        export_floors.append(
-            config.terminal_value / battery.efficiency_discharge
-            + battery.wear_cost_per_kwh
-            + config.min_battery_export_spread
-        )
-    if export_floors:
-        below = np.where(inputs.sell < max(export_floors))[0]
+        below = np.where(inputs.sell < grid.min_battery_export_price)[0]
         if below.size:
-            residual_load = np.maximum(0.0, inputs.load - inputs.pv)
             constraints.append(pd[below] <= residual_load[below])
-    # Export reserve: the SoC-based counterpart to the price floors above.
-    # Battery→grid sales may never take (or leave) SoC below the reserve;
-    # serving the house's uncovered load still may, down to the hard floor.
-    # One-way: it blocks sales, never forces charging back above itself.
-    # The price floors' condition is on prices (input data, precomputable);
-    # this one is on SoC — a decision variable — so it needs a binary: w[t]=1
-    # permits selling at step t and requires that step to END at or above the
-    # reserve (sell down TO it, never through it). With w[t]=0 the discharge
-    # cap is the same residual-load trick as above, so stored energy can't
-    # reach the grid even by displacing PV. Created only when the reserve is
-    # active and above the hard floor — zero extra binaries otherwise.
-    if battery.export_reserve_kwh > soc_floor:
-        sell_ok = cp.Variable(T, boolean=True)
+    # Battery-sourced export, pd_sell: the residual-load cap on the remainder
+    # (pd - pd_sell <= residual) forces any discharge beyond the house's
+    # uncovered load to carry the pd_sell label, so stored energy cannot reach
+    # the grid unlabelled even by displacing PV. Shared by two features,
+    # created once when either is active:
+    #   * The DYNAMIC export spread — a penalty per sold kWh in the objective,
+    #     so selling must beat the plan's own best alternative use of the
+    #     energy (tonight's load, a cheaper rebuy, or solar that would
+    #     otherwise export) by the configured margin. Deliberately NOT a
+    #     static price gate off the hold value: on a solar-refill day the
+    #     true replacement cost is the forgone feed-in, far below the hold
+    #     value, and a static gate blocks sales the economics support (seen
+    #     live 2026-07-29: a 28c sell refused on a 20c-hold, 40 kWh-PV day).
+    #   * The export reserve — sales may never take (or leave) SoC below the
+    #     reserve; the house may still draw down to the hard floor. One-way:
+    #     never forces charging back above itself. Its condition is on SoC (a
+    #     decision variable), so it needs a binary: sell_ok[t]=1 permits
+    #     selling at step t and requires that step to END at or above the
+    #     reserve (sell down TO it, never through it).
+    # Only the reserve adds binaries; the spread alone stays pure LP, and
+    # with both off no pd_sell machinery is built at all.
+    spread_active = config.min_battery_export_spread > 0
+    reserve_active = battery.export_reserve_kwh > soc_floor
+    pd_sell = None
+    if spread_active or reserve_active:
         pd_sell = cp.Variable(T, nonneg=True)
-        residual = np.maximum(0.0, inputs.load - inputs.pv)
+        constraints += [pd_sell <= pd, pd - pd_sell <= residual_load]
+    if reserve_active:
+        sell_ok = cp.Variable(T, boolean=True)
         pd_cap = (
             inputs.max_discharge_kw_step
             if inputs.max_discharge_kw_step is not None
             else np.full(T, battery.max_discharge_kw)
         )
         constraints += [
-            pd_sell <= pd,
-            pd - pd_sell <= residual,
             pd_sell <= cp.multiply(pd_cap, sell_ok),
             soc[1:]
             >= battery.export_reserve_kwh
@@ -314,6 +317,12 @@ def solve(
         + EPSILON_CHATTER * cp.sum(cp.multiply(pc + pd, dt))
         - config.terminal_value * soc[T]
     )
+    if spread_active and pd_sell is not None:
+        # The dynamic spread: a margin bar per sold kWh (battery-side, like
+        # wear). Because it sits in the objective, "profit" is measured
+        # against the plan's OWN valuation of the energy, whatever the
+        # marginal alternative is this horizon.
+        cost = cost + config.min_battery_export_spread * cp.sum(cp.multiply(pd_sell, dt))
     if config.import_penalty_per_kwh > 0:
         # Import reluctance: virtual toll per imported kWh (see OptimizerConfig).
         # Gated per step on the RAW buy price so negative-price windows keep

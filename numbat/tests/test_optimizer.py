@@ -440,10 +440,33 @@ def test_higher_wear_reduces_export_not_increases_it():
     assert kept == 1  # low wear exports into the bump, high wear holds
 
 
+def test_export_spread_is_dynamic_solar_refill_day_still_sells():
+    """The 2026-07-29 live case: a 28c feed-in blip on a day when solar will
+    refill the battery within hours. The hold value is high (no cheap grid
+    window), so the OLD static gate (hold/eff + wear + spread ~ 32c) refused
+    the sale — but the true replacement cost is the ~10c feed-in the
+    refilling solar would otherwise have earned, so the sale nets ~+12c/kWh
+    and must clear a 5c spread."""
+    sell = np.full(24, 0.10)
+    sell[:2] = 0.28  # the blip, before the solar arrives
+    pv = np.zeros(24)
+    pv[6:16] = 6.0  # 30 kWh of midday solar: refills the battery, then exports
+    inputs = make_inputs(buy=0.32, sell=sell, pv=pv, load=0.5, soc0=10.0)
+    sol = solve(
+        inputs, BATTERY, GRID,
+        OptimizerConfig(terminal_value=0.22, reserve_penalty_per_kwh=0.5,
+                        solver_timeout_s=30, min_battery_export_spread=0.05),
+    )
+    # Sells hard into the blip (load 0.5, pv 0 -> export is battery-sourced)...
+    assert sol.grid_export_kw[:2].max() > 3.0
+    # ...and ends refilled by the solar, not drained
+    assert sol.soc_kwh[-1] > 9.0
+
+
 def test_min_battery_export_spread_deadband_suppresses_thin_export():
-    """The automatic deadband: a feed-in that only just beats holding is not
-    worth the cycle. A 0.02 spread lifts the battery-export floor above the
-    thin margin and forbids the sale."""
+    """The margin bar: a feed-in that only just beats holding is not
+    worth the cycle. A 0.02 spread outweighs the thin margin and the plan
+    holds instead of selling."""
     buy = np.full(24, 0.30)
     buy[:6] = 0.08  # cheap overnight -> low rebuy hold value
     inputs = make_inputs(buy=buy, sell=0.14, pv=0.0, load=0.5, soc0=10.0)

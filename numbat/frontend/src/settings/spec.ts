@@ -377,10 +377,12 @@ export const SECTIONS: SectionSpec[] = [
       number(
         "optimizer.min_battery_export_spread",
         "Min battery export spread",
-        "Automatic export deadband: the battery only sells to the grid when the feed-in " +
-          "beats the value of holding by at least this margin, killing pennies-margin " +
-          "churn. 0 = off (sell whenever marginally profitable). The automatic " +
-          "counterpart to grid min battery export price.",
+        "Minimum profit per sold kWh: the battery only sells when the feed-in beats " +
+          "the plan's own best alternative use of that energy — tonight's load, a " +
+          "cheaper rebuy, or solar that would otherwise export — by at least this " +
+          "margin. Kills pennies-margin churn without blocking good sales above " +
+          "cheap replacement. 0 = off. The dynamic counterpart to grid min battery " +
+          "export price.",
         { unit: "$/kWh", min: 0, max: 10, step: 0.01, default: "0.05" },
       ),
       number(
