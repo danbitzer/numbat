@@ -121,6 +121,8 @@ const config = {
 };
 
 const server = Bun.serve({
+  // Loopback only: this must never be reachable from the LAN, however briefly.
+  hostname: "127.0.0.1",
   port: 0,
   async fetch(req) {
     const url = new URL(req.url);
@@ -142,7 +144,7 @@ const server = Bun.serve({
     }
     if (p === "/" || p === "/index.html") {
       let html = await file(join(DIST, "index.html")).text();
-      const theme = url.searchParams.get("theme") ?? "light";
+      const theme = url.searchParams.get("theme") === "dark" ? "dark" : "light";
       html = html.replace(
         "<head>",
         `<head><script>try{localStorage.setItem('numbat-theme','${theme}')}catch(e){}</script>`,
