@@ -1,14 +1,11 @@
 # Numbat — Energy Optimizer
 
 **Numbat** — the **NUM**erical **BAT**tery optimizer for Home Assistant.
-(Also an endangered little striped marsupial from Western Australia.)
 
 A Home Assistant add-on that optimizes home battery charge/discharge and
 solar-export decisions against Amber Electric's 5-minute wholesale pricing.
 Every 5 minutes it re-solves a mixed-integer linear program (MILP) over the
-next ~36 hours and publishes what the battery should do *right now* — classic
-receding-horizon MPC, tuned for one job: **capture price spikes without
-trusting price forecasts too much**.
+next ~36 hours and publishes what the battery should do *right now*.
 
 Numbat is a **recommendation engine**. It never touches your inverter: it
 publishes sensors, and actuation happens through a Home Assistant automation
