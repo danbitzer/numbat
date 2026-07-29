@@ -15,6 +15,8 @@
   refused; the semantics finally match the field's description ("minimum
   profit per sold kWh"). `grid.min_battery_export_price` deliberately stays
   a static dollar floor. No config change — same field, same default.
+- Internal: dropped the stale `IMPLEMENTATION_PLAN.md` (long superseded by
+  README/DOCS/OPTIMIZER docs); the optimizer docstring no longer cites it.
 
 ## 0.12.0
 
