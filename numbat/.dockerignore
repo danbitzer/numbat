@@ -1,0 +1,10 @@
+# Belt-and-braces: the Dockerfile COPYs an explicit list (pyproject.toml,
+# uv.lock, DOCS.md, src/), so nothing here is shipped today. Keeping dev
+# trees and secrets out of the build context guards a future broadened COPY
+# and shrinks the context upload.
+.env
+.venv/
+__pycache__/
+data/
+frontend/
+tests/
