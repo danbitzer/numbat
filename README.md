@@ -18,6 +18,14 @@ makes it inverter-agnostic — anything HA can control can follow the plan.
 **[→ Setup guide from a fresh HA install](docs/SETUP.md)** ·
 **[→ Add-on docs / option reference](numbat/DOCS.md)**
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
+  <img alt="The Numbat dashboard: the current action and battery setpoint, live buy/sell prices, and the planned prices, PV/load forecast, mode, battery power and state of charge over the 36 h horizon" src="docs/screenshots/dashboard-light.png">
+</picture>
+
+*The ingress dashboard (demo data), mid-way through selling into an evening
+price peak.*
+
 ## Inputs
 
 All via existing HA integrations — no glue automations needed:

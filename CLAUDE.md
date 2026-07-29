@@ -15,6 +15,11 @@ and `numbat/src/numbat/__init__.py`, run `uv lock` in `numbat/`, rename
 `## Unreleased` to the version, commit, push to `main` — CI builds and
 publishes the GHCR images.
 
+If the release changes the dashboard's appearance, first regenerate the
+README screenshots: `bun run screenshot` from `numbat/frontend/` (builds,
+then captures light + dark via headless Firefox into
+`docs/screenshots/dashboard-*.png`) and commit the updated PNGs.
+
 ## Checks
 Run `uv run ruff check .` and `uv run pytest -q` from `numbat/` before
 committing. For frontend changes also run `bun run typecheck` and
