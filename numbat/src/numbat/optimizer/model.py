@@ -1,6 +1,6 @@
 """The MILP: battery charge/discharge scheduling over the rolling horizon.
 
-Formulation (see IMPLEMENTATION_PLAN.md §3):
+Formulation:
 
     min  Σ (buy·gi − sell·ge)·Δt            energy cost/revenue
        + wear · Σ pd·Δt                      battery wear on discharge
