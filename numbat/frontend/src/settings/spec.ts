@@ -407,11 +407,11 @@ export const SECTIONS: SectionSpec[] = [
       number(
         "optimizer.forecast_haircut",
         "Sell price forecast haircut",
-        "Shaves this share of the above-median excess off sell prices more than 6h " +
-          "out, so distant phantom spikes don't distort near-term decisions (the spike " +
-          "reserve reads raw prices, unaffected). Off by default: Amber's advanced " +
-          "predicted pricing already tempers over-forecast spikes — turn it up if your " +
-          "price sensor uses raw AEMO-style forecasts.",
+        "Shaves this share of the above-median excess off every FORECAST sell price — " +
+          "the live confirmed price is never cut, so a confirmed good price beats " +
+          "holding for a forecast better one. Applies to spike prices and the spike " +
+          "reserve trigger too (a real spike clears the threshold even after the cut); " +
+          "5–10% is plenty. The dashboard always shows raw prices.",
         { unit: "%", percent: true, min: 0, max: 100, step: 5, default: "0" },
       ),
     ],

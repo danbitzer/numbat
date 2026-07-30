@@ -252,7 +252,11 @@ def solve(
     # the floor — the stored kWh reaching the grid by substitution. And do NOT
     # bound `ge <= pv_u - pc` instead: with ge >= 0 that forces pc <= pv_u,
     # forbidding grid charging overnight (pv_u = 0) at exactly the cheap,
-    # low-feed-in windows you want to charge in. Uses the raw forecast sell.
+    # low-feed-in windows you want to charge in. Reads the objective's sell
+    # series — forecast steps carry the haircut, deliberately: a forecast
+    # only marginally above the user's floor isn't trusted with a planned
+    # sale. Step 0 is exempt from the haircut, so a confirmed above-floor
+    # price always clears the gate.
     residual_load = np.maximum(0.0, inputs.load - inputs.pv)
     if grid.min_battery_export_price is not None:
         below = np.where(inputs.sell < grid.min_battery_export_price)[0]

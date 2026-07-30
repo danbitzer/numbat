@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
 from typing import cast
@@ -362,6 +363,87 @@ def test_spike_reserve_vector_lookahead_and_trigger():
         )
         is None
     )
+
+
+async def test_gather_haircuts_solve_prices_and_keeps_raw_for_display():
+    """The wiring, not the maths: gather must hand the solver the trimmed
+    series AND stash the raw one for the published plan. (A dropped
+    sell_raw= or a raw inputs.sell would silently pass every other test —
+    they run with the haircut off.)"""
+    settings = make_settings(optimizer={"forecast_haircut": 0.5})
+    fake = full_fake_ha()
+    async with fake_ha_client(fake) as client:
+        data = await make_planner(client, settings).gather(NOW)
+    assert data.sell_raw is not None
+    assert data.inputs.sell[0] == data.sell_raw[0]  # live price exempt
+    median = float(np.median(data.sell_raw))
+    above = data.sell_raw[1:] > median
+    assert above.any()  # fixture sanity: something to trim
+    assert np.all(data.inputs.sell[1:][above] < data.sell_raw[1:][above])
+    assert np.array_equal(data.inputs.sell[1:][~above], data.sell_raw[1:][~above])
+
+
+async def test_spike_reserve_triggers_on_trimmed_not_raw_prices():
+    """The reserve shares the objective's skepticism: a forecast spike that
+    only clears the threshold before the haircut isn't reserved for. Uses a
+    threshold set strictly between the fixture's trimmed and raw forecast
+    peaks, so this fails if the reserve is ever wired back to sell_raw."""
+    def spike_settings(threshold: float, haircut: float) -> Settings:
+        return make_settings(
+            spike={"lookahead_hours": 48, "reserve_kwh": 6.0, "high_price_threshold": threshold},
+            optimizer={"forecast_haircut": haircut},
+        )
+
+    fake = full_fake_ha()
+    async with fake_ha_client(fake) as client:
+        # threshold 999 arms nothing; this gather just measures the fixture
+        probe = await make_planner(client, spike_settings(999.0, 0.5)).gather(NOW)
+        raw_peak = float(probe.sell_raw[1:].max())
+        trimmed_peak = float(probe.inputs.sell[1:].max())
+        assert trimmed_peak < raw_peak  # fixture sanity: the trim bites
+        threshold = (trimmed_peak + raw_peak) / 2
+
+        armed = await make_planner(client, spike_settings(threshold, 0.0)).gather(NOW)
+        assert armed.inputs.reserve_kwh is not None  # raw peak clears it...
+        skeptical = await make_planner(client, spike_settings(threshold, 0.5)).gather(NOW)
+        assert skeptical.inputs.reserve_kwh is None  # ...the trimmed one doesn't
+
+
+def test_haircut_trims_forecast_above_median_but_never_step0():
+    """The haircut is a flat trim on every FORECAST interval's excess above
+    the median; the live step-0 price is confirmed and never cut, biasing
+    the plan toward selling at a good confirmed price over holding for a
+    forecast better one."""
+    settings = make_settings(optimizer={"forecast_haircut": 0.10})
+    planner = offline_planner(settings)
+    sell = np.array([0.90, 0.90, 0.30, 0.20, 0.10])  # median 0.30
+    out = planner._haircut_sell(sell)
+    assert out[0] == 0.90  # step 0: confirmed, untouched
+    assert out[1] == pytest.approx(0.30 + 0.60 * 0.9)  # forecast spike trimmed
+    assert out[2] == 0.30  # at the median: no excess to trim
+    assert out[3] == 0.20  # below median: untouched
+    assert out[4] == 0.10
+
+
+def test_haircut_off_is_identity():
+    settings = make_settings(optimizer={"forecast_haircut": 0.0})
+    planner = offline_planner(settings)
+    sell = np.array([0.90, 0.80, 0.10])
+    assert np.array_equal(planner._haircut_sell(sell), sell)
+
+
+def test_plan_reports_raw_prices_not_haircut_ones():
+    """The haircut shapes the solve only — the published plan (dashboard
+    chart, interval costs) must quote the real forecast prices."""
+    settings = make_settings(optimizer={"forecast_haircut": 0.50})
+    planner = offline_planner(settings)
+    data = synthetic_cycle_data(settings)
+    raw = data.inputs.sell.copy()
+    raw[3] = 0.80  # a forecast blip the haircut would halve toward the median
+    data = replace(data, sell_raw=raw, inputs=replace(data.inputs, sell=planner._haircut_sell(raw)))
+    assert data.inputs.sell[3] < 0.80  # sanity: the solve really saw a trim
+    plan = planner.optimize(data, NOW)
+    assert plan.intervals[3].sell == pytest.approx(0.80)
 
 
 def test_fallback_shifts_previous_plan():

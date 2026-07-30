@@ -237,10 +237,13 @@ class Optimizer(BaseModel):
     # planner falls back to the previous plan anyway.
     solver_timeout_s: int = Field(default=30, ge=1, le=60)
     action_switch_threshold_dollars: float = Field(default=0.02, ge=0)
-    # Sell-price forecast haircut. Defaults OFF: Amber's advanced predicted
-    # pricing (the recommended sensor mode) already tempers over-forecast
-    # spikes, so a second haircut double-discounts them. Turn it up if
-    # optimizing on raw AEMO-style forecasts.
+    # Sell-price forecast haircut: the share shaved off every FORECAST
+    # interval's excess above the median (the live step-0 price is exempt —
+    # confirmed beats forecast). Flat across the horizon by design. Field
+    # experience: even Amber's advanced predicted pricing runs optimistic
+    # around spikes — including the very next interval — so a small value
+    # (0.05–0.10) biases the plan toward selling at good confirmed prices
+    # over holding for forecast ones. Default off.
     forecast_haircut: float = Field(default=0.0, ge=0, le=1)
 
 

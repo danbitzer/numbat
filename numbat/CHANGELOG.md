@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **The sell-price forecast haircut now applies from the next interval, not
+  6 hours out** — and the live confirmed price is never cut. Field
+  experience (the 2026-07-30 morning spikes): sell forecasts run optimistic
+  even one interval ahead, so the optimizer would hold stored energy through
+  a good confirmed price chasing a forecast better one that never
+  eventuated. The haircut is a flat trim on every forecast interval's excess
+  above the median (simple to reason about) — spike-level prices and the
+  spike-reserve trigger included, so a marginal forecast spike trimmed
+  below the threshold isn't reserved for while a real spike still clears
+  it comfortably; 5–10% is plenty. Also fixed:
+  the published plan now reports raw prices — the haircut shapes the solve
+  only, so the dashboard's price chart and revenue figures always match the
+  real forecast (same philosophy as import reluctance). Test mode (scenarios
+  and time travel) now applies the haircut too — previously the sandbox
+  exposed the knob but silently ignored it, so A/B runs lied. Default
+  unchanged (off).
 - **Dropped the "why this action" sentence** from the More info panel. The
   optimizer weighs the whole horizon — refill routes, reserves, targets, the
   dynamic export spread — so any one-line reason compares against a single

@@ -34,8 +34,8 @@ def test_minimal_config_defaults():
     assert settings.battery.soc_min == 0.05
     # 3c = top of the honest lithium wear range the field help quotes
     assert settings.battery.wear_cost_per_kwh == 0.03
-    # haircut defaults OFF: Amber's advanced predicted pricing already tempers
-    # over-forecast spikes; a second haircut double-discounts them
+    # haircut defaults OFF (trust the forecast until the user opts into
+    # skepticism — the help suggests 5-10% for optimistic feeds)
     assert settings.optimizer.forecast_haircut == 0.0
     # Numbat starts disabled: the enable toggle in the UI is a deliberate act
     assert settings.enabled is False

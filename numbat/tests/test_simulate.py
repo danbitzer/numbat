@@ -67,6 +67,24 @@ def test_min_battery_export_price_suppresses_low_price_export():
     assert batt_export(floored) < batt_export(base)
 
 
+def test_simulate_applies_the_haircut_and_reports_raw_prices():
+    """Test mode must honour the sandbox's forecast_haircut (else A/B runs
+    lie), while displayed prices stay raw in every case."""
+    base = run_simulation(make_settings(), scenario_id="export_spike_tonight",
+                          soc_frac=0.9, now=NOW, tz=ADELAIDE)
+    cut = run_simulation(make_settings(optimizer={"forecast_haircut": 1.0}),
+                         scenario_id="export_spike_tonight",
+                         soc_frac=0.9, now=NOW, tz=ADELAIDE)
+    # displayed prices are the raw scenario in both runs
+    assert [iv["sell"] for iv in cut["intervals"]] == [iv["sell"] for iv in base["intervals"]]
+    # but a full trim (forecast spike flattened to the median) kills the
+    # hold-and-sell-into-the-spike play the base plan makes
+    def batt_export(r):
+        return sum(iv["grid_export_kw"] for iv in r["intervals"] if iv["action"] == "discharge")
+
+    assert batt_export(cut) < batt_export(base)
+
+
 def test_api_scenarios_and_simulate(tmp_path):
     controller = _controller(tmp_path, make_settings())
     client = TestClient(create_app(AppState(), controller))
