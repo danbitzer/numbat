@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.0
 
 - **The sell-price forecast haircut now applies from the next interval, not
   6 hours out** — and the live confirmed price is never cut. Field
