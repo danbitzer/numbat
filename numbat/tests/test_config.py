@@ -103,6 +103,23 @@ def test_invalid_soc_bounds_rejected():
         Settings.model_validate(config)
 
 
+def test_spike_reserve_defaults_and_bounds():
+    s = make_settings()
+    # manual insurance: off by default, $1 release threshold
+    assert s.spike.reserve_soc == 0.0
+    assert s.spike.high_price_threshold == 1.0
+    # dropped pre-0.15 spike keys are ignored, not fatal
+    config = json.loads(json.dumps(MINIMAL_CONFIG))
+    config["spike"] = {"reserve_soc": 0.3, "lookahead_hours": 4, "reserve_kwh": 6.0,
+                      "reserve_penalty_per_kwh": 0.5}
+    assert Settings.model_validate(config).spike.reserve_soc == 0.3
+    # a reserve above usable capacity is rejected
+    config["battery"]["soc_max"] = 0.9
+    config["spike"]["reserve_soc"] = 0.95
+    with pytest.raises(ValueError, match="spike.reserve_soc"):
+        Settings.model_validate(config)
+
+
 def test_export_reserve_default_and_bounded_by_soc_max():
     # 10% over the 5% soc_min default: the sell floor is active out of the
     # box (the gate binds only while reserve > soc_min). Explicit 0 = off.

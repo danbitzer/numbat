@@ -45,7 +45,7 @@ def test_optimizer_honors_per_step_discharge_caps():
         soc0_kwh=40.0,
         max_discharge_kw_step=caps,
     )
-    config = OptimizerConfig(terminal_value=0.1, reserve_penalty_per_kwh=0.5, solver_timeout_s=30)
+    config = OptimizerConfig(terminal_value=0.1, solver_timeout_s=30)
     sol = solve(inputs, BATTERY, GRID, config)
     assert sol.discharge_kw[0] == pytest.approx(15.0, abs=0.01)  # raised cap used now
     assert sol.discharge_kw[1] == pytest.approx(12.0, abs=0.01)  # everyday cap beyond
@@ -57,11 +57,21 @@ def test_planner_caps_only_on_live_spike():
         battery={"capacity_kwh": 44.8, "max_charge_kw": 9.0, "max_discharge_kw": 12.0},
     )
     planner = offline_planner(settings)
-    assert planner._discharge_caps(10, live_spike=False) is None
-    caps = planner._discharge_caps(10, live_spike=True)
+    quiet = np.full(10, 0.30)  # nothing spike-priced anywhere
+    assert planner._discharge_caps(quiet, live_spike=False) is None
+    caps = planner._discharge_caps(quiet, live_spike=True)
     assert caps is not None
     assert caps[0] == 15.0
     assert (caps[1:] == 12.0).all()
+    # forecast steps above the release threshold anticipate the raised cap:
+    # if those spikes confirm, the live cap WILL be raised when they arrive
+    spiky = np.full(10, 0.30)
+    spiky[4:6] = 1.50
+    caps = planner._discharge_caps(spiky, live_spike=False)
+    assert caps is not None
+    assert caps[0] == 12.0  # no confirmed spike now
+    assert (caps[4:6] == 15.0).all()
+    assert (caps[1:4] == 12.0).all() and (caps[6:] == 12.0).all()
 
 
 def test_planner_cap_disabled_when_not_higher():
@@ -70,7 +80,7 @@ def test_planner_cap_disabled_when_not_higher():
         battery={"capacity_kwh": 44.8, "max_charge_kw": 9.0, "max_discharge_kw": 12.0},
     )
     planner = offline_planner(settings)
-    assert planner._discharge_caps(10, live_spike=True) is None
+    assert planner._discharge_caps(np.full(10, 2.0), live_spike=True) is None
 
 
 def test_plan_carries_live_spike_flag():

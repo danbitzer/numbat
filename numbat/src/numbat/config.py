@@ -248,10 +248,18 @@ class Optimizer(BaseModel):
 
 
 class Spike(BaseModel):
-    lookahead_hours: float = Field(default=4, ge=0)
-    reserve_kwh: float = Field(default=6.0, ge=0)
+    # The spike reserve: SoC (fraction of capacity) that ordinary sales may
+    # never dip below — it sells ONLY into a live confirmed price above
+    # high_price_threshold. Spikes arrive with no warning (2026-07-31, 2am:
+    # $5.60/kWh, zero forecast or spike_status notice — battery already sold
+    # down), so this is standing insurance, enabled manually (0 = off) when
+    # prices are volatile. It binds only above battery.export_reserve_soc,
+    # and like that reserve it never blocks serving the house. Forecast
+    # spikes need no machinery: they're in the prices, so the optimizer
+    # plans for them by economics alone.
+    reserve_soc: float = Field(default=0.0, ge=0, le=1)
+    # The confirmed feed-in price that releases the reserve for sale.
     high_price_threshold: float = Field(default=1.0, ge=0)
-    reserve_penalty_per_kwh: float = Field(default=0.5, ge=0)
     # Discharge cap while a CONFIRMED spike is active (current interval only).
     # Lets a wear-conscious everyday max_discharge_kw be exceeded for the rare
     # high-value hours. 0 = disabled (always use battery.max_discharge_kw).
@@ -271,6 +279,12 @@ class Settings(BaseModel):
     vacation: Vacation = Vacation()
     optimizer: Optimizer = Optimizer()
     spike: Spike = Spike()
+
+    @model_validator(mode="after")
+    def _spike_reserve_bounded(self) -> Self:
+        if self.spike.reserve_soc > self.battery.soc_max:
+            raise ValueError("spike.reserve_soc must be <= battery.soc_max")
+        return self
 
 
 def resolve_log_level(env: EnvSettings) -> str:

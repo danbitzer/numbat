@@ -76,7 +76,13 @@ export const ExplanationSchema = z.object({
     .optional(),
   levers: z
     .looseObject({
-      spike_reserve: z.object({ kwh: z.number(), until: z.string().nullish() }).nullish(),
+      spike_reserve: z
+        .object({
+          soc: z.number(),
+          threshold: z.number(),
+          released: z.boolean().optional(),
+        })
+        .nullish(),
       daily_target: z.boolean().optional(),
       live_spike: z.boolean().optional(),
       prices_estimated: z.boolean().optional(),

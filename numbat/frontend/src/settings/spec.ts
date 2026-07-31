@@ -75,7 +75,8 @@ export const SECTIONS: SectionSpec[] = [
       entity(
         "entities.price_spike",
         "Price spike",
-        "Amber Express price-spike binary sensor — enables the spike reserve strategy.",
+        "Amber Express price-spike binary sensor — a confirming spike triggers an " +
+          "instant re-solve and the raised spike discharge cap.",
         ["binary_sensor"],
         { optional: true, default: "" },
       ),
@@ -409,9 +410,10 @@ export const SECTIONS: SectionSpec[] = [
         "Sell price forecast haircut",
         "Shaves this share of the above-median excess off every FORECAST sell price — " +
           "the live confirmed price is never cut, so a confirmed good price beats " +
-          "holding for a forecast better one. Applies to spike prices and the spike " +
-          "reserve trigger too (a real spike clears the threshold even after the cut); " +
-          "5–10% is plenty. The dashboard always shows raw prices.",
+          "holding for a forecast better one. Applies to spike-level forecast prices " +
+          "too, including the spike reserve's planned releases — only its execution " +
+          "gate (the live confirmed price) is never cut. 5–10% is plenty. The " +
+          "dashboard always shows raw prices.",
         { unit: "%", percent: true, min: 0, max: 100, step: 5, default: "0" },
       ),
     ],
@@ -420,43 +422,41 @@ export const SECTIONS: SectionSpec[] = [
     id: "spike",
     title: "Spike strategy",
     description:
-      "When Amber flags a potential price spike within the lookahead, Numbat softly " +
-      "reserves energy in the battery so it can sell into the spike if it confirms.",
+      "Insurance for unforecast price spikes — they arrive with zero warning, when a " +
+      "well-run battery has often already sold. The reserve is state of charge that " +
+      "ordinary sales never dip below: it sells only at prices above the release " +
+      "threshold. Real sales are gated on the live CONFIRMED price; where the " +
+      "forecast clears the threshold the plan anticipates the sale (a phantom " +
+      "forecast can never actually spend it). Serving your house is never blocked. " +
+      "Enable it only when prices are volatile, or leave it on permanently.",
     fields: [
-      number("spike.lookahead_hours", "Lookahead", "How far ahead to honor potential spikes.", {
-        unit: "h",
-        min: 0,
-        max: 48,
-        step: 0.5,
-        default: "4",
-      }),
-      number("spike.reserve_kwh", "Reserve", "Energy kept in the battery while a spike looms.", {
-        unit: "kWh",
-        min: 0,
-        step: 0.5,
-        default: "6",
-      }),
       number(
-        "spike.high_price_threshold",
-        "High price threshold",
-        "Forecast sell price that counts as spike-worthy even without an Amber flag.",
-        { unit: "$/kWh", min: 0, max: 20, step: 0.1, default: "1" },
+        "spike.reserve_soc",
+        "Spike reserve",
+        "State of charge held back from ordinary selling; it sells only at prices " +
+          "above the release price below (confirmed for the current interval, forecast " +
+          "for planned/anticipated sales). Binds above the export reserve; 0 = off. " +
+          "The cost of carry is small — the energy still serves your house — but on " +
+          "quiet weeks it forgoes some ordinary sell margin.",
+        { unit: "%", percent: true, min: 0, max: 100, step: 5, default: "0" },
       ),
       number(
-        "spike.reserve_penalty_per_kwh",
-        "Reserve penalty",
-        "Softness of the reserve: cost per kWh per hour spent below it. Below true " +
-          "spike value but above normal arbitrage margin, so only genuinely better " +
-          "opportunities break the reserve.",
-        { unit: "$/kWh", min: 0, max: 20, step: 0.1, default: "0.5" },
+        "spike.high_price_threshold",
+        "Release price",
+        "The feed-in price that releases the reserve for sale (real sales need the " +
+          "live confirmed price above it). Set it above your ordinary evening peaks " +
+          "so the reserve waits for genuine spikes.",
+        { unit: "$/kWh", min: 0, max: 20, step: 0.1, default: "1" },
       ),
       number(
         "spike.discharge_kw",
         "Spike discharge cap",
-        "Discharge limit while a CONFIRMED spike is active (current interval only) — " +
-          "lets a wear-conscious everyday limit be exceeded for the rare high-value " +
-          "hours. Set to your inverter's true limit; 0 disables. Extra power only " +
-          "reaches the grid if the export limit allows it.",
+        "Discharge limit while a CONFIRMED spike is active — lets a wear-conscious " +
+          "everyday limit be exceeded for the rare high-value hours. The plan also " +
+          "assumes this cap at future steps priced above the release price, so " +
+          "anticipated spike sales are scheduled at the power a confirming spike " +
+          "will actually grant. Set to your inverter's true limit; 0 disables. Extra " +
+          "power only reaches the grid if the export limit allows it.",
         { unit: "kW", min: 0, max: 100, step: 0.5, default: "0" },
       ),
     ],

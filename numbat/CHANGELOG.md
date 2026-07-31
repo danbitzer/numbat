@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **Spike reserve reworked: manual, confirmed-release insurance.**
+  `spike.reserve_soc` (default off) is state of charge that ordinary sales
+  never dip below — it sells only at prices above
+  `spike.high_price_threshold`: the live confirmed price gates real sales,
+  while forecast prices above it release in-plan, so the dashboard and
+  simulations show the anticipated sale (scheduled at the raised
+  `spike.discharge_kw` cap) and a phantom forecast can never actually spend
+  the reserve. Serving the house is never blocked. Replaces the
+  forecast-triggered soft reserve: `spike.lookahead_hours`,
+  `spike.reserve_kwh` and `spike.reserve_penalty_per_kwh` are dropped
+  (ignored harmlessly in saved configs).
+
 ## 0.14.0
 
 - **The sell-price forecast haircut now applies from the next interval, not

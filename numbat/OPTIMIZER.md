@@ -46,9 +46,8 @@ The optimizer adds up, over the whole 36 hours:
    [hold value](#the-hold-value), so the plan doesn't treat leftover charge
    as worthless.
 5. **Penalties for breaking soft promises** — the daily full-charge target
-   and the spike reserve are "soft": the plan can break them, but it pays a
-   configured penalty when it does, so it only breaks them for something
-   genuinely better.
+   is "soft": the plan can break it, but it pays a configured penalty when
+   it does, so it only breaks it for something genuinely better.
 
 It then picks the plan with the lowest total. That's the whole trick. Charge
 timing, export decisions, curtailing (deliberately spilling) solar on
@@ -248,12 +247,38 @@ full-charge target** (e.g. 100% at 3pm). Two things make it work:
 
 ## The spike reserve
 
-When the price forecast shows a possible spike in the next few hours (a
-forecast feed-in above a threshold — default $1/kWh — within the lookahead,
-default 4 hours), Numbat softly reserves energy (default 6 kWh) so there's
-something to sell if the spike confirms. Like the daily target, it's soft: a better opportunity can
-break the reserve, but it costs the configured penalty. When a spike
-actually confirms, Numbat re-plans within seconds and discharges into it.
+The one thing no forecast knob can catch is the spike nobody predicted —
+and they happen: picture feed-in jumping to $5/kWh at 2am with nothing in
+the forecast and no spike-status warning, right after the battery has,
+quite correctly, sold down through a well-forecast evening. Forecast spikes need no
+special machinery (they're in the prices, so the plan pre-charges and
+positions for them by economics alone); unforecast ones can only be met by
+**already holding sellable energy**.
+
+That's the spike reserve (default off — it's manual insurance): state of
+charge that ordinary sales may never dip below, sold only at prices above
+the release threshold (default $1/kWh). The **execution gate is the live
+confirmed price**: when it actually clears the threshold, the current
+interval's sales floor drops to the export reserve and the 5-minute/event
+re-solves keep releasing while the spike lasts. Where the *forecast* clears
+the threshold, the plan releases those future steps too — so the dashboard
+shows the intended spike sale and the optimizer pre-positions for it — but
+that's anticipation, not commitment: only the current interval ever acts,
+so a forecast spike that never confirms simply keeps the reserve intact,
+cycle after cycle. Serving your house is never blocked — like the export
+reserve it floors sales, not the battery — so on quiet days the reserve's
+cost is only the forgone margin on energy that ends up running the house
+anyway.
+
+Turn it on when prices are volatile — or leave it on permanently; the
+carry cost is small — and set the threshold above your ordinary evening
+peaks so it waits for genuine spikes. Size it with two
+time-travel experiments: an ordinary day with and without it gives the
+carry cost, and a replay started *at the spike instant* with the SoC the
+reserve would have held gives the payoff. (A plain full-day replay can't
+show the payoff: replays have perfect hindsight, so they capture the
+recorded spike with or without the reserve — insurance against forecast
+error can't be exhibited by a replay that makes no forecast errors.)
 
 ## Trust and hygiene features
 
@@ -266,11 +291,10 @@ A few quieter mechanisms keep the plan sensible:
   confirmed price to chase a forecast better one that often never
   eventuates (sell forecasts run optimistic around spikes, even one
   interval out). A small haircut — 5–10% is plenty — tips those calls
-  toward the bird in hand. Spike-level prices get the same trim, spike
-  reserve trigger included: a marginal forecast spike cut below your
-  threshold isn't reserved for, while a real one clears the threshold even
-  after the cut (10% off $1.88 still leaves $1.69). Displayed prices are
-  always raw; only the plan's internal trust is tempered.
+  toward the bird in hand. Spike-level forecast prices get the same trim;
+  the spike reserve is unaffected — it releases on the live confirmed
+  price, which the haircut never touches. Displayed prices are always raw;
+  only the plan's internal trust is tempered.
 - **Action switch threshold** (default $0.02): the current action only
   changes if the new plan beats sticking with the old action by more than
   this, across the whole horizon — this stops the battery flip-flopping
@@ -335,7 +359,7 @@ make it a great time to fill the battery.
    few days. Every decision shows the prices and hold value behind it.
 5. **Then add preferences**: an export spread if thin-margin cycling annoys
    you; the daily target if you want full-battery insurance; the spike
-   settings if your tariff has real spikes.
+   reserve when your market throws unforecast spikes.
 6. **Use Test mode before changing live settings.** Synthetic scenarios show
    how a setting behaves in specific conditions; time travel replays real
    recorded days from your own system with your candidate settings.
@@ -354,6 +378,6 @@ make it a great time to fill the battery.
 | prefer solar/stored energy over importing | Import reluctance |
 | hold charge more / trade more | Hold value scaling |
 | stop chasing forecast spikes it can't trust | Sell price forecast haircut |
-| keep something in the tank for possible spikes | Spike reserve settings |
+| keep something in the tank for unforecast spikes | Spike reserve (sells only above the release price) |
 | plan for a hungrier house than the forecast | Load forecast buffer |
 | never plan to spend the bottom X% | SoC min — keep near the inverter's floor; see pitfalls |

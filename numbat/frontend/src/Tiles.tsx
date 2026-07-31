@@ -205,7 +205,11 @@ function MoreInfo({ explanation, plan }: { explanation: Explanation; plan?: Plan
   const meter = meterText(v.interval_cost);
   const chips = [
     l?.spike_reserve && (
-      <Chip key="reserve">spike reserve {Math.round(l.spike_reserve.kwh)} kWh</Chip>
+      <Chip key="reserve">
+        {l.spike_reserve.released
+          ? `spike reserve released (> $${l.spike_reserve.threshold.toFixed(2)})`
+          : `spike reserve ${Math.round(l.spike_reserve.soc * 100)}% · sells > $${l.spike_reserve.threshold.toFixed(2)}`}
+      </Chip>
     ),
     l?.daily_target && <Chip key="target">daily charge target</Chip>,
     l?.live_spike && <Chip key="spike">spike live</Chip>,

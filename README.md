@@ -65,13 +65,14 @@ capture, curtailment under negative feed-in, and charging on negative prices
 all fall out of the economics rather than hand-written rules.
 
 Because price forecasts are routinely wrong about spikes, several layers keep
-the plan honest: a soft **spike reserve** holds energy ready while a forecast
-spike sits within the lookahead, an **event-triggered re-solve** reacts within
-seconds of any live price change (a confirmed spike gets its full-power
-discharge decision immediately — and never a grid charge), **hysteresis**
-stops near-identical plans chattering the inverter, and solver failures or
-stale inputs **fall back** to the previous plan or idle recommendations —
-never silent garbage.
+the plan honest: an **event-triggered re-solve** reacts within seconds of any
+live price change (a confirmed spike gets its full-power discharge decision
+immediately — and never a grid charge), an optional **spike reserve** holds
+sellable charge that releases only into a *confirmed* spike-level price
+(real spikes can arrive with zero forecast warning), **hysteresis** stops
+near-identical plans chattering the inverter, and solver failures or stale
+inputs **fall back** to the previous plan or idle recommendations — never
+silent garbage.
 
 **[OPTIMIZER.md](numbat/OPTIMIZER.md)** explains the *why* behind all of it
 in plain language — the hold value, wear cost, when it sells, every knob and
