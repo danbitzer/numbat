@@ -2,9 +2,9 @@
 
 Each cycle runs the full planner pipeline (gather -> solve -> publish -> record).
 A WebSocket watcher triggers an early re-solve on ANY change of the Amber
-price sensors (value, estimate flag, or spike status) — that's how a
-confirmed price or spike reaches the plan within seconds instead of at the
-next 5-minute tick.
+price sensors (value or estimate flag) — that's how a confirmed price or a
+spike-level price reaches the plan within seconds instead of at the next
+5-minute tick.
 """
 
 from __future__ import annotations

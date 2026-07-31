@@ -335,7 +335,10 @@ sell margin, not stranded energy.
 
 Enable it only when prices are volatile (a spiky week, a heatwave) or
 simply leave it on permanently — the carry cost is small. Set
-`high_price_threshold` above your ordinary evening peaks. One nuance: the execution release keys off the live price
+`high_price_threshold` above your ordinary evening peaks, but not beyond
+the feed-in level of a real spike — besides releasing the reserve, the
+threshold is what raises the spike discharge cap and arms the
+never-grid-charge-during-a-spike guard. One nuance: the execution release keys off the live price
 the instant it clears the threshold — in the first seconds of an interval
 that price can still be Amber's estimate, so a release may start marginally
 early; the event-driven re-solve corrects within seconds either way.

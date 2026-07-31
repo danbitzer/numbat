@@ -10,7 +10,10 @@
   actually engages at *your* threshold, consistent with the plan's
   anticipated spike steps). `entities.price_spike` is dropped (ignored
   harmlessly in saved configs); the price sensors alone still trigger
-  instant re-solves.
+  instant re-solves. If you have an automation keyed off the published
+  `live_spike` attribute, note it now flips at your threshold (default
+  $1/kWh feed-in), not Amber's ~$3/kWh official flag — considerably more
+  often.
 - **Spike reserve reworked: manual, confirmed-release insurance.**
   `spike.reserve_soc` (default off) is state of charge that ordinary sales
   never dip below — it sells only at prices above

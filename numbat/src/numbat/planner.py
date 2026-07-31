@@ -166,7 +166,8 @@ def discharge_cap_vector(
     high_price_threshold: float,
 ) -> np.ndarray | None:
     """Per-step discharge caps: the everyday wear-conscious limit, raised to
-    the spike cap at step 0 while a spike is CONFIRMED (the binary sensor),
+    the spike cap at step 0 while a spike is live (the current sell price
+    clears the release threshold — see Planner._live_spike),
     and at future steps whose forecast clears the release threshold — if
     those spikes confirm, the live cap will be raised when their interval
     arrives, so the plan should model the power it will actually have
@@ -361,9 +362,12 @@ class Planner:
         )
 
     def _live_spike(self, prices: PriceForecast) -> bool:
-        """A spike is live when the confirmed feed-in price clears
+        """A spike is live when the current feed-in price clears
         spike.high_price_threshold — the same gate that releases the spike
-        reserve, so every spike behavior keys off one user-set number."""
+        reserve, so every spike behavior keys off one user-set number.
+        In an interval's first seconds that price can still be Amber's
+        estimate (same nuance as the reserve release, documented in DOCS);
+        the estimate->confirmed re-solve corrects within seconds."""
         return prices.current_sell > self._settings.spike.high_price_threshold
 
     def _discharge_caps(self, sell: np.ndarray, live_spike: bool) -> np.ndarray | None:

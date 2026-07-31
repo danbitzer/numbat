@@ -10,7 +10,7 @@ What you'll end up with:
 
 | Piece | Provides | Source |
 |---|---|---|
-| Amber Express | Buy/sell prices + Amber's advanced forecast + spike flag | HACS |
+| Amber Express | Buy/sell prices + Amber's advanced forecast | HACS |
 | Open-Meteo Solar Forecast | PV production forecast | HACS |
 | BOM weather (or any `weather.*` + outdoor temp sensor) | Hourly temperature forecast + observed outdoor temperature | HACS |
 | Battery integration | SoC %, battery power, house load (load learning) | e.g. mkaiser Sungrow |
