@@ -159,14 +159,26 @@ def daily_soc_target_vector(
 
 
 def discharge_cap_vector(
-    steps: int, live_spike: bool, spike_discharge_kw: float, max_discharge_kw: float
+    sell: np.ndarray,
+    live_spike: bool,
+    spike_discharge_kw: float,
+    max_discharge_kw: float,
+    high_price_threshold: float,
 ) -> np.ndarray | None:
-    """Raised step-0 discharge cap during a CONFIRMED spike only."""
-    if not live_spike or spike_discharge_kw <= max_discharge_kw:
+    """Per-step discharge caps: the everyday wear-conscious limit, raised to
+    the spike cap at step 0 while a spike is CONFIRMED (the binary sensor),
+    and at future steps whose forecast clears the release threshold — if
+    those spikes confirm, the live cap will be raised when their interval
+    arrives, so the plan should model the power it will actually have
+    (matters for scheduling anticipated spike-reserve sales). None when the
+    spike cap is disabled or nothing raises it."""
+    if spike_discharge_kw <= max_discharge_kw:
         return None
-    caps = np.full(steps, max_discharge_kw)
-    caps[0] = spike_discharge_kw
-    return caps
+    caps = np.full(len(sell), max_discharge_kw)
+    caps[1:] = np.where(sell[1:] > high_price_threshold, spike_discharge_kw, max_discharge_kw)
+    if live_spike:
+        caps[0] = spike_discharge_kw
+    return caps if caps.max() > max_discharge_kw else None
 
 
 @dataclass
@@ -308,7 +320,7 @@ class Planner:
             load=load_kw,
             soc0_kwh=battery.soc_frac * self._battery_params.capacity_kwh,
             sell_floor_kwh=self._sell_floor(sell),
-            max_discharge_kw_step=self._discharge_caps(len(grid), prices.live_spike),
+            max_discharge_kw_step=self._discharge_caps(sell, prices.live_spike),
             soc_target_kwh=daily_soc_target_vector(
                 grid,
                 self._tz,
@@ -348,14 +360,15 @@ class Planner:
             vacation=vacation_info,
         )
 
-    def _discharge_caps(self, steps: int, live_spike: bool) -> np.ndarray | None:
+    def _discharge_caps(self, sell: np.ndarray, live_spike: bool) -> np.ndarray | None:
         caps = discharge_cap_vector(
-            steps,
+            sell,
             live_spike,
             self._settings.spike.discharge_kw,
             self._battery_params.max_discharge_kw,
+            self._settings.spike.high_price_threshold,
         )
-        if caps is not None:
+        if caps is not None and live_spike:
             log.info("confirmed spike: step-0 discharge cap raised to %.1f kW", caps[0])
         return caps
 

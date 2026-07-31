@@ -25,6 +25,9 @@
   from the spike instant with the SoC the reserve would have held (payoff
   — replays have perfect hindsight and capture recorded spikes either way,
   so a plain full-day A/B can't exhibit insurance against forecast error).
+  The raised `spike.discharge_kw` cap is likewise anticipated at future
+  steps priced above the threshold, so planned spike sales are scheduled at
+  the power a confirming spike will actually grant.
   Dropped: `spike.lookahead_hours`,
   `spike.reserve_kwh`, `spike.reserve_penalty_per_kwh` and the soft-floor
   slack machinery (old config keys are ignored harmlessly);

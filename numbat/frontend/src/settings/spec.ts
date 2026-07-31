@@ -450,10 +450,12 @@ export const SECTIONS: SectionSpec[] = [
       number(
         "spike.discharge_kw",
         "Spike discharge cap",
-        "Discharge limit while a CONFIRMED spike is active (current interval only) — " +
-          "lets a wear-conscious everyday limit be exceeded for the rare high-value " +
-          "hours. Set to your inverter's true limit; 0 disables. Extra power only " +
-          "reaches the grid if the export limit allows it.",
+        "Discharge limit while a CONFIRMED spike is active — lets a wear-conscious " +
+          "everyday limit be exceeded for the rare high-value hours. The plan also " +
+          "assumes this cap at future steps priced above the release price, so " +
+          "anticipated spike sales are scheduled at the power a confirming spike " +
+          "will actually grant. Set to your inverter's true limit; 0 disables. Extra " +
+          "power only reaches the grid if the export limit allows it.",
         { unit: "kW", min: 0, max: 100, step: 0.5, default: "0" },
       ),
     ],

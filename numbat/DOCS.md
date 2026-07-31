@@ -350,12 +350,16 @@ Measure the **payoff** by replaying *from the spike instant itself* (say
 reserve would have held, versus the recorded sold-down SoC — that's the
 "what if I'd been holding 30%" question the reserve exists to answer.
 
-`discharge_kw` optionally raises the discharge cap **only while the spike binary
-sensor confirms a spike, and only for the current interval** — everyday operation
-keeps the wear-conscious `battery.max_discharge_kw`. Spikes are rare enough that
-a few full-power hours add negligible cell wear while capturing peak revenue.
-Set it to your inverter's true limit (0 disables). Note the extra power only
-reaches the grid if `grid.export_limit_kw` allows it.
+`discharge_kw` optionally raises the discharge cap while the spike binary
+sensor **confirms** a spike (current interval) — everyday operation keeps the
+wear-conscious `battery.max_discharge_kw`. The plan also *assumes* the raised
+cap at future steps priced above `high_price_threshold`: if those spikes
+confirm, the live cap will be raised when their interval arrives, so
+anticipated spike sales (the reserve's included) are scheduled at the power
+the battery will actually have. Spikes are rare enough that a few full-power
+hours add negligible cell wear while capturing peak revenue. Set it to your
+inverter's true limit (0 disables). Note the extra power only reaches the
+grid if `grid.export_limit_kw` allows it.
 
 ## Published sensors
 

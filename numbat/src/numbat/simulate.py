@@ -28,6 +28,7 @@ from numbat.optimizer.result import solution_to_plan
 from numbat.planner import (
     battery_params,
     daily_soc_target_vector,
+    discharge_cap_vector,
     haircut_sell,
     sell_floor_vector,
 )
@@ -262,12 +263,22 @@ def simulate_solve(
         export_reserve_kwh=bp.export_reserve_kwh,
         high_price_threshold=settings.spike.high_price_threshold,
     )
+    # Spike discharge caps, same anticipation as live: a scenario step 0 above
+    # the threshold counts as confirmed (its price IS the sim's live price).
+    caps = discharge_cap_vector(
+        sell_solve,
+        float(sell[0]) > settings.spike.high_price_threshold,
+        settings.spike.discharge_kw,
+        bp.max_discharge_kw,
+        settings.spike.high_price_threshold,
+    )
 
     inputs = OptimizerInputs(
         dt_hours=grid.dt_hours,
         buy=buy, sell=sell_solve, pv=pv, load=load,
         soc0_kwh=float(np.clip(soc_frac, 0.0, 1.0)) * bp.capacity_kwh,
         sell_floor_kwh=sell_floor,
+        max_discharge_kw_step=caps,
         soc_target_kwh=target,
     )
 
