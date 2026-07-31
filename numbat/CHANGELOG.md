@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Fix: time-travel replays could inflate PV 1000x and curtail at positive
+  prices.** The recorded-PV series was run through the house-load magnitude
+  guard, whose per-UTC-day *median* heuristic misreads a PV day: a replay
+  window's first UTC day holding only dusk + night rows (median a few watts)
+  was "corrected" x1000, so the optimizer saw a phantom multi-megawatt
+  morning, hit the export limit and curtailed. PV now has its own guard
+  keyed on the day's peak (down-scale only — tiny values are legitimate
+  PV). Seen live on the 2026-07-30 replay.
+
 ## 0.15.0
 
 - **Spike detection is now price-based; the Price Spike entity is gone.**
