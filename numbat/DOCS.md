@@ -196,12 +196,19 @@ Once a day Numbat reads hourly long-term statistics of `entities.load_power` (a
 house load sensor in W or kW — e.g. the mkaiser package's `sensor.load_power`)
 over the last **365 days** — the window self-caps to however much history the
 sensor actually has — and builds hour-of-day averages, split weekday/weekend,
-in your local timezone. Long-term statistics survive recorder purging, so the
+in your local timezone. The averages are **recency-weighted** with a 21-day
+half-life: a sample from three weeks ago counts half as much as one from
+today, so the current season's habits dominate — winter's morning heating
+block forecasts at winter strength instead of being averaged away against
+summer mornings — while months of history still steady the thin weekend
+buckets. Long-term statistics survive recorder purging, so the
 window genuinely grows toward a full year; if the sensor has no `state_class`
 (hence no statistics), Numbat falls back to raw recorder history (limited to
 your purge window, ~10 days). Hours with under 2 observed hours of data use
 the mean of the hours that do have data. The dashboard shows what each learn
-used: window length, data source, and the fitted temperature response.
+used: window length, data source, the recency weighting, and the fitted
+temperature response (slopes, balance temperatures, and how many hours the
+fit saw — the numbers to check when a cold snap under-forecasts).
 
 Add `entities.outdoor_temp` (any outdoor temperature sensor with long-term
 statistics) and the daily learn also fits a **temperature response**: how many

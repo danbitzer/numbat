@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Load learning is recency-weighted (21-day half-life).** Bucket means and
+  the temperature regression decay a sample's weight by half every three
+  weeks, so the current season's habits dominate the year of history — a
+  winter weekend's ~3 kW morning heating block now forecasts at winter
+  strength instead of being averaged against summer mornings (the
+  2026-08-01 flat-battery morning). The dashboard's load-forecast line now
+  also shows the weighting and the full fitted temperature response —
+  slopes with their balance temperatures and the hours the fit saw.
+
 - **Fix: time-travel replays could inflate PV 1000x and curtail at positive
   prices.** The recorded-PV series was run through the house-load magnitude
   guard, whose per-UTC-day *median* heuristic misreads a PV day: a replay

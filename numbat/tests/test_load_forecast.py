@@ -174,7 +174,8 @@ def synth_records(days: range) -> list[tuple[datetime, float, float | None]]:
 
 
 def test_fit_recovers_cooling_slope_and_predicts_forecast_temps():
-    model = fit_load_model(synth_records(range(13, 20)), ADELAIDE)
+    # half_life_days=None: this test pins the exact unweighted means
+    model = fit_load_model(synth_records(range(13, 20)), ADELAIDE, half_life_days=None)
     assert model.has_temp_response
     assert model.cool_kw_per_deg == pytest.approx(COOL_SLOPE)
     assert model.heat_kw_per_deg == pytest.approx(0.0)
@@ -237,6 +238,37 @@ def test_block_slopes_capture_schedule_gated_heating():
     # cold morning forecast: base(6am)=0.4+0.5*2.5=1.65, +0.5*(5-2.5) -> 2.9
     assert model.predict(0, 6, 10.0) == pytest.approx(2.9, abs=0.1)
     assert model.predict(0, 2, 10.0) == pytest.approx(0.4, abs=0.1)
+
+
+def test_recency_weighting_tracks_a_seasonal_shift():
+    """Heating season arrives: 83 days of 0.5 kW then three recent weeks of
+    3.0 kW. The plain mean smears this to ~1.0 kW; the weighted fit must land
+    much closer to the recent regime (the 2026-08-01 flat-battery morning was
+    exactly this smear)."""
+    records = []
+    for day in range(104):
+        kw = 3.0 if day >= 83 else 0.5
+        start = datetime(2026, 3, 2, tzinfo=UTC) + timedelta(days=day)  # a Monday
+        records.extend((start + timedelta(hours=h), kw, None) for h in range(24))
+    weighted = fit_load_model(records, ADELAIDE)
+    unweighted = fit_load_model(records, ADELAIDE, half_life_days=None)
+    assert weighted.half_life_days > 0 and unweighted.half_life_days == 0
+    h = 10
+    assert unweighted.base[0][h] == pytest.approx(1.0, abs=0.05)  # the smear
+    assert weighted.base[0][h] > 1.6  # recent regime dominates
+    assert weighted.base[0][h] > unweighted.base[0][h] * 1.5
+
+
+def test_recency_weighted_slope_fit_stays_exact_on_linear_data():
+    # exact-linear synthetic data must recover the same slope weighted or not
+    weighted = fit_load_model(synth_records(range(13, 20)), ADELAIDE)
+    assert weighted.has_temp_response
+    assert weighted.cool_kw_per_deg == pytest.approx(COOL_SLOPE)
+    assert weighted.predict(0, 10, 26.0) == pytest.approx(BASE_KW + COOL_SLOPE * 4)
+    # fit facts surfaced for the dashboard (temp_hours counts regression rows,
+    # which exclude thin buckets — so bounded by, not equal to, the records)
+    assert 0 < weighted.temp_hours <= len(synth_records(range(13, 20)))
+    assert weighted.half_life_days == pytest.approx(21.0)
 
 
 def test_predict_never_exceeds_observed_max():
