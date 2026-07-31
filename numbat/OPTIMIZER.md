@@ -249,7 +249,7 @@ full-charge target** (e.g. 100% at 3pm). Two things make it work:
 
 The one thing no forecast knob can catch is the spike nobody predicted —
 and they happen: picture feed-in jumping to $5/kWh at 2am with nothing in
-the forecast and no spike-status warning, right after the battery has,
+the forecast, right after the battery has,
 quite correctly, sold down through a well-forecast evening. Forecast spikes need no
 special machinery (they're in the prices, so the plan pre-charges and
 positions for them by economics alone); unforecast ones can only be met by
@@ -291,10 +291,10 @@ A few quieter mechanisms keep the plan sensible:
   confirmed price to chase a forecast better one that often never
   eventuates (sell forecasts run optimistic around spikes, even one
   interval out). A small haircut — 5–10% is plenty — tips those calls
-  toward the bird in hand. Spike-level forecast prices get the same trim;
-  the spike reserve is unaffected — it releases on the live confirmed
-  price, which the haircut never touches. Displayed prices are always raw;
-  only the plan's internal trust is tempered.
+  toward the bird in hand. Spike-level forecast prices get the same trim,
+  including the spike reserve's planned releases — only the reserve's
+  execution gate (the live confirmed price) is never cut. Displayed prices
+  are always raw; only the plan's internal trust is tempered.
 - **Action switch threshold** (default $0.02): the current action only
   changes if the new plan beats sticking with the old action by more than
   this, across the whole horizon — this stops the battery flip-flopping

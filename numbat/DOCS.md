@@ -305,8 +305,9 @@ buffer until learning is active. The goal state is always a learned forecast.
   (yes, including Amber's advanced predicted pricing). Flat across the
   horizon for predictability; a low setting (5–10%) is plenty, since it
   compounds every hold-for-later decision. It applies to spike-level
-  forecast prices too; the spike reserve is unaffected — it releases on the
-  live confirmed price, which the haircut never touches. The dashboard
+  forecast prices too, including the spike reserve's planned releases —
+  only the reserve's execution gate (the live confirmed price) is never
+  cut. The dashboard
   always displays raw prices — the haircut only tempers the plan's internal
   trust, never a dollar figure you see.
 
@@ -314,7 +315,7 @@ buffer until learning is active. The goal state is always a learned forecast.
 
 Insurance for **unforecast** price spikes. Real spikes can arrive with zero
 warning — picture feed-in jumping to $5/kWh at 2am with nothing in the
-forecast and no spike-status notice, right after the battery has (correctly)
+forecast, right after the battery has (correctly)
 sold down for the evening. No forecast-reading mechanism can catch that; the
 only tool is holding sellable energy on standing insurance.
 
@@ -350,8 +351,9 @@ interval* with the battery SoC overridden to what the reserve would have
 held, versus the recorded sold-down SoC — that's the "what if I'd been
 holding 30%" question the reserve exists to answer.
 
-`discharge_kw` optionally raises the discharge cap while the spike binary
-sensor **confirms** a spike (current interval) — everyday operation keeps the
+`discharge_kw` optionally raises the discharge cap while the live
+**confirmed** price is above `high_price_threshold` (the same test that
+releases the reserve) — everyday operation keeps the
 wear-conscious `battery.max_discharge_kw`. The plan also *assumes* the raised
 cap at future steps priced above `high_price_threshold`: if those spikes
 confirm, the live cap will be raised when their interval arrives, so

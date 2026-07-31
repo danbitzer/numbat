@@ -69,9 +69,10 @@ async def main() -> None:
     print(f"now={now.isoformat()}  local tz={tz}  steps={len(grid)}")
     if load_forecaster.status != "learned":
         print(f"warning: load forecast {load_forecaster.status} — load column is zero")
+    live_spike = prices.current_sell > settings.spike.high_price_threshold
     print(
         f"battery: soc={battery.soc_frac:.1%} power={battery.power_kw:+.2f}kW "
-        f"capacity={battery.capacity_kwh}kWh  live_spike={prices.live_spike}"
+        f"capacity={battery.capacity_kwh}kWh  live_spike={live_spike}"
     )
     print(
         f"coverage: buy={coverage(prices.buy, grid):.0%} sell={coverage(prices.sell, grid):.0%} "

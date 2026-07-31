@@ -29,7 +29,6 @@ def make_watcher() -> PriceWatcher:
             "entities": {
                 "buy_price": "sensor.buy",
                 "sell_price": "sensor.sell",
-                "price_spike": "binary_sensor.spike",
                 "pv_forecast_today": "sensor.pv1",
                 "pv_forecast_tomorrow": "sensor.pv2",
                 "battery_soc": "sensor.soc",
@@ -44,10 +43,10 @@ def make_watcher() -> PriceWatcher:
 
 
 def test_watcher_first_change_after_restart_triggers():
-    # the very first observed event carries old_state — a spike confirming
+    # the very first observed event carries old_state — a spike price landing
     # minutes after an add-on restart must trigger immediately
     w = make_watcher()
-    w.on_change("binary_sensor.spike", "on", "off")
+    w.on_change("sensor.sell", "5.60", "0.30")
     assert w.trigger.is_set()
 
 
@@ -67,20 +66,6 @@ def test_watcher_estimate_flip_at_same_value_triggers():
     w.on_change("sensor.buy", "0.44", "0.44", {"estimate": True}, {"estimate": True})
     assert not w.trigger.is_set()  # seeded, no change
     w.on_change("sensor.buy", "0.44", "0.44", {"estimate": False}, {"estimate": True})
-    assert w.trigger.is_set()
-
-
-def test_watcher_spike_status_flip_triggers_without_state_change():
-    # _spike_active treats spike_status == "spike" as live even while the
-    # binary sensor state is still "off" — that flip alone must re-solve
-    w = make_watcher()
-    w.on_change(
-        "binary_sensor.spike", "off", "off", {"spike_status": "none"}, {"spike_status": "none"}
-    )
-    assert not w.trigger.is_set()
-    w.on_change(
-        "binary_sensor.spike", "off", "off", {"spike_status": "spike"}, {"spike_status": "none"}
-    )
     assert w.trigger.is_set()
 
 

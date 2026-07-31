@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Spike detection is now price-based; the Price Spike entity is gone.**
+  A spike is live when the confirmed feed-in price is above
+  `spike.high_price_threshold` — the same gate that releases the spike
+  reserve — instead of Amber's price-spike binary sensor (which only fires
+  around $3/kWh wholesale, so the raised `spike.discharge_kw` cap now
+  actually engages at *your* threshold, consistent with the plan's
+  anticipated spike steps). `entities.price_spike` is dropped (ignored
+  harmlessly in saved configs); the price sensors alone still trigger
+  instant re-solves.
 - **Spike reserve reworked: manual, confirmed-release insurance.**
   `spike.reserve_soc` (default off) is state of charge that ordinary sales
   never dip below — it sells only at prices above

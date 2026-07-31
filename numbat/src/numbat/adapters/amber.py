@@ -20,15 +20,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Protocol
 
 from numbat.config import Entities
 from numbat.ha.client import HaClient, State
 from numbat.models import PriceForecast, Series
 
 log = logging.getLogger(__name__)
-
-SPIKE_ACTIVE_STATES = frozenset({"on"})
 
 
 class PriceProvider(Protocol):
@@ -61,29 +59,15 @@ def parse_forecast_attribute(state: State) -> Series:
     return Series(times=times, values=values)
 
 
-def _spike_active(spike_state: State | None) -> bool:
-    if spike_state is None or not spike_state.available:
-        return False
-    if spike_state.state in SPIKE_ACTIVE_STATES:
-        return True
-    return spike_state.attributes.get("spike_status") == "spike"
-
-
 class AmberExpressAdapter:
     def __init__(self, client: HaClient, entities: Entities):
         self._client = client
         self._entities = entities
 
     async def get_prices(self) -> PriceForecast:
-        spike_task = (
-            self._client.get_state(self._entities.price_spike)
-            if self._entities.price_spike
-            else _none()
-        )
-        buy_state, sell_state, spike_state = await asyncio.gather(
+        buy_state, sell_state = await asyncio.gather(
             self._client.get_state(self._entities.buy_price),
             self._client.get_state(self._entities.sell_price),
-            spike_task,
         )
         for s in (buy_state, sell_state):
             if not s.available:
@@ -96,12 +80,7 @@ class AmberExpressAdapter:
             sell=sell,
             current_buy=buy_state.as_float(),
             current_sell=sell_state.as_float(),
-            live_spike=_spike_active(spike_state),
             updated_at=min(buy_state.freshness, sell_state.freshness),
             current_estimate=bool(buy_state.attributes.get("estimate"))
             or bool(sell_state.attributes.get("estimate")),
         )
-
-
-async def _none() -> Any:
-    return None

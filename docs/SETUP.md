@@ -44,7 +44,6 @@ no advanced-price mode, which is not good enough to optimize against.
 4. Note the entities it created — you'll need:
    - `sensor.amber_express_<site>_general_price` (buy)
    - `sensor.amber_express_<site>_feed_in_price` (sell)
-   - `binary_sensor.amber_express_<site>_price_spike`
 
 ## 3. Open-Meteo Solar Forecast (PV)
 

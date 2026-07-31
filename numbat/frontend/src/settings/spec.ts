@@ -73,14 +73,6 @@ export const SECTIONS: SectionSpec[] = [
         ["sensor"],
       ),
       entity(
-        "entities.price_spike",
-        "Price spike",
-        "Amber Express price-spike binary sensor — a confirming spike triggers an " +
-          "instant re-solve and the raised spike discharge cap.",
-        ["binary_sensor"],
-        { optional: true, default: "" },
-      ),
-      entity(
         "entities.pv_forecast_today",
         "PV forecast (today)",
         "Open-Meteo Solar Forecast energy production today.",
@@ -451,7 +443,8 @@ export const SECTIONS: SectionSpec[] = [
       number(
         "spike.discharge_kw",
         "Spike discharge cap",
-        "Discharge limit while a CONFIRMED spike is active — lets a wear-conscious " +
+        "Discharge limit while the live confirmed price is above the release price — " +
+          "lets a wear-conscious " +
           "everyday limit be exceeded for the rare high-value hours. The plan also " +
           "assumes this cap at future steps priced above the release price, so " +
           "anticipated spike sales are scheduled at the power a confirming spike " +

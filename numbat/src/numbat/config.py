@@ -84,7 +84,6 @@ class Entities(BaseModel):
     # price forecast, so no separate forecast entities exist.
     buy_price: str
     sell_price: str
-    price_spike: str = ""
     pv_forecast_today: str
     pv_forecast_tomorrow: str
     battery_soc: str

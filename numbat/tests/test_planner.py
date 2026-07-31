@@ -27,7 +27,6 @@ SETTINGS_DICT = {
     "entities": {
         "buy_price": "sensor.amber_express_general_price",
         "sell_price": "sensor.amber_express_feed_in_price",
-        "price_spike": "binary_sensor.amber_express_price_spike",
         "pv_forecast_today": "sensor.home_energy_production_today",
         "pv_forecast_tomorrow": "sensor.home_energy_production_tomorrow",
         "battery_soc": "sensor.battery_level",
@@ -69,7 +68,6 @@ def full_fake_ha() -> FakeHa:
     for name in (
         "amber_express_feed_in_price",
         "amber_express_general_price",
-        "amber_express_price_spike",
         "solar_production_today",
         "solar_production_tomorrow",
         "weather_henley_beach_hourly",
@@ -256,8 +254,10 @@ def synthetic_cycle_data(settings: Settings, live_spike: bool = False) -> CycleD
         soc0_kwh=6.4,
     )
     series = Series(times=[start], values=[0.30])
+    # A live spike is now purely a price condition: confirmed sell above
+    # spike.high_price_threshold (default $1).
     prices = PriceForecast(
-        buy=series, sell=series, current_buy=0.30, current_sell=0.10, live_spike=live_spike
+        buy=series, sell=series, current_buy=0.30, current_sell=1.50 if live_spike else 0.10
     )
     battery = BatteryState(soc_frac=0.5, power_kw=0.0, capacity_kwh=12.8, ts=start)
     return CycleData(grid=grid, inputs=inputs, prices=prices, battery=battery, temps=None)
