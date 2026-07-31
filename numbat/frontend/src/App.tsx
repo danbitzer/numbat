@@ -278,16 +278,16 @@ function loadForecastLine(plan: PlanResponse): string | null {
   const days = Math.max(1, Math.round(lf.window_days));
   let text =
     `load forecast: ${days} day${days === 1 ? "" : "s"} of ${lf.source} (${lf.load_entity})`;
-  if (lf.half_life_days) text += `, recent-weighted (${lf.half_life_days}-day half-life)`;
+  if (lf.half_life_days) text += `, recency-weighted (${lf.half_life_days}-day half-life)`;
   if (lf.temp_response) {
     const heat =
       lf.balance_heat_c != null
-        ? `heat ${lf.heat_kw_per_deg} kW/°C below ${lf.balance_heat_c}°C`
-        : `heat ${lf.heat_kw_per_deg} kW/°C`;
+        ? `heat up to ${lf.heat_kw_per_deg} kW/°C below ${lf.balance_heat_c}°C`
+        : `heat up to ${lf.heat_kw_per_deg} kW/°C`;
     const cool =
       lf.balance_cool_c != null
-        ? `cool ${lf.cool_kw_per_deg} kW/°C above ${lf.balance_cool_c}°C`
-        : `cool ${lf.cool_kw_per_deg} kW/°C`;
+        ? `cool up to ${lf.cool_kw_per_deg} kW/°C above ${lf.balance_cool_c}°C`
+        : `cool up to ${lf.cool_kw_per_deg} kW/°C`;
     text += ` · temp response: ${heat}, ${cool}`;
     if (lf.temp_hours) text += ` (fitted on ${lf.temp_hours.toLocaleString()} h)`;
   } else {

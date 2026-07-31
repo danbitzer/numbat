@@ -328,7 +328,11 @@ def fit_load_model(
         age_days = (newest - start).total_seconds() / 86400
         return float(0.5 ** (age_days / half_life_days))
 
-    count = np.zeros((2, 24))  # effective observed hours per bucket (rows are split)
+    # Two accumulators: the trust gate stays on RAW observed hours (two
+    # weekend days must keep unlocking the weekend buckets, exactly as
+    # before weighting existed), while the means use recency-weighted hours.
+    raw_hours = np.zeros((2, 24))
+    count = np.zeros((2, 24))  # effective (recency-weighted) observed hours
     load_sum = np.zeros((2, 24))
     cdh_sum = np.zeros((2, 24))
     hdh_sum = np.zeros((2, 24))
@@ -338,6 +342,7 @@ def fit_load_model(
         pieces = _local_hour_pieces(start, start + timedelta(hours=1), tz)
         pieces_per_row.append((pieces, rw))
         for weekend, hour, w in pieces:
+            raw_hours[weekend][hour] += w
             w *= rw
             count[weekend][hour] += w
             load_sum[weekend][hour] += max(load_kw, 0.0) * w
@@ -350,7 +355,7 @@ def fit_load_model(
     model = LoadModel(
         base=[
             [
-                float(base_arr[d][h]) if count[d][h] >= min_bucket_hours else None
+                float(base_arr[d][h]) if raw_hours[d][h] >= min_bucket_hours else None
                 for h in range(24)
             ]
             for d in (0, 1)
@@ -371,18 +376,25 @@ def fit_load_model(
     # by sqrt(recency) makes the normal equations recency-weighted, matching
     # the bucket means the deviations are measured against.
     dc, dh, dy, hours = [], [], [], []
+    temp_rows = 0
     for (_, load_kw, temp_c), (pieces, rw) in zip(rows, pieces_per_row, strict=True):
         sw = rw**0.5
+        contributed = False
         for weekend, hour, _w in pieces:
-            if count[weekend][hour] < min_bucket_hours:
+            if raw_hours[weekend][hour] < min_bucket_hours:
                 continue
+            contributed = True
             dc.append(sw * (max(temp_c - balance_cool_c, 0.0) - model.cdh_mean[weekend][hour]))
             dh.append(sw * (max(balance_heat_c - temp_c, 0.0) - model.hdh_mean[weekend][hour]))
             dy.append(sw * (max(load_kw, 0.0) - base_arr[weekend][hour]))
             hours.append(hour)
+        # count RECORDS, not regression rows: statistics rows are UTC-hour
+        # aligned, which a half-hour-offset zone splits into two pieces —
+        # counting pieces would double the dashboard's "fitted on N h".
+        temp_rows += contributed
     if not dy:
         return model
-    model.temp_hours = len(dy)
+    model.temp_hours = temp_rows
     dc_a, dh_a, dy_a = np.array(dc), np.array(dh), np.array(dy)
     cool, heat = _fit_slopes(dc_a, dh_a, dy_a)
     if max(cool, heat) > MAX_SLOPE_KW_PER_DEG:

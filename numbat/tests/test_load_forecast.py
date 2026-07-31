@@ -265,10 +265,35 @@ def test_recency_weighted_slope_fit_stays_exact_on_linear_data():
     assert weighted.has_temp_response
     assert weighted.cool_kw_per_deg == pytest.approx(COOL_SLOPE)
     assert weighted.predict(0, 10, 26.0) == pytest.approx(BASE_KW + COOL_SLOPE * 4)
-    # fit facts surfaced for the dashboard (temp_hours counts regression rows,
-    # which exclude thin buckets — so bounded by, not equal to, the records)
-    assert 0 < weighted.temp_hours <= len(synth_records(range(13, 20)))
+    # fit facts surfaced for the dashboard: every record contributed here
+    # (raw-hours gate — the weekend buckets' 2 observed hours still count)
+    assert weighted.temp_hours == len(synth_records(range(13, 20)))
     assert weighted.half_life_days == pytest.approx(21.0)
+
+
+def test_temp_hours_counts_records_not_split_pieces():
+    """LTS rows start on UTC hour boundaries, which Adelaide (+09:30) splits
+    into two local-hour pieces — the dashboard's 'fitted on N h' must count
+    records, not pieces (it read 2x on exactly the install it exists for)."""
+    records = []
+    for day in range(6, 18):  # Mon 6 Jul .. Fri 17 Jul: a full weekend inside,
+        t = synth_day_temp(day)  # so every (daytype, hour) bucket passes the gate
+        kw = BASE_KW + COOL_SLOPE * max(t - 22.0, 0.0)
+        records.extend(
+            (datetime(2026, 7, day, h, 0, tzinfo=UTC), kw, t) for h in range(24)
+        )
+    model = fit_load_model(records, ADELAIDE)
+    assert model.has_temp_response
+    assert model.temp_hours == len(records)
+
+
+def test_week_old_install_still_learns_weekend_buckets():
+    """The trust gate runs on RAW observed hours: one recorded weekend (2h
+    per bucket) must unlock the weekend buckets even though their recency-
+    WEIGHTED hours fall just short of the gate."""
+    model = fit_load_model(synth_records(range(13, 20)), ADELAIDE)
+    weekend_known = sum(v is not None for v in model.base[1])
+    assert weekend_known == 24
 
 
 def test_predict_never_exceeds_observed_max():

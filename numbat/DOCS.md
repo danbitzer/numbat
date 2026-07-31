@@ -201,10 +201,14 @@ half-life: a sample from three weeks ago counts half as much as one from
 today, so the current season's habits dominate — winter's morning heating
 block forecasts at winter strength instead of being averaged away against
 summer mornings — while months of history still steady the thin weekend
-buckets. Long-term statistics survive recorder purging, so the
+buckets. (The first cold weekend of a new season still lags a little — one
+weekend of new-regime data against the decayed old season; the daily SoC
+target is the insurance for sharp regime breaks.) Long-term statistics
+survive recorder purging, so the
 window genuinely grows toward a full year; if the sensor has no `state_class`
 (hence no statistics), Numbat falls back to raw recorder history (limited to
-your purge window, ~10 days). Hours with under 2 observed hours of data use
+your purge window, ~10 days — too short for weighting to matter, so that
+path is unweighted). Hours with under 2 observed hours of data use
 the mean of the hours that do have data. The dashboard shows what each learn
 used: window length, data source, the recency weighting, and the fitted
 temperature response (slopes, balance temperatures, and how many hours the

@@ -7,7 +7,9 @@
   weeks, so the current season's habits dominate the year of history — a
   winter weekend's ~3 kW morning heating block now forecasts at winter
   strength instead of being averaged against summer mornings (the
-  2026-08-01 flat-battery morning). The dashboard's load-forecast line now
+  2026-08-01 flat-battery morning). The very first cold snap of a season
+  still lags — one weekend of new-regime data — so the daily SoC target
+  remains the insurance for sharp breaks. The dashboard's load-forecast line now
   also shows the weighting and the full fitted temperature response —
   slopes with their balance temperatures and the hours the fit saw.
 
