@@ -20,8 +20,10 @@ makes it inverter-agnostic — anything HA can control can follow the plan.
 
 | | |
 |---|---|
+| **True cost optimization** | A genuine MILP over the whole horizon — spike capture, negative-price grid charging and export timing all fall out of the economics. |
+| **Solar-aware** | Plans around your PV forecast, and curtails export when feed-in prices go negative. |
 | **Any HA-integrated battery** | Numbat publishes recommendation sensors and ships an actuator blueprint — anything Home Assistant can control can follow the plan. |
-| **User-friendly dashboard** | Live prices and the full ~36 h plan behind HA ingress, with every setting explained in plain language. Light and dark. |
+| **User-friendly dashboard** | Live prices and the full ~36 h plan available in HA, with every setting explained in plain language. |
 | **Learned load forecast** | Hour-of-day consumption learned from your home's real history, plus a fitted temperature response so heatwaves and cold snaps raise the forecast. |
 | **Spike reserve** | Charge held back that only sells into confirmed spike-level prices — insurance against the spikes no forecast sees coming. |
 | **Daily SoC target** | Have the battery at a chosen level by a chosen time each day. |
