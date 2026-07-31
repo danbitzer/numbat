@@ -5,7 +5,8 @@ Also owns the judgment calls around the raw MILP:
 - step-0 price override with the live 5-min prices
 - forecast haircut (forecast sell prices discounted toward the median — only
   the live, confirmed price is trusted in full)
-- spike reserve (a sales floor that releases only on a confirmed spike price)
+- spike reserve (a sales floor released by spike-level prices; execution is
+  gated on the live confirmed price — only step 0 ever acts)
 - hysteresis (pin-and-compare before switching the current action)
 - live-spike guard (never grid-charge during a confirmed spike)
 - fallback (reuse the previous plan when the solver fails)
@@ -57,10 +58,12 @@ def haircut_sell(sell: np.ndarray, haircut: float) -> np.ndarray:
     above the median. Forecasts run optimistic even one interval out — around
     spikes especially — so only step 0 (the live, confirmed price) is trusted
     in full. Flat by design: one rule, easy to reason about. Below-median
-    prices are untouched. (The spike reserve is untouched by definition: it
-    releases on the live confirmed price, never a forecast.) Shared by the
-    live planner and test mode (scenarios + time travel), so the sandbox
-    knob behaves exactly like the live one."""
+    prices are untouched. (The spike reserve reads this trimmed series for
+    its in-plan releases — a marginal forecast spike the trim drops below
+    the release price isn't anticipated — while step 0's confirmed price is
+    exempt from the trim, so real releases are never haircut away.) Shared
+    by the live planner and test mode (scenarios + time travel), so the
+    sandbox knob behaves exactly like the live one."""
     if haircut <= 0 or len(sell) < 2:
         return sell
     median = float(np.median(sell))
@@ -71,28 +74,27 @@ def haircut_sell(sell: np.ndarray, haircut: float) -> np.ndarray:
 
 
 def sell_floor_vector(
-    steps: int,
-    current_sell: float,
+    sell: np.ndarray,
     *,
     reserve_kwh: float,
     export_reserve_kwh: float,
     high_price_threshold: float,
 ) -> np.ndarray | None:
     """The spike reserve as a per-step SALES floor (kWh, aligned with
-    soc[1:]): ordinary sales stop at the reserve; it sells ONLY when the
-    live CONFIRMED price clears the release threshold — then step 0's floor
-    drops to the export reserve, and the 5-minute/event re-solves roll the
-    release forward while the spike lasts. Forecast prices never release it:
-    real spikes arrive with no forecast at all (2026-07-31, 2am, $5.60/kWh,
-    zero warning), and forecast spikes need no reserve — they're in the
-    prices, so the optimizer plans for them by economics alone. None =
+    soc[1:]): ordinary sales stop at the reserve; a step sells through it
+    only at a price above the release threshold. Pass the SOLVE series, so
+    step 0 releases on the live CONFIRMED price — the execution gate, since
+    only step 0 ever acts — while future steps release on the (haircut)
+    forecast, letting the plan anticipate the sale, pre-position for it,
+    and show it honestly on the dashboard and in simulations. A phantom
+    forecast spike can never actually spend the reserve: when its interval
+    arrives un-confirmed, that cycle's step 0 stays floored and the foreseen
+    sale evaporates in the re-solve. During a real spike the 5-minute/event
+    re-solves roll the confirmed release forward while it lasts. None =
     disabled, or inert (not above the export reserve)."""
     if reserve_kwh <= export_reserve_kwh:
         return None
-    floor = np.full(steps, reserve_kwh)
-    if current_sell > high_price_threshold:
-        floor[0] = export_reserve_kwh
-    return floor
+    return np.where(sell > high_price_threshold, export_reserve_kwh, reserve_kwh)
 
 
 def daily_soc_target_vector(
@@ -254,8 +256,9 @@ class Planner:
         # The haircut tempers the objective's trust in forecast prices (the
         # live step-0 price is exempt). The published plan still shows raw
         # prices: the haircut is planning maths, not a dollar the meter will
-        # see. The spike reserve is orthogonal — it releases on the live
-        # confirmed price, which the haircut never touches.
+        # see. The spike reserve's in-plan releases read the trimmed series;
+        # its execution gate (step 0) is the confirmed price the haircut
+        # never touches.
         sell = self._haircut_sell(sell_raw)
 
         pv_kw = resample_mean(pv, grid)
@@ -304,7 +307,7 @@ class Planner:
             pv=pv_kw,
             load=load_kw,
             soc0_kwh=battery.soc_frac * self._battery_params.capacity_kwh,
-            sell_floor_kwh=self._sell_floor(len(grid), prices.current_sell),
+            sell_floor_kwh=self._sell_floor(sell),
             max_discharge_kw_step=self._discharge_caps(len(grid), prices.live_spike),
             soc_target_kwh=daily_soc_target_vector(
                 grid,
@@ -359,19 +362,18 @@ class Planner:
     def _haircut_sell(self, sell: np.ndarray) -> np.ndarray:
         return haircut_sell(sell, self._settings.optimizer.forecast_haircut)
 
-    def _sell_floor(self, steps: int, current_sell: float) -> np.ndarray | None:
+    def _sell_floor(self, sell: np.ndarray) -> np.ndarray | None:
         cfg = self._settings.spike
         floor = sell_floor_vector(
-            steps,
-            current_sell,
+            sell,
             reserve_kwh=cfg.reserve_soc * self._battery_params.capacity_kwh,
             export_reserve_kwh=self._battery_params.export_reserve_kwh,
             high_price_threshold=cfg.high_price_threshold,
         )
-        if floor is not None and current_sell > cfg.high_price_threshold:
+        if floor is not None and sell[0] > cfg.high_price_threshold:
             log.info(
                 "spike reserve released: confirmed %.2f $/kWh clears the %.2f threshold",
-                current_sell,
+                float(sell[0]),
                 cfg.high_price_threshold,
             )
         return floor

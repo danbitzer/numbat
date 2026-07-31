@@ -200,13 +200,14 @@ async def test_unchanged_but_reported_battery_is_fresh():
 
 
 async def test_gather_wires_the_spike_reserve_sales_floor():
-    """Enabled reserve → a per-step sales floor in kWh; the confirmed live
-    price (and ONLY it) releases step 0 when it clears the threshold."""
+    """Enabled reserve → a per-step sales floor built from the SOLVE (trimmed)
+    series: released exactly where that series clears the threshold."""
     fake = full_fake_ha()
 
     def spike_settings(threshold: float) -> Settings:
         return make_settings(
-            spike={"reserve_soc": 0.5, "high_price_threshold": threshold}
+            optimizer={"forecast_haircut": 0.5},
+            spike={"reserve_soc": 0.5, "high_price_threshold": threshold},
         )
 
     async with fake_ha_client(fake) as client:
@@ -215,13 +216,27 @@ async def test_gather_wires_the_spike_reserve_sales_floor():
         floor = held.inputs.sell_floor_kwh
         assert floor is not None
         assert np.all(floor == pytest.approx(0.5 * 12.8))
-        # threshold 0: the fixture's live confirmed price clears it — step 0
-        # released to the export reserve, the rest still floored
-        released = await make_planner(client, spike_settings(0.0)).gather(NOW)
-        floor = released.inputs.sell_floor_kwh
+        # a threshold between the trimmed and raw forecast peaks: wired to the
+        # trimmed series, nothing releases; wired to raw, the peak step would
+        trimmed_peak = float(held.inputs.sell[1:].max())
+        raw_peak = float(held.sell_raw[1:].max())
+        assert trimmed_peak < raw_peak
+        mid = await make_planner(
+            client, spike_settings((trimmed_peak + raw_peak) / 2)
+        ).gather(NOW)
+        assert np.all(mid.inputs.sell_floor_kwh == pytest.approx(0.5 * 12.8))
+        # a threshold just under the trimmed peak: that forecast step (and any
+        # like it) releases IN-PLAN; step 0 (low confirmed price) stays floored
+        antic = await make_planner(
+            client, spike_settings(trimmed_peak - 0.001)
+        ).gather(NOW)
+        floor = antic.inputs.sell_floor_kwh
         assert floor is not None
-        assert floor[0] == pytest.approx(0.10 * 12.8)  # export reserve default
-        assert np.all(floor[1:] == pytest.approx(0.5 * 12.8))
+        assert floor[0] == pytest.approx(0.5 * 12.8)  # confirmed price low
+        released_mask = np.isclose(floor, 0.10 * 12.8)  # export reserve default
+        expected = antic.inputs.sell > trimmed_peak - 0.001
+        assert np.array_equal(released_mask, expected)
+        assert expected[1:].any()
         # disabled (or not above the export reserve): no floor machinery
         off = await make_planner(client, make_settings()).gather(NOW)
         assert off.inputs.sell_floor_kwh is None
@@ -354,27 +369,30 @@ def test_live_spike_guard_suppresses_grid_charge():
     assert plan.intervals[0].action != Action.CHARGE
 
 
-def test_sell_floor_vector_confirmed_release_semantics():
+def test_sell_floor_vector_release_semantics():
     from numbat.planner import sell_floor_vector
 
-    # below threshold: uniformly floored at the reserve
-    floor = sell_floor_vector(
-        12, 0.90, reserve_kwh=9.6, export_reserve_kwh=3.2, high_price_threshold=1.0
-    )
+    kw = dict(reserve_kwh=9.6, export_reserve_kwh=3.2, high_price_threshold=1.0)
+    # nothing clears the threshold: uniformly floored at the reserve
+    sell = np.full(12, 0.90)
+    floor = sell_floor_vector(sell, **kw)
     assert floor is not None and np.all(floor == 9.6)
-    # confirmed price clears the threshold: step 0 released to export reserve
-    floor = sell_floor_vector(
-        12, 5.60, reserve_kwh=9.6, export_reserve_kwh=3.2, high_price_threshold=1.0
-    )
+    # confirmed step 0 clears it: released to the export reserve
+    sell[0] = 5.60
+    floor = sell_floor_vector(sell, **kw)
     assert floor is not None
     assert floor[0] == 3.2 and np.all(floor[1:] == 9.6)
+    # a FORECAST step above the threshold releases in-plan too (anticipation;
+    # execution still needs the confirmed price when that interval arrives)
+    sell = np.full(12, 0.90)
+    sell[5] = 1.88
+    floor = sell_floor_vector(sell, **kw)
+    assert floor is not None
+    assert floor[5] == 3.2 and floor[0] == 9.6
+    assert np.all(np.delete(floor, 5) == 9.6)
     # inert unless the reserve sits above the export reserve
-    assert (
-        sell_floor_vector(
-            12, 0.90, reserve_kwh=3.0, export_reserve_kwh=3.2, high_price_threshold=1.0
-        )
-        is None
-    )
+    assert sell_floor_vector(sell, reserve_kwh=3.0, export_reserve_kwh=3.2,
+                             high_price_threshold=1.0) is None
 
 
 async def test_gather_haircuts_solve_prices_and_keeps_raw_for_display():

@@ -256,21 +256,28 @@ positions for them by economics alone); unforecast ones can only be met by
 **already holding sellable energy**.
 
 That's the spike reserve (default off — it's manual insurance): state of
-charge that ordinary sales may never dip below, released **only** by a live
-*confirmed* feed-in price above the release threshold (default $1/kWh). When
-a price actually clears it, the current interval's sales floor drops to the
-export reserve and the 5-minute/event re-solves keep releasing while the
-spike lasts. Serving your house is never blocked — like the export reserve
-it floors sales, not the battery — so on quiet days the reserve's cost is
-only the forgone margin on energy that ends up running the house anyway.
+charge that ordinary sales may never dip below, sold only at prices above
+the release threshold (default $1/kWh). The **execution gate is the live
+confirmed price**: when it actually clears the threshold, the current
+interval's sales floor drops to the export reserve and the 5-minute/event
+re-solves keep releasing while the spike lasts. Where the *forecast* clears
+the threshold, the plan releases those future steps too — so the dashboard
+shows the intended spike sale and the optimizer pre-positions for it — but
+that's anticipation, not commitment: only the current interval ever acts,
+so a forecast spike that never confirms simply keeps the reserve intact,
+cycle after cycle. Serving your house is never blocked — like the export
+reserve it floors sales, not the battery — so on quiet days the reserve's
+cost is only the forgone margin on energy that ends up running the house
+anyway.
 
 Turn it on when prices are volatile, and set the threshold above your
 ordinary evening peaks so it waits for genuine spikes. Size it with two
 time-travel experiments: an ordinary day with and without it gives the
 carry cost, and a replay started *at the spike instant* with the SoC the
 reserve would have held gives the payoff. (A plain full-day replay can't
-show the payoff — the replayed optimizer meets recorded spikes as
-forecasts, and forecasts never release the reserve.)
+show the payoff: replays have perfect hindsight, so they capture the
+recorded spike with or without the reserve — insurance against forecast
+error can't be exhibited by a replay that makes no forecast errors.)
 
 ## Trust and hygiene features
 

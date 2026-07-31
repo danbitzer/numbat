@@ -423,16 +423,18 @@ export const SECTIONS: SectionSpec[] = [
     description:
       "Insurance for unforecast price spikes — they arrive with zero warning, when a " +
       "well-run battery has often already sold. The reserve is state of charge that " +
-      "ordinary sales never dip below: it sells ONLY into a live confirmed price above " +
-      "the threshold (serving your house is never blocked). Enable it manually when " +
-      "prices are volatile; forecast spikes need no reserve — they're in the prices, " +
-      "so the plan already positions for them.",
+      "ordinary sales never dip below: it sells only at prices above the release " +
+      "threshold. Real sales are gated on the live CONFIRMED price; where the " +
+      "forecast clears the threshold the plan anticipates the sale (a phantom " +
+      "forecast can never actually spend it). Serving your house is never blocked. " +
+      "Enable it manually when prices are volatile.",
     fields: [
       number(
         "spike.reserve_soc",
         "Spike reserve",
-        "State of charge held back from ordinary selling, released only by a confirmed " +
-          "price above the threshold below. Binds above the export reserve; 0 = off. " +
+        "State of charge held back from ordinary selling; it sells only at prices " +
+          "above the release price below (confirmed for the current interval, forecast " +
+          "for planned/anticipated sales). Binds above the export reserve; 0 = off. " +
           "The cost of carry is small — the energy still serves your house — but on " +
           "quiet weeks it forgoes some ordinary sell margin.",
         { unit: "%", percent: true, min: 0, max: 100, step: 5, default: "0" },
@@ -440,8 +442,9 @@ export const SECTIONS: SectionSpec[] = [
       number(
         "spike.high_price_threshold",
         "Release price",
-        "The confirmed feed-in price that releases the reserve for sale. Set it above " +
-          "your ordinary evening peaks so the reserve waits for genuine spikes.",
+        "The feed-in price that releases the reserve for sale (real sales need the " +
+          "live confirmed price above it). Set it above your ordinary evening peaks " +
+          "so the reserve waits for genuine spikes.",
         { unit: "$/kWh", min: 0, max: 20, step: 0.1, default: "1" },
       ),
       number(

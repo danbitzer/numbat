@@ -82,8 +82,9 @@ class OptimizerInputs:
     # Per-step SALES floor (kWh, aligned with soc[1:]): selling at step t may
     # not end below max(export_reserve_kwh, sell_floor_kwh[t]). The planner
     # sets it to the spike reserve on every step whose sell price doesn't
-    # clear the release threshold — the reserved tranche sells only into a
-    # live confirmed spike price. Serving the house is never floored by it.
+    # clear the release threshold — released steps (step 0 on the confirmed
+    # price; later steps on the forecast, as in-plan anticipation) may sell
+    # through it. Serving the house is never floored by it.
     sell_floor_kwh: np.ndarray | None = None
     # Per-step discharge cap override (kW); None -> battery.max_discharge_kw
     # everywhere. Used to raise the cap during a confirmed spike interval.
@@ -283,8 +284,9 @@ def solve(
     #     step's floor; the house may still draw down to the hard floor.
     #     One-way: never forces charging back above itself. Per step it is
     #     the export reserve, raised to the spike reserve on steps whose
-    #     price doesn't clear the release threshold (sell_floor_kwh) — so
-    #     the spike tranche sells only into a live confirmed spike price.
+    #     price doesn't clear the release threshold (sell_floor_kwh) — the
+    #     spike tranche sells only at spike-level prices (execution gated on
+    #     the confirmed step-0 price; forecast releases are anticipation).
     #     The condition is on SoC (a decision variable), so it needs a
     #     binary: sell_ok[t]=1 permits selling at step t and requires that
     #     step to END at or above its floor (sell down TO it, never through).

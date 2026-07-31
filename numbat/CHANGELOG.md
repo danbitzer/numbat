@@ -11,15 +11,21 @@
   reserve anyway — they're in the prices, so the optimizer positions for
   them by economics alone. The reserve (`spike.reserve_soc`, default off —
   enable it manually when prices are volatile) is now SoC that ordinary
-  sales may never dip below: it sells **only** when the live *confirmed*
-  price clears `spike.high_price_threshold`, releasing the current interval
-  down to the export reserve while re-solves roll the release forward.
-  Serving the house is never blocked, so quiet-day carry cost is just
-  forgone sell margin. Sizing takes two time-travel experiments: an
-  ordinary day with/without it (carry cost), and a replay from the spike
-  instant with the SoC the reserve would have held (payoff — a full-day
-  replay meets spikes as forecasts, which never release the reserve, so it
-  only shows the cost side). Dropped: `spike.lookahead_hours`,
+  sales may never dip below: it sells only at prices above
+  `spike.high_price_threshold`. Execution is gated on the live *confirmed*
+  price — clearing it releases the current interval down to the export
+  reserve, rolled forward by the re-solves while the spike lasts. Future
+  steps whose (haircut) forecast clears the threshold release **in the
+  plan**: the dashboard and simulations show the intended spike sale and
+  the optimizer pre-positions for it, while a phantom forecast can never
+  actually spend the reserve (only the current interval acts, and it needs
+  the confirmed price). Serving the house is never blocked, so quiet-day
+  carry cost is just forgone sell margin. Sizing takes two time-travel
+  experiments: an ordinary day with/without it (carry cost), and a replay
+  from the spike instant with the SoC the reserve would have held (payoff
+  — replays have perfect hindsight and capture recorded spikes either way,
+  so a plain full-day A/B can't exhibit insurance against forecast error).
+  Dropped: `spike.lookahead_hours`,
   `spike.reserve_kwh`, `spike.reserve_penalty_per_kwh` and the soft-floor
   slack machinery (old config keys are ignored harmlessly);
   `spike.discharge_kw` and the confirmed-spike re-solve/no-grid-charge

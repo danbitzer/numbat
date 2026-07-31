@@ -188,17 +188,31 @@ def test_spike_reserve_released_step0_sells_through():
     assert sol.soc_kwh[1] < 6.0  # sold through the reserve into the spike
 
 
-def test_spike_reserve_forecast_spike_never_releases():
-    """Confirmed-only by construction: the planner keeps future steps floored
-    no matter what the forecast promises, so even an in-horizon $2 forecast
-    sells only the tranche above the reserve (zero load isolates sales)."""
+def test_spike_reserve_floored_steps_never_sell_through():
+    """The floor array is law: a step the planner left floored (its price
+    below the release threshold, or a forecast the haircut discounted) can't
+    sell through the reserve no matter how attractive its price — only the
+    free tranche above the floor sells (zero load isolates sales)."""
     sell = np.full(24, 0.10)
-    sell[5] = 2.0  # forecast spike — not confirmed, floor stays up
+    sell[5] = 2.0  # attractive, but the planner kept this step floored
     floor = np.full(24, 6.0)
     inputs = make_inputs(buy=0.30, sell=sell, load=0.0, soc0=10.0, sell_floor=floor)
     sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.05))
     assert sol.grid_export_kw[5] > 0.5  # the free tranche sells into it
     assert sol.soc_kwh[1:].min() >= 6.0 - 0.05  # the reserve never does
+
+
+def test_spike_reserve_forecast_release_plans_the_sale():
+    """A future step the planner released (forecast above the threshold)
+    lets the plan schedule the reserve sale there — in-plan anticipation."""
+    sell = np.full(24, 0.10)
+    sell[5] = 2.0
+    floor = np.full(24, 6.0)
+    floor[5] = 0.0  # released by the planner: forecast cleared the threshold
+    inputs = make_inputs(buy=0.30, sell=sell, load=0.0, soc0=10.0, sell_floor=floor)
+    sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.05))
+    assert sol.soc_kwh[6] < 6.0 - 1.0  # the plan sells the reserve at t=5
+    assert sol.soc_kwh[1:5].min() >= 6.0 - 0.05  # but not a step earlier
 
 
 def test_no_grid_charge_option():

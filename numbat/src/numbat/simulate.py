@@ -252,10 +252,12 @@ def simulate_solve(
     # haircut knob would silently do nothing, making test-mode A/B runs lie.
     sell_solve = haircut_sell(sell, settings.optimizer.forecast_haircut)
 
-    # The spike reserve, same as live: a sales floor that releases only when
-    # the scenario's CONFIRMED step-0 price clears the threshold.
+    # The spike reserve, same as live: steps priced above the release
+    # threshold sell through it (step 0 = the scenario's "confirmed" price;
+    # later steps = forecast anticipation), so a simulated spike scenario
+    # shows the planned reserve sale the way the live dashboard would.
     sell_floor = sell_floor_vector(
-        len(grid), float(sell[0]),
+        sell_solve,
         reserve_kwh=settings.spike.reserve_soc * bp.capacity_kwh,
         export_reserve_kwh=bp.export_reserve_kwh,
         high_price_threshold=settings.spike.high_price_threshold,

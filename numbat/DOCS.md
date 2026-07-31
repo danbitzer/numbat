@@ -319,31 +319,36 @@ sold down for the evening. No forecast-reading mechanism can catch that; the
 only tool is holding sellable energy on standing insurance.
 
 `reserve_soc` (0 = off) is state of charge that ordinary sales may never dip
-below: it sells **only** when the live *confirmed* feed-in price clears
-`high_price_threshold` — then the current interval's sales floor drops to the
-export reserve, and Numbat's 5-minute/event re-solves roll the release
-forward while the spike lasts. Forecast prices never release it, and forecast
-spikes need no reserve at all: they're in the prices, so the optimizer
-pre-charges and positions for them by economics alone. Serving your house is
-never blocked (same one-way semantics as the export reserve), so the cost of
-carry on quiet days is just forgone sell margin, not stranded energy.
+below: it sells only at prices above `high_price_threshold`. The gate that
+matters is **execution**: the current interval sells through the reserve only
+when the live *confirmed* price clears the threshold, and Numbat's
+5-minute/event re-solves roll that release forward while the spike lasts.
+Future intervals whose (haircut) *forecast* clears the threshold release
+**in the plan** — so the dashboard and simulations honestly show the intended
+spike sale and the optimizer can pre-position for it — but a phantom forecast
+can never actually spend the reserve: only the current interval acts, and if
+the price arrives un-confirmed the foreseen sale simply evaporates in the
+next re-solve. Serving your house is never blocked (same one-way semantics
+as the export reserve), so the cost of carry on quiet days is just forgone
+sell margin, not stranded energy.
 
 Enable it manually when prices are volatile (a spiky week, a heatwave), set
 `high_price_threshold` above your ordinary evening peaks, and turn it off
-when calm returns. One nuance: the release keys off the live price the
-instant it clears the threshold — in the first seconds of an interval that
-price can still be Amber's estimate, so a release may start marginally
+when calm returns. One nuance: the execution release keys off the live price
+the instant it clears the threshold — in the first seconds of an interval
+that price can still be Amber's estimate, so a release may start marginally
 early; the event-driven re-solve corrects within seconds either way.
 
-Sizing it honestly takes **two** time-travel experiments, because a plain
-full-day replay meets recorded spikes as *forecasts* — and forecasts never
-release the reserve, so that replay can only ever show the reserve losing
-money. Measure the **carry cost** by replaying an ordinary day with and
-without the reserve (the difference is the insurance premium per quiet
-day). Measure the **payoff** by replaying *from the spike instant itself*
-(say 2:00am as the $5.60 confirms) with the battery SoC overridden to what
-the reserve would have held, versus the recorded sold-down SoC — that's
-the "what if I'd been holding 30%" question the reserve exists to answer.
+Sizing it honestly takes **two** time-travel experiments, because a replay
+has perfect hindsight — the recorded spike is visible in advance, so a
+replayed optimizer captures it with or without the reserve, and the
+reserve's real value (insurance against *forecast error*) can't show up.
+Measure the **carry cost** by replaying an ordinary day with and without
+the reserve (the difference is the insurance premium per quiet day).
+Measure the **payoff** by replaying *from the spike instant itself* (say
+2:00am as the $5.60 confirms) with the battery SoC overridden to what the
+reserve would have held, versus the recorded sold-down SoC — that's the
+"what if I'd been holding 30%" question the reserve exists to answer.
 
 `discharge_kw` optionally raises the discharge cap **only while the spike binary
 sensor confirms a spike, and only for the current interval** — everyday operation
