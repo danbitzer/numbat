@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.15.0
 
 - **Spike detection is now price-based; the Price Spike entity is gone.**
   A spike is live when the confirmed feed-in price is above
