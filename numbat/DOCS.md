@@ -313,8 +313,8 @@ buffer until learning is active. The goal state is always a learned forecast.
 ### `spike`
 
 Insurance for **unforecast** price spikes. Real spikes can arrive with zero
-warning — live 2026-07-31 at 2am: $5.60/kWh feed-in with nothing in the
-forecast and no spike-status notice, when the battery had (correctly) already
+warning — picture feed-in jumping to $5/kWh at 2am with nothing in the
+forecast and no spike-status notice, right after the battery has (correctly)
 sold down for the evening. No forecast-reading mechanism can catch that; the
 only tool is holding sellable energy on standing insurance.
 
@@ -332,9 +332,9 @@ next re-solve. Serving your house is never blocked (same one-way semantics
 as the export reserve), so the cost of carry on quiet days is just forgone
 sell margin, not stranded energy.
 
-Enable it manually when prices are volatile (a spiky week, a heatwave), set
-`high_price_threshold` above your ordinary evening peaks, and turn it off
-when calm returns. One nuance: the execution release keys off the live price
+Enable it only when prices are volatile (a spiky week, a heatwave) or
+simply leave it on permanently — the carry cost is small. Set
+`high_price_threshold` above your ordinary evening peaks. One nuance: the execution release keys off the live price
 the instant it clears the threshold — in the first seconds of an interval
 that price can still be Amber's estimate, so a release may start marginally
 early; the event-driven re-solve corrects within seconds either way.
@@ -345,10 +345,10 @@ replayed optimizer captures it with or without the reserve, and the
 reserve's real value (insurance against *forecast error*) can't show up.
 Measure the **carry cost** by replaying an ordinary day with and without
 the reserve (the difference is the insurance premium per quiet day).
-Measure the **payoff** by replaying *from the spike instant itself* (say
-2:00am as the $5.60 confirms) with the battery SoC overridden to what the
-reserve would have held, versus the recorded sold-down SoC — that's the
-"what if I'd been holding 30%" question the reserve exists to answer.
+Measure the **payoff** by replaying *from a recorded spike's first
+interval* with the battery SoC overridden to what the reserve would have
+held, versus the recorded sold-down SoC — that's the "what if I'd been
+holding 30%" question the reserve exists to answer.
 
 `discharge_kw` optionally raises the discharge cap while the spike binary
 sensor **confirms** a spike (current interval) — everyday operation keeps the

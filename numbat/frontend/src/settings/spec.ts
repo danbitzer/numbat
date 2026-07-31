@@ -411,8 +411,9 @@ export const SECTIONS: SectionSpec[] = [
         "Shaves this share of the above-median excess off every FORECAST sell price — " +
           "the live confirmed price is never cut, so a confirmed good price beats " +
           "holding for a forecast better one. Applies to spike-level forecast prices " +
-          "too; the spike reserve is unaffected (it releases on the live confirmed " +
-          "price). 5–10% is plenty. The dashboard always shows raw prices.",
+          "too, including the spike reserve's planned releases — only its execution " +
+          "gate (the live confirmed price) is never cut. 5–10% is plenty. The " +
+          "dashboard always shows raw prices.",
         { unit: "%", percent: true, min: 0, max: 100, step: 5, default: "0" },
       ),
     ],
@@ -427,7 +428,7 @@ export const SECTIONS: SectionSpec[] = [
       "threshold. Real sales are gated on the live CONFIRMED price; where the " +
       "forecast clears the threshold the plan anticipates the sale (a phantom " +
       "forecast can never actually spend it). Serving your house is never blocked. " +
-      "Enable it manually when prices are volatile.",
+      "Enable it only when prices are volatile, or leave it on permanently.",
     fields: [
       number(
         "spike.reserve_soc",

@@ -247,10 +247,10 @@ full-charge target** (e.g. 100% at 3pm). Two things make it work:
 
 ## The spike reserve
 
-The one thing no forecast knob can catch is the spike nobody predicted.
-Live example, 2026-07-31 at 2am: feed-in hit $5.60/kWh with *nothing* in the
-forecast and no spike-status warning — and the battery had, quite correctly,
-already sold down through the well-forecast evening. Forecast spikes need no
+The one thing no forecast knob can catch is the spike nobody predicted —
+and they happen: picture feed-in jumping to $5/kWh at 2am with nothing in
+the forecast and no spike-status warning, right after the battery has,
+quite correctly, sold down through a well-forecast evening. Forecast spikes need no
 special machinery (they're in the prices, so the plan pre-charges and
 positions for them by economics alone); unforecast ones can only be met by
 **already holding sellable energy**.
@@ -270,8 +270,9 @@ reserve it floors sales, not the battery — so on quiet days the reserve's
 cost is only the forgone margin on energy that ends up running the house
 anyway.
 
-Turn it on when prices are volatile, and set the threshold above your
-ordinary evening peaks so it waits for genuine spikes. Size it with two
+Turn it on when prices are volatile — or leave it on permanently; the
+carry cost is small — and set the threshold above your ordinary evening
+peaks so it waits for genuine spikes. Size it with two
 time-travel experiments: an ordinary day with and without it gives the
 carry cost, and a replay started *at the spike instant* with the SoC the
 reserve would have held gives the payoff. (A plain full-day replay can't

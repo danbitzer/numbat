@@ -2,37 +2,17 @@
 
 ## Unreleased
 
-- **The spike reserve is now confirmed-release insurance** — the two spike
-  mechanisms are one. Motivation, live 2026-07-31 2am: feed-in hit
-  **$5.60/kWh with zero warning** (nothing in the forecast, no spike-status
-  "potential" phase) while the battery had correctly sold down through the
-  well-forecast evening. A forecast-triggered soft reserve is machinery
-  pointed at a signal that doesn't exist; forecast spikes never needed a
-  reserve anyway — they're in the prices, so the optimizer positions for
-  them by economics alone. The reserve (`spike.reserve_soc`, default off —
-  enable it manually when prices are volatile) is now SoC that ordinary
-  sales may never dip below: it sells only at prices above
-  `spike.high_price_threshold`. Execution is gated on the live *confirmed*
-  price — clearing it releases the current interval down to the export
-  reserve, rolled forward by the re-solves while the spike lasts. Future
-  steps whose (haircut) forecast clears the threshold release **in the
-  plan**: the dashboard and simulations show the intended spike sale and
-  the optimizer pre-positions for it, while a phantom forecast can never
-  actually spend the reserve (only the current interval acts, and it needs
-  the confirmed price). Serving the house is never blocked, so quiet-day
-  carry cost is just forgone sell margin. Sizing takes two time-travel
-  experiments: an ordinary day with/without it (carry cost), and a replay
-  from the spike instant with the SoC the reserve would have held (payoff
-  — replays have perfect hindsight and capture recorded spikes either way,
-  so a plain full-day A/B can't exhibit insurance against forecast error).
-  The raised `spike.discharge_kw` cap is likewise anticipated at future
-  steps priced above the threshold, so planned spike sales are scheduled at
-  the power a confirming spike will actually grant.
-  Dropped: `spike.lookahead_hours`,
-  `spike.reserve_kwh`, `spike.reserve_penalty_per_kwh` and the soft-floor
-  slack machinery (old config keys are ignored harmlessly);
-  `spike.discharge_kw` and the confirmed-spike re-solve/no-grid-charge
-  guard are unchanged.
+- **Spike reserve reworked: manual, confirmed-release insurance.**
+  `spike.reserve_soc` (default off) is state of charge that ordinary sales
+  never dip below — it sells only at prices above
+  `spike.high_price_threshold`: the live confirmed price gates real sales,
+  while forecast prices above it release in-plan, so the dashboard and
+  simulations show the anticipated sale (scheduled at the raised
+  `spike.discharge_kw` cap) and a phantom forecast can never actually spend
+  the reserve. Serving the house is never blocked. Replaces the
+  forecast-triggered soft reserve: `spike.lookahead_hours`,
+  `spike.reserve_kwh` and `spike.reserve_penalty_per_kwh` are dropped
+  (ignored harmlessly in saved configs).
 
 ## 0.14.0
 
