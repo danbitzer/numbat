@@ -16,6 +16,22 @@ makes it inverter-agnostic — anything HA can control can follow the plan.
 **[→ Add-on docs / option reference](numbat/DOCS.md)** ·
 **[→ How the optimizer thinks](numbat/OPTIMIZER.md)**
 
+## Features
+
+| | |
+|---|---|
+| **Any HA-integrated battery** | Numbat publishes recommendation sensors and ships an actuator blueprint — anything Home Assistant can control can follow the plan. |
+| **User-friendly dashboard** | Live prices and the full ~36 h plan behind HA ingress, with every setting explained in plain language. Light and dark. |
+| **Learned load forecast** | Hour-of-day consumption learned from your home's real history, plus a fitted temperature response so heatwaves and cold snaps raise the forecast. |
+| **Spike reserve** | Charge held back that only sells into confirmed spike-level prices — insurance against the spikes no forecast sees coming. |
+| **Daily SoC target** | Have the battery at a chosen level by a chosen time each day. |
+| **Vacation mode** | A flat standby-baseline load while the house is empty, auto-expiring the day you're back. |
+| **Test mode** | Time-travel through recorded days or run synthetic scenarios against sandbox settings — see what a change would do before it goes live. |
+| **Lightweight and fast** | A full re-plan is a MILP solve in tens of milliseconds; the dashboard is a small, fully offline bundle. |
+
+Deliberately **not** included: EV charging and deferrable-load scheduling —
+Numbat does one thing well: the battery.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
   <img alt="The Numbat dashboard: the current action and battery setpoint, live buy/sell prices, and the planned prices, PV/load forecast, mode, battery power and state of charge over the 36 h horizon" src="docs/screenshots/dashboard-light.png">
