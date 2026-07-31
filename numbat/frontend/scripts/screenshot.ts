@@ -98,8 +98,9 @@ function makePlan() {
       load_forecast: "learned",
       load_forecast_info: {
         load_entity: "sensor.load_power", source: "long-term statistics",
-        window_days: 30, temp_response: true, heat_kw_per_deg: 0.12,
-        cool_kw_per_deg: 0.2, buffer: 0.1,
+        window_days: 30, half_life_days: 21, temp_response: true,
+        heat_kw_per_deg: 0.12, cool_kw_per_deg: 0.2,
+        balance_heat_c: 15, balance_cool_c: 22, temp_hours: 720, buffer: 0.1,
       },
       explanation: {
         values: {

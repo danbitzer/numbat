@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16.0
 
 - **Load learning is recency-weighted (21-day half-life).** Bucket means and
   the temperature regression decay a sample's weight by half every three
