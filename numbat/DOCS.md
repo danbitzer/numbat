@@ -304,17 +304,34 @@ buffer until learning is active. The goal state is always a learned forecast.
   one — sell forecasts run optimistic around spikes, even one interval out
   (yes, including Amber's advanced predicted pricing). Flat across the
   horizon for predictability; a low setting (5–10%) is plenty, since it
-  compounds every hold-for-later decision. It applies to spike-level prices
-  too — including the spike-reserve trigger, so a marginal forecast spike
-  the trim drops below your threshold isn't reserved for, while a real
-  spike clears the threshold even after the cut. The dashboard always
-  displays raw prices — the haircut only tempers the plan's internal
+  compounds every hold-for-later decision. It applies to spike-level
+  forecast prices too; the spike reserve is unaffected — it releases on the
+  live confirmed price, which the haircut never touches. The dashboard
+  always displays raw prices — the haircut only tempers the plan's internal
   trust, never a dollar figure you see.
 
 ### `spike`
 
-When Amber flags a potential price spike within `lookahead_hours`, Numbat softly reserves
-`reserve_kwh` in the battery so it can sell into the spike if it confirms.
+Insurance for **unforecast** price spikes. Real spikes can arrive with zero
+warning — live 2026-07-31 at 2am: $5.60/kWh feed-in with nothing in the
+forecast and no spike-status notice, when the battery had (correctly) already
+sold down for the evening. No forecast-reading mechanism can catch that; the
+only tool is holding sellable energy on standing insurance.
+
+`reserve_soc` (0 = off) is state of charge that ordinary sales may never dip
+below: it sells **only** when the live *confirmed* feed-in price clears
+`high_price_threshold` — then the current interval's sales floor drops to the
+export reserve, and Numbat's 5-minute/event re-solves roll the release
+forward while the spike lasts. Forecast prices never release it, and forecast
+spikes need no reserve at all: they're in the prices, so the optimizer
+pre-charges and positions for them by economics alone. Serving your house is
+never blocked (same one-way semantics as the export reserve), so the cost of
+carry on quiet days is just forgone sell margin, not stranded energy.
+
+Enable it manually when prices are volatile (a spiky week, a heatwave), set
+`high_price_threshold` above your ordinary evening peaks, and turn it off
+when calm returns. Time travel is the honest way to size it: replay a spiky
+recorded day with and without the reserve and compare the dollars.
 
 `discharge_kw` optionally raises the discharge cap **only while the spike binary
 sensor confirms a spike, and only for the current interval** — everyday operation
@@ -348,9 +365,9 @@ it runs before every other branch so a later charge or idle isn't left capped.
 Without a no_charge sequence the blueprint falls back to idle and the deferral
 is lost.
 
-> The mirror case — block *discharging* to hold the spike reserve while the
-> grid serves the load — currently actuates as plain idle (the battery may
-> discharge to load). A future `no_discharge` action will handle it distinctly.
+> There is deliberately no discharge-blocking mirror: every reserve in Numbat
+> (SoC min aside) floors *sales* only, and the battery always remains free to
+> serve the house.
 | `sensor.numbat_power_setpoint` | recommended battery power, kW (+charge / −discharge) |
 | `sensor.numbat_soc_target` | planned SoC at end of the current interval |
 | `sensor.numbat_horizon_cost` | expected net meter cash flow ($) over the horizon: imports at forecast buy prices − exports at forecast sell prices; negative = earning. Excludes wear cost and the value of energy still stored at the horizon end |

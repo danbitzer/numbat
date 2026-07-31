@@ -29,7 +29,7 @@ from numbat.planner import (
     battery_params,
     daily_soc_target_vector,
     haircut_sell,
-    spike_reserve_vector,
+    sell_floor_vector,
 )
 from numbat.timegrid import TimeGrid
 
@@ -252,19 +252,20 @@ def simulate_solve(
     # haircut knob would silently do nothing, making test-mode A/B runs lie.
     sell_solve = haircut_sell(sell, settings.optimizer.forecast_haircut)
 
-    reserve = spike_reserve_vector(
-        sell_solve, grid.dt_hours,
-        lookahead_hours=settings.spike.lookahead_hours,
+    # The spike reserve, same as live: a sales floor that releases only when
+    # the scenario's CONFIRMED step-0 price clears the threshold.
+    sell_floor = sell_floor_vector(
+        len(grid), float(sell[0]),
+        reserve_kwh=settings.spike.reserve_soc * bp.capacity_kwh,
+        export_reserve_kwh=bp.export_reserve_kwh,
         high_price_threshold=settings.spike.high_price_threshold,
-        reserve_kwh=settings.spike.reserve_kwh,
-        soc_max_kwh=bp.soc_max_kwh,
     )
 
     inputs = OptimizerInputs(
         dt_hours=grid.dt_hours,
         buy=buy, sell=sell_solve, pv=pv, load=load,
         soc0_kwh=float(np.clip(soc_frac, 0.0, 1.0)) * bp.capacity_kwh,
-        reserve_kwh=reserve,
+        sell_floor_kwh=sell_floor,
         soc_target_kwh=target,
     )
 
@@ -285,7 +286,6 @@ def simulate_solve(
         )
     opt_config = OptimizerConfig(
         terminal_value=terminal,
-        reserve_penalty_per_kwh=settings.spike.reserve_penalty_per_kwh,
         solver_timeout_s=cfg.solver_timeout_s,
         soc_target_penalty_per_kwh=penalty,
         min_battery_export_spread=cfg.min_battery_export_spread,
@@ -298,7 +298,13 @@ def simulate_solve(
         plan,
         hold_value=terminal,
         spike_reserve=(
-            {"kwh": float(reserve[0]), "until": None} if reserve is not None else None
+            {
+                "soc": settings.spike.reserve_soc,
+                "threshold": settings.spike.high_price_threshold,
+                "released": float(sell[0]) > settings.spike.high_price_threshold,
+            }
+            if sell_floor is not None
+            else None
         ),
         daily_target_active=target is not None,
         live_spike=False,

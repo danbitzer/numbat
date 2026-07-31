@@ -45,7 +45,7 @@ def test_optimizer_honors_per_step_discharge_caps():
         soc0_kwh=40.0,
         max_discharge_kw_step=caps,
     )
-    config = OptimizerConfig(terminal_value=0.1, reserve_penalty_per_kwh=0.5, solver_timeout_s=30)
+    config = OptimizerConfig(terminal_value=0.1, solver_timeout_s=30)
     sol = solve(inputs, BATTERY, GRID, config)
     assert sol.discharge_kw[0] == pytest.approx(15.0, abs=0.01)  # raised cap used now
     assert sol.discharge_kw[1] == pytest.approx(12.0, abs=0.01)  # everyday cap beyond

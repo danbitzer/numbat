@@ -199,19 +199,32 @@ async def test_unchanged_but_reported_battery_is_fresh():
     assert data.battery.soc_frac == pytest.approx(0.725)
 
 
-async def test_spike_reserve_armed_from_forecast():
-    settings = make_settings(
-        spike={"lookahead_hours": 48, "reserve_kwh": 6.0, "high_price_threshold": 0.6}
-    )
+async def test_gather_wires_the_spike_reserve_sales_floor():
+    """Enabled reserve → a per-step sales floor in kWh; the confirmed live
+    price (and ONLY it) releases step 0 when it clears the threshold."""
     fake = full_fake_ha()
+
+    def spike_settings(threshold: float) -> Settings:
+        return make_settings(
+            spike={"reserve_soc": 0.5, "high_price_threshold": threshold}
+        )
+
     async with fake_ha_client(fake) as client:
-        planner = make_planner(client, settings)
-        data = await planner.gather(NOW)
-    reserve = data.inputs.reserve_kwh
-    assert reserve is not None
-    assert reserve.max() == pytest.approx(6.0)
-    assert reserve[0] == pytest.approx(6.0)  # held from now...
-    assert reserve[-1] == 0.0  # ...released at/after the trigger step
+        # threshold nothing clears: floored everywhere at 50% of capacity
+        held = await make_planner(client, spike_settings(999.0)).gather(NOW)
+        floor = held.inputs.sell_floor_kwh
+        assert floor is not None
+        assert np.all(floor == pytest.approx(0.5 * 12.8))
+        # threshold 0: the fixture's live confirmed price clears it — step 0
+        # released to the export reserve, the rest still floored
+        released = await make_planner(client, spike_settings(0.0)).gather(NOW)
+        floor = released.inputs.sell_floor_kwh
+        assert floor is not None
+        assert floor[0] == pytest.approx(0.10 * 12.8)  # export reserve default
+        assert np.all(floor[1:] == pytest.approx(0.5 * 12.8))
+        # disabled (or not above the export reserve): no floor machinery
+        off = await make_planner(client, make_settings()).gather(NOW)
+        assert off.inputs.sell_floor_kwh is None
 
 
 def synthetic_cycle_data(settings: Settings, live_spike: bool = False) -> CycleData:
@@ -341,25 +354,24 @@ def test_live_spike_guard_suppresses_grid_charge():
     assert plan.intervals[0].action != Action.CHARGE
 
 
-def test_spike_reserve_vector_lookahead_and_trigger():
-    from numbat.planner import spike_reserve_vector
+def test_sell_floor_vector_confirmed_release_semantics():
+    from numbat.planner import sell_floor_vector
 
-    dt = np.full(12, 0.5)  # 6h of 30-min steps
-    sell = np.full(12, 0.10)
-    sell[6] = 5.0  # 3h out, inside 4h lookahead
-    reserve = spike_reserve_vector(
-        sell, dt, lookahead_hours=4, high_price_threshold=1.0, reserve_kwh=6.0, soc_max_kwh=44.8
+    # below threshold: uniformly floored at the reserve
+    floor = sell_floor_vector(
+        12, 0.90, reserve_kwh=9.6, export_reserve_kwh=3.2, high_price_threshold=1.0
     )
-    assert reserve is not None
-    assert (reserve[:6] == 6.0).all()
-    assert (reserve[6:] == 0.0).all()
-
-    sell2 = np.full(12, 0.10)
-    sell2[10] = 5.0  # 5h out, beyond lookahead
+    assert floor is not None and np.all(floor == 9.6)
+    # confirmed price clears the threshold: step 0 released to export reserve
+    floor = sell_floor_vector(
+        12, 5.60, reserve_kwh=9.6, export_reserve_kwh=3.2, high_price_threshold=1.0
+    )
+    assert floor is not None
+    assert floor[0] == 3.2 and np.all(floor[1:] == 9.6)
+    # inert unless the reserve sits above the export reserve
     assert (
-        spike_reserve_vector(
-            sell2, dt, lookahead_hours=4, high_price_threshold=1.0, reserve_kwh=6.0,
-            soc_max_kwh=44.8,
+        sell_floor_vector(
+            12, 0.90, reserve_kwh=3.0, export_reserve_kwh=3.2, high_price_threshold=1.0
         )
         is None
     )
@@ -381,32 +393,6 @@ async def test_gather_haircuts_solve_prices_and_keeps_raw_for_display():
     assert above.any()  # fixture sanity: something to trim
     assert np.all(data.inputs.sell[1:][above] < data.sell_raw[1:][above])
     assert np.array_equal(data.inputs.sell[1:][~above], data.sell_raw[1:][~above])
-
-
-async def test_spike_reserve_triggers_on_trimmed_not_raw_prices():
-    """The reserve shares the objective's skepticism: a forecast spike that
-    only clears the threshold before the haircut isn't reserved for. Uses a
-    threshold set strictly between the fixture's trimmed and raw forecast
-    peaks, so this fails if the reserve is ever wired back to sell_raw."""
-    def spike_settings(threshold: float, haircut: float) -> Settings:
-        return make_settings(
-            spike={"lookahead_hours": 48, "reserve_kwh": 6.0, "high_price_threshold": threshold},
-            optimizer={"forecast_haircut": haircut},
-        )
-
-    fake = full_fake_ha()
-    async with fake_ha_client(fake) as client:
-        # threshold 999 arms nothing; this gather just measures the fixture
-        probe = await make_planner(client, spike_settings(999.0, 0.5)).gather(NOW)
-        raw_peak = float(probe.sell_raw[1:].max())
-        trimmed_peak = float(probe.inputs.sell[1:].max())
-        assert trimmed_peak < raw_peak  # fixture sanity: the trim bites
-        threshold = (trimmed_peak + raw_peak) / 2
-
-        armed = await make_planner(client, spike_settings(threshold, 0.0)).gather(NOW)
-        assert armed.inputs.reserve_kwh is not None  # raw peak clears it...
-        skeptical = await make_planner(client, spike_settings(threshold, 0.5)).gather(NOW)
-        assert skeptical.inputs.reserve_kwh is None  # ...the trimmed one doesn't
 
 
 def test_haircut_trims_forecast_above_median_but_never_step0():

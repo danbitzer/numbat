@@ -34,7 +34,7 @@ def make_inputs(
     pv: float | np.ndarray = 0.0,
     load: float | np.ndarray = 0.5,
     soc0: float = 6.4,
-    reserve: np.ndarray | None = None,
+    sell_floor: np.ndarray | None = None,
     soc_target: np.ndarray | None = None,
 ) -> OptimizerInputs:
     def full(v) -> np.ndarray:
@@ -47,17 +47,14 @@ def make_inputs(
         pv=full(pv),
         load=full(load),
         soc0_kwh=soc0,
-        reserve_kwh=reserve,
+        sell_floor_kwh=sell_floor,
         soc_target_kwh=soc_target,
     )
 
 
-def config(
-    terminal_value: float, reserve_penalty: float = 0.5, target_penalty: float = 0.0
-) -> OptimizerConfig:
+def config(terminal_value: float, target_penalty: float = 0.0) -> OptimizerConfig:
     return OptimizerConfig(
         terminal_value=terminal_value,
-        reserve_penalty_per_kwh=reserve_penalty,
         solver_timeout_s=30,
         soc_target_penalty_per_kwh=target_penalty,
     )
@@ -157,36 +154,51 @@ def test_scenario_terminal_value_prevents_horizon_drain():
     assert held.grid_export_kw.max() < 0.01
 
 
-def test_scenario_spike_reserve_holds_energy():
-    """Soft reserve floor keeps SoC available for a potential spike, unless
-    the penalty is outweighed (it isn't here)."""
-    # Attractive early sell price + low terminal value would normally drain it
-    inputs_free = make_inputs(buy=0.60, sell=0.50, soc0=10.0)
-    free = solve(inputs_free, BATTERY, GRID, config(terminal_value=0.05))
+def test_spike_reserve_blocks_ordinary_sales_but_serves_the_house():
+    """The spike reserve is a SALES floor: attractive-but-ordinary prices sell
+    only down to it, while the house keeps drawing through it to the hard
+    floor — insurance that still runs your home."""
+    # Without a floor this exact setup drains to soc_min (control):
+    free = solve(make_inputs(buy=0.60, sell=0.50, soc0=12.0), BATTERY, GRID,
+                 config(terminal_value=0.05))
     assert free.soc_kwh[-1] == pytest.approx(BATTERY.soc_min_kwh, abs=0.05)
 
-    reserve = np.full(24, 6.0)
-    inputs_held = make_inputs(buy=0.60, sell=0.50, soc0=10.0, reserve=reserve)
-    held = solve(inputs_held, BATTERY, GRID, config(terminal_value=0.05, reserve_penalty=5.0))
-    assert held.soc_kwh[1:].min() >= 6.0 - 0.05
+    floor = np.full(24, 6.0)
+    held = solve(make_inputs(buy=0.60, sell=0.50, soc0=12.0, sell_floor=floor),
+                 BATTERY, GRID, config(terminal_value=0.05))
+    # every selling step ends at/above the floor…
+    sells = held.grid_export_kw > 0.01
+    assert sells.any()  # the free tranche above the floor still sells
+    assert held.soc_kwh[1:][sells].min() >= 6.0 - 0.05
+    # …but the house (0.5 kW, no PV, buy 60c) still drains below it
+    assert held.soc_kwh[-1] < 6.0 - 0.5
 
 
-def test_scenario_spike_reserve_yields_to_bigger_opportunity():
-    """The reserve is soft: a confirmed spike RIGHT NOW (no time to pre-charge)
-    is worth more than the slack penalty, so the floor is broken to sell.
-
-    (With any lead time the optimizer prefers to grid-charge first and keep
-    the reserve intact — verified by the passing pre-charge scenario above.)
-    """
+def test_spike_reserve_released_step0_sells_through():
+    """A released step (the planner drops its floor when the CONFIRMED price
+    clears the threshold) sells straight through the reserve."""
     sell = np.full(24, 0.10)
     buy = np.full(24, 0.30)
-    sell[0] = 8.0  # spike in the current interval
-    buy[0] = 8.3
-    reserve = np.full(24, 6.0)
-    inputs = make_inputs(buy=buy, sell=sell, soc0=8.0, reserve=reserve)
-    sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.05, reserve_penalty=0.5))
+    sell[0], buy[0] = 5.60, 5.90  # the 2026-07-31 2am special
+    floor = np.full(24, 6.0)
+    floor[0] = 0.0  # released by the confirmed price
+    inputs = make_inputs(buy=buy, sell=sell, soc0=8.0, sell_floor=floor)
+    sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.05))
     assert sol.discharge_kw[0] == pytest.approx(BATTERY.max_discharge_kw, abs=0.01)
-    assert sol.soc_kwh[1] < 6.0  # broke the reserve to sell into the real spike
+    assert sol.soc_kwh[1] < 6.0  # sold through the reserve into the spike
+
+
+def test_spike_reserve_forecast_spike_never_releases():
+    """Confirmed-only by construction: the planner keeps future steps floored
+    no matter what the forecast promises, so even an in-horizon $2 forecast
+    sells only the tranche above the reserve (zero load isolates sales)."""
+    sell = np.full(24, 0.10)
+    sell[5] = 2.0  # forecast spike — not confirmed, floor stays up
+    floor = np.full(24, 6.0)
+    inputs = make_inputs(buy=0.30, sell=sell, load=0.0, soc0=10.0, sell_floor=floor)
+    sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.05))
+    assert sol.grid_export_kw[5] > 0.5  # the free tranche sells into it
+    assert sol.soc_kwh[1:].min() >= 6.0 - 0.05  # the reserve never does
 
 
 def test_no_grid_charge_option():
@@ -454,8 +466,7 @@ def test_export_spread_is_dynamic_solar_refill_day_still_sells():
     inputs = make_inputs(buy=0.32, sell=sell, pv=pv, load=0.5, soc0=10.0)
     sol = solve(
         inputs, BATTERY, GRID,
-        OptimizerConfig(terminal_value=0.22, reserve_penalty_per_kwh=0.5,
-                        solver_timeout_s=30, min_battery_export_spread=0.05),
+        OptimizerConfig(terminal_value=0.22, solver_timeout_s=30, min_battery_export_spread=0.05),
     )
     # Sells hard into the blip (load 0.5, pv 0 -> export is battery-sourced)...
     assert sol.grid_export_kw[:2].max() > 3.0
@@ -473,8 +484,8 @@ def test_min_battery_export_spread_suppresses_thin_export():
     hv = auto_terminal_value(buy, BATTERY)
     thin = solve(inputs, BATTERY, GRID, config(terminal_value=hv))
     guarded = solve(inputs, BATTERY, GRID,
-                    OptimizerConfig(terminal_value=hv, reserve_penalty_per_kwh=0.5,
-                                    solver_timeout_s=30, min_battery_export_spread=0.02))
+                    OptimizerConfig(terminal_value=hv, solver_timeout_s=30,
+                                    min_battery_export_spread=0.02))
     assert thin.grid_export_kw.max() > 1.0  # would export without the margin bar
     assert guarded.grid_export_kw.max() < 0.01  # the margin bar holds it
 
@@ -486,8 +497,8 @@ def test_export_spread_never_taxes_serving_the_house():
     self-consumption here.)"""
     inputs = make_inputs(buy=0.40, sell=0.05, pv=0.0, load=2.0, soc0=6.4)
     sol = solve(inputs, BATTERY, GRID,
-                OptimizerConfig(terminal_value=0.05, reserve_penalty_per_kwh=0.5,
-                                solver_timeout_s=30, min_battery_export_spread=5.0))
+                OptimizerConfig(terminal_value=0.05, solver_timeout_s=30,
+                                min_battery_export_spread=5.0))
     assert sol.discharge_kw.sum() * 0.5 > 1.0  # house still served from battery
     assert sol.grid_export_kw.max() < 0.01
 
@@ -502,8 +513,8 @@ def test_export_spread_is_per_kwh_not_per_step():
     inputs = make_inputs(buy=buy, sell=0.155, pv=0.0, load=0.5, soc0=10.0)
     hv = auto_terminal_value(buy, BATTERY)
     sol = solve(inputs, BATTERY, GRID,
-                OptimizerConfig(terminal_value=hv, reserve_penalty_per_kwh=0.5,
-                                solver_timeout_s=30, min_battery_export_spread=0.02))
+                OptimizerConfig(terminal_value=hv, solver_timeout_s=30,
+                                min_battery_export_spread=0.02))
     assert sol.grid_export_kw.max() > 1.0  # the ~+0.6c margin clears a true 2c bar
 
 
@@ -556,8 +567,7 @@ def test_import_penalty_suppresses_marginal_import_arbitrage():
     free = solve(inputs, BATTERY, GRID, config(terminal_value=0.05))
     tolled = solve(
         inputs, BATTERY, GRID,
-        OptimizerConfig(terminal_value=0.05, reserve_penalty_per_kwh=0.5,
-                        solver_timeout_s=30, import_penalty_per_kwh=0.08),
+        OptimizerConfig(terminal_value=0.05, solver_timeout_s=30, import_penalty_per_kwh=0.08),
     )
     assert free.charge_kw[0:6].sum() > 3.0  # takes the thin bet
     assert tolled.charge_kw[0:6].sum() < 0.01  # toll kills it
@@ -571,8 +581,7 @@ def test_import_penalty_skips_negative_buy_prices():
     inputs = make_inputs(buy=buy, sell=0.02, soc0=2.0)
     sol = solve(
         inputs, BATTERY, GRID,
-        OptimizerConfig(terminal_value=0.25, reserve_penalty_per_kwh=0.5,
-                        solver_timeout_s=30, import_penalty_per_kwh=0.10),
+        OptimizerConfig(terminal_value=0.25, solver_timeout_s=30, import_penalty_per_kwh=0.10),
     )
     assert sol.charge_kw[0:6].sum() > 4.0  # still gets paid to charge
     assert sol.grid_import_kw[0:6].max() > 1.0
@@ -585,8 +594,7 @@ def test_import_penalty_never_blocks_unavoidable_load_imports():
     terminal = auto_terminal_value(inputs.buy, BATTERY)
     sol = solve(
         inputs, BATTERY, GRID,
-        OptimizerConfig(terminal_value=terminal, reserve_penalty_per_kwh=0.5,
-                        solver_timeout_s=30, import_penalty_per_kwh=0.10),
+        OptimizerConfig(terminal_value=terminal, solver_timeout_s=30, import_penalty_per_kwh=0.10),
     )
     assert float(np.min(sol.grid_import_kw)) >= 1.5 - 1e-6  # load still fed
     assert sol.charge_kw.max() < 0.01  # and no phantom behavior appears

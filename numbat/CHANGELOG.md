@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+- **The spike reserve is now confirmed-release insurance** — the two spike
+  mechanisms are one. Motivation, live 2026-07-31 2am: feed-in hit
+  **$5.60/kWh with zero warning** (nothing in the forecast, no spike-status
+  "potential" phase) while the battery had correctly sold down through the
+  well-forecast evening. A forecast-triggered soft reserve is machinery
+  pointed at a signal that doesn't exist; forecast spikes never needed a
+  reserve anyway — they're in the prices, so the optimizer positions for
+  them by economics alone. The reserve (`spike.reserve_soc`, default off —
+  enable it manually when prices are volatile) is now SoC that ordinary
+  sales may never dip below: it sells **only** when the live *confirmed*
+  price clears `spike.high_price_threshold`, releasing the current interval
+  down to the export reserve while re-solves roll the release forward.
+  Serving the house is never blocked, so quiet-day carry cost is just
+  forgone sell margin. Size it honestly with time travel (replay a spiky
+  day with and without). Dropped: `spike.lookahead_hours`,
+  `spike.reserve_kwh`, `spike.reserve_penalty_per_kwh` and the soft-floor
+  slack machinery (old config keys are ignored harmlessly);
+  `spike.discharge_kw` and the confirmed-spike re-solve/no-grid-charge
+  guard are unchanged.
+
 ## 0.14.0
 
 - **The sell-price forecast haircut now applies from the next interval, not

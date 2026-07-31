@@ -6,7 +6,6 @@ Formulation:
        + wear · Σ pd·Δt                      battery wear on discharge
        + spread · Σ pd_sell·Δt               margin bar on battery-sourced export
        + ε · Σ (pc + pd)·Δt                  anti-chatter tiebreak
-       + reserve_penalty · Σ slack·Δt        soft spike-reserve violations
        + target_penalty · Σ tslack           soft daily-SoC-target shortfall
        − v_T · soc[T]                        terminal SoC value
 
@@ -15,7 +14,10 @@ Formulation:
          soc[t+1] == soc[t] + (ηc·pc − pd/ηd)·Δt
          soc bounds; pc ≤ Pc·y; pd ≤ Pd·(1−y)   no simultaneous charge+discharge
          gi ≤ Gi; ge ≤ Ge
-         soc[t] ≥ reserve[t] − slack[t]      soft floor (spike readiness)
+         sales floor: selling at t requires soc[t+1] ≥ floor[t] (big-M via
+             sell_ok[t]) — floor[t] is the export reserve, raised to the
+             spike reserve on steps whose price doesn't clear the release
+             threshold (see OptimizerInputs.sell_floor_kwh)
          soc[k] ≥ target[k] − tslack[k]      soft instants (daily full-charge)
          optional: pc ≤ pv_u                 (allow_grid_charge=false)
 
@@ -77,7 +79,12 @@ class OptimizerInputs:
     pv: np.ndarray  # kW per step
     load: np.ndarray
     soc0_kwh: float
-    reserve_kwh: np.ndarray | None = None  # soft SoC floor per step (spike readiness)
+    # Per-step SALES floor (kWh, aligned with soc[1:]): selling at step t may
+    # not end below max(export_reserve_kwh, sell_floor_kwh[t]). The planner
+    # sets it to the spike reserve on every step whose sell price doesn't
+    # clear the release threshold — the reserved tranche sells only into a
+    # live confirmed spike price. Serving the house is never floored by it.
+    sell_floor_kwh: np.ndarray | None = None
     # Per-step discharge cap override (kW); None -> battery.max_discharge_kw
     # everywhere. Used to raise the cap during a confirmed spike interval.
     max_discharge_kw_step: np.ndarray | None = None
@@ -93,9 +100,6 @@ class OptimizerInputs:
 @dataclass(frozen=True)
 class OptimizerConfig:
     terminal_value: float  # $/kWh valuing residual stored energy (the hold value)
-    # Slack cost accumulates per step: effectively $/kWh PER HOUR spent below
-    # the reserve floor, so persistent violations cost more than momentary ones.
-    reserve_penalty_per_kwh: float
     solver_timeout_s: float
     # $/kWh PER HOUR of shortfall below the (windowed) daily SoC target floor —
     # the insurance premium for not being full through the target window.
@@ -275,16 +279,23 @@ def solve(
     #     true replacement cost is the forgone feed-in, far below the hold
     #     value, and a static gate blocks sales the economics support (seen
     #     live 2026-07-29: a 28c sell refused on a 20c-hold, 40 kWh-PV day).
-    #   * The export reserve — sales may never take (or leave) SoC below the
-    #     reserve; the house may still draw down to the hard floor. One-way:
-    #     never forces charging back above itself. Its condition is on SoC (a
-    #     decision variable), so it needs a binary: sell_ok[t]=1 permits
-    #     selling at step t and requires that step to END at or above the
-    #     reserve (sell down TO it, never through it).
-    # Only the reserve adds binaries; the spread alone stays pure LP, and
+    #   * The sales floor — sales may never take (or leave) SoC below the
+    #     step's floor; the house may still draw down to the hard floor.
+    #     One-way: never forces charging back above itself. Per step it is
+    #     the export reserve, raised to the spike reserve on steps whose
+    #     price doesn't clear the release threshold (sell_floor_kwh) — so
+    #     the spike tranche sells only into a live confirmed spike price.
+    #     The condition is on SoC (a decision variable), so it needs a
+    #     binary: sell_ok[t]=1 permits selling at step t and requires that
+    #     step to END at or above its floor (sell down TO it, never through).
+    # Only the floor adds binaries; the spread alone stays pure LP, and
     # with both off no pd_sell machinery is built at all.
+    floor_vec = np.maximum(
+        np.full(T, max(battery.export_reserve_kwh, soc_floor)),
+        inputs.sell_floor_kwh if inputs.sell_floor_kwh is not None else soc_floor,
+    )
     spread_active = config.min_battery_export_spread > 0
-    reserve_active = battery.export_reserve_kwh > soc_floor
+    reserve_active = float(floor_vec.max()) > soc_floor
     pd_sell = None
     if spread_active or reserve_active:
         pd_sell = cp.Variable(T, nonneg=True)
@@ -298,9 +309,7 @@ def solve(
         )
         constraints += [
             pd_sell <= cp.multiply(pd_cap, sell_ok),
-            soc[1:]
-            >= battery.export_reserve_kwh
-            - (battery.export_reserve_kwh - soc_floor) * (1 - sell_ok),
+            soc[1:] >= floor_vec - cp.multiply(floor_vec - soc_floor, 1 - sell_ok),
         ]
     # The self-consumption envelope: charge from PV only, export only PV
     # leftovers (no battery export); serving load from the battery is free.
@@ -346,11 +355,6 @@ def solve(
         cost = cost + config.soc_target_penalty_per_kwh * cp.sum(
             cp.multiply(target_slack, dt)
         )
-    if inputs.reserve_kwh is not None and np.any(inputs.reserve_kwh > 0):
-        slack = cp.Variable(T, nonneg=True)
-        constraints.append(soc[1:] >= inputs.reserve_kwh - slack)
-        cost = cost + config.reserve_penalty_per_kwh * cp.sum(cp.multiply(slack, dt))
-
     problem = cp.Problem(cp.Minimize(cost), constraints)
     start = time.perf_counter()
     try:
