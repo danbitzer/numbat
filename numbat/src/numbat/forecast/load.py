@@ -5,7 +5,9 @@ learns hour-of-day × weekday/weekend averages from the household's real
 consumption (entities.load_power), refreshed daily. Preferred data source is
 hourly long-term statistics (which survive recorder purging, so the window
 can be months), falling back to raw recorder history (~10 days) for sensors
-without a state_class.
+without a state_class. The fit is recency-weighted (RECENCY_HALF_LIFE_DAYS)
+so the current season's habits dominate the year of history instead of being
+averaged away.
 
 With an outdoor temperature sensor configured (entities.outdoor_temp), the
 daily learn also fits a temperature response: pooled cooling/heating slopes
@@ -55,6 +57,16 @@ MIN_STATS_HOURS = 24
 # better (the window self-caps to what the sensors actually have), and a year
 # bounds the query while covering every season.
 HISTORY_DAYS = 365
+# Recency half-life for the fit: a sample this many days old counts half as
+# much as one from today. A straight mean over the window smears seasons —
+# a winter weekend's ~3 kW morning heating block averaged against summer's
+# ~0.3 kW mornings under-forecasts cold mornings by kilowatts (seen live
+# 2026-08-01: the battery was run flat by a 4.4 kW morning block the plan
+# never saw coming). Three weeks keeps the current season dominant (~half
+# the total weight comes from the last three weeks) while months of history
+# still steady the thin weekend buckets. Not configurable, same reasoning
+# as HISTORY_DAYS.
+RECENCY_HALF_LIFE_DAYS = 21.0
 REFRESH_INTERVAL = timedelta(hours=24)
 RETRY_INTERVAL = timedelta(minutes=30)
 # Unit plausibility: no house has a median hourly load above ~50 kW or below
@@ -181,6 +193,8 @@ class LoadModel:
     # learn-window facts, surfaced on the dashboard
     window_days: float = 0.0  # span of the data actually fitted
     hours_used: int = 0  # hourly rows in that window (0 for raw history)
+    half_life_days: float = 0.0  # recency half-life used (0 = unweighted)
+    temp_hours: int = 0  # hourly rows the temperature regression saw
 
     @property
     def known_buckets(self) -> int:
@@ -272,6 +286,7 @@ def fit_load_model(
     balance_heat_c: float = 15.0,
     min_bucket_hours: float = MIN_BUCKET_HOURS,
     min_temp_hours: int = MIN_TEMP_HOURS,
+    half_life_days: float | None = RECENCY_HALF_LIFE_DAYS,
 ) -> LoadModel:
     """Fit a LoadModel from hourly (start, load_kw, temp_c | None) records.
 
@@ -281,6 +296,12 @@ def fit_load_model(
     sensor's is excluded rather than mixed in. Without enough joint hours a
     base-only model is fitted on all records. Pure and synchronous for
     testability.
+
+    The fit is recency-weighted (see RECENCY_HALF_LIFE_DAYS): bucket means,
+    degree-hour means and the slope regression all decay a sample's weight by
+    half every `half_life_days`, so the current season dominates without the
+    older history being thrown away. None = unweighted (exact means, used by
+    precision tests).
     """
     with_temp = [r for r in records if r[2] is not None]
     use_temp = len(with_temp) >= min_temp_hours
@@ -299,15 +320,30 @@ def fit_load_model(
     window_days = (
         (rows[-1][0] + timedelta(hours=1) - rows[0][0]).total_seconds() / 86400 if rows else 0.0
     )
-    count = np.zeros((2, 24))  # observed hours per bucket (rows are split)
+    newest = max((r[0] for r in rows), default=None)
+
+    def recency(start: datetime) -> float:
+        if not half_life_days or newest is None:
+            return 1.0
+        age_days = (newest - start).total_seconds() / 86400
+        return float(0.5 ** (age_days / half_life_days))
+
+    # Two accumulators: the trust gate stays on RAW observed hours (two
+    # weekend days must keep unlocking the weekend buckets, exactly as
+    # before weighting existed), while the means use recency-weighted hours.
+    raw_hours = np.zeros((2, 24))
+    count = np.zeros((2, 24))  # effective (recency-weighted) observed hours
     load_sum = np.zeros((2, 24))
     cdh_sum = np.zeros((2, 24))
     hdh_sum = np.zeros((2, 24))
-    pieces_per_row: list[list[tuple[int, int, float]]] = []
+    pieces_per_row: list[tuple[list[tuple[int, int, float]], float]] = []
     for start, load_kw, temp_c in rows:
+        rw = recency(start)
         pieces = _local_hour_pieces(start, start + timedelta(hours=1), tz)
-        pieces_per_row.append(pieces)
+        pieces_per_row.append((pieces, rw))
         for weekend, hour, w in pieces:
+            raw_hours[weekend][hour] += w
+            w *= rw
             count[weekend][hour] += w
             load_sum[weekend][hour] += max(load_kw, 0.0) * w
             if temp_c is not None:
@@ -319,7 +355,7 @@ def fit_load_model(
     model = LoadModel(
         base=[
             [
-                float(base_arr[d][h]) if count[d][h] >= min_bucket_hours else None
+                float(base_arr[d][h]) if raw_hours[d][h] >= min_bucket_hours else None
                 for h in range(24)
             ]
             for d in (0, 1)
@@ -331,21 +367,34 @@ def fit_load_model(
         max_kw=max_kw,
         window_days=window_days,
         hours_used=len(rows),
+        half_life_days=half_life_days or 0.0,
     )
     if not use_temp:
         return model
 
+    # Weighted least squares by row scaling: multiplying each regression row
+    # by sqrt(recency) makes the normal equations recency-weighted, matching
+    # the bucket means the deviations are measured against.
     dc, dh, dy, hours = [], [], [], []
-    for (_, load_kw, temp_c), pieces in zip(rows, pieces_per_row, strict=True):
+    temp_rows = 0
+    for (_, load_kw, temp_c), (pieces, rw) in zip(rows, pieces_per_row, strict=True):
+        sw = rw**0.5
+        contributed = False
         for weekend, hour, _w in pieces:
-            if count[weekend][hour] < min_bucket_hours:
+            if raw_hours[weekend][hour] < min_bucket_hours:
                 continue
-            dc.append(max(temp_c - balance_cool_c, 0.0) - model.cdh_mean[weekend][hour])
-            dh.append(max(balance_heat_c - temp_c, 0.0) - model.hdh_mean[weekend][hour])
-            dy.append(max(load_kw, 0.0) - base_arr[weekend][hour])
+            contributed = True
+            dc.append(sw * (max(temp_c - balance_cool_c, 0.0) - model.cdh_mean[weekend][hour]))
+            dh.append(sw * (max(balance_heat_c - temp_c, 0.0) - model.hdh_mean[weekend][hour]))
+            dy.append(sw * (max(load_kw, 0.0) - base_arr[weekend][hour]))
             hours.append(hour)
+        # count RECORDS, not regression rows: statistics rows are UTC-hour
+        # aligned, which a half-hour-offset zone splits into two pieces —
+        # counting pieces would double the dashboard's "fitted on N h".
+        temp_rows += contributed
     if not dy:
         return model
+    model.temp_hours = temp_rows
     dc_a, dh_a, dy_a = np.array(dc), np.array(dh), np.array(dy)
     cool, heat = _fit_slopes(dc_a, dh_a, dy_a)
     if max(cool, heat) > MAX_SLOPE_KW_PER_DEG:
@@ -474,6 +523,8 @@ class HistoryLoadForecaster:
             "buckets": f"{model.known_buckets}/48",
             "temp_response": model.has_temp_response,
         }
+        if model.half_life_days:
+            info["half_life_days"] = round(model.half_life_days)
         if self._learned_at is not None:
             info["learned_at"] = self._learned_at.isoformat()
         if model.has_temp_response:
@@ -484,6 +535,9 @@ class HistoryLoadForecaster:
             info["cool_kw_per_deg"] = round(
                 max(model.cool_by_hour or [model.cool_kw_per_deg]), 3
             )
+            info["balance_heat_c"] = model.balance_heat_c
+            info["balance_cool_c"] = model.balance_cool_c
+            info["temp_hours"] = model.temp_hours
         return info
 
     async def refresh(self, now: datetime) -> None:
