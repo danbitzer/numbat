@@ -112,7 +112,7 @@ export function VacationCard() {
             </>
           ) : (
             <>
-              Household away? Flatten the load forecast to a standby baseline so the whole
+              Household away? Flatten the load forecast to a standby baseline so the
               battery is free for the market{expired && " (previous vacation has ended)"}.
             </>
           )}
@@ -129,8 +129,8 @@ export function VacationCard() {
             onClick={openDialog}
           >
             {active
-              ? `Vacation mode on · ${stored.until ? `ends ${new Date(stored.until).toLocaleString(undefined, { hour: "numeric", minute: "2-digit", day: "numeric", month: "short" })}` : "no end time"}`
-              : "Enable vacation mode…"}
+              ? `Edit`
+              : "Enable"}
           </Button>
         </CardAction>
         {error && !open && <p className="text-destructive text-xs">{error}</p>}

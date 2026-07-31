@@ -234,7 +234,7 @@ knob: the buffer shapes the **forecast**, while `battery.soc_min` (reserve
 floor) and the daily full-charge target shape **SoC policy** — stacking all
 three overlaps. The dashboard's load-forecast line shows the active buffer.
 
-**Vacation mode** (Settings → "Enable vacation mode…"): while the household
+**Vacation mode** (Settings → Vacation mode → "Enable"): while the household
 is away the learned profile books phantom evening load, so the planner holds
 back energy for cooking and AC that won't happen — and under-commits to
 spikes. Vacation mode replaces the forecast with a flat standby baseline

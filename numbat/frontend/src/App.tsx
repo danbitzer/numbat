@@ -185,7 +185,6 @@ export function App() {
               <>
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 px-1">
                   <h2 className="text-[15px] font-bold">Settings</h2>
-                  <span className="text-muted-foreground text-xs">saving applies immediately</span>
                 </div>
                 <SettingsView />
               </>
@@ -277,7 +276,7 @@ function loadForecastLine(plan: PlanResponse): string | null {
   if (plan.meta.load_forecast !== "learned" || !lf?.window_days) return null;
   const days = Math.max(1, Math.round(lf.window_days));
   let text =
-    `load forecast: ${days} day${days === 1 ? "" : "s"} of ${lf.source} (${lf.load_entity})`;
+    `Load forecast: ${days} day${days === 1 ? "" : "s"} of ${lf.source}`;
   if (lf.half_life_days) text += `, recency-weighted (${lf.half_life_days}-day half-life)`;
   if (lf.temp_response) {
     const heat =

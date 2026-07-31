@@ -21,6 +21,7 @@
   morning, hit the export limit and curtailed. PV now has its own guard
   keyed on the day's peak (down-scale only — tiny values are legitimate
   PV). Seen live on the 2026-07-30 replay.
+- UI: Minor text changes
 
 ## 0.15.0
 

@@ -138,9 +138,7 @@ function SettingsForm({ initialConfig }: { initialConfig: Record<string, unknown
         <CardHeader>
           <CardTitle>Numbat enabled</CardTitle>
           <CardDescription>
-            The master switch. While off (or before first configuration), Numbat runs no planning
-            cycles and publishes <code>sensor.numbat_status</code> as something other than{" "}
-            <code>ok</code> — your actuator automation's failsafe then keeps the inverter in
+            The master switch. While off the actuator automation keeps the inverter in
             plain self-consumption.
           </CardDescription>
           <CardAction>
