@@ -15,8 +15,11 @@
   price clears `spike.high_price_threshold`, releasing the current interval
   down to the export reserve while re-solves roll the release forward.
   Serving the house is never blocked, so quiet-day carry cost is just
-  forgone sell margin. Size it honestly with time travel (replay a spiky
-  day with and without). Dropped: `spike.lookahead_hours`,
+  forgone sell margin. Sizing takes two time-travel experiments: an
+  ordinary day with/without it (carry cost), and a replay from the spike
+  instant with the SoC the reserve would have held (payoff — a full-day
+  replay meets spikes as forecasts, which never release the reserve, so it
+  only shows the cost side). Dropped: `spike.lookahead_hours`,
   `spike.reserve_kwh`, `spike.reserve_penalty_per_kwh` and the soft-floor
   slack machinery (old config keys are ignored harmlessly);
   `spike.discharge_kw` and the confirmed-spike re-solve/no-grid-charge

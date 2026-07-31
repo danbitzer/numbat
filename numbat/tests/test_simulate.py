@@ -85,6 +85,25 @@ def test_simulate_applies_the_haircut_and_reports_raw_prices():
     assert batt_export(cut) < batt_export(base)
 
 
+def test_simulate_spike_reserve_floor_is_wired():
+    """Kills the sell_floor_kwh=None mutation: the sandbox reserve must
+    actually constrain the sim's sales, not just decorate the lever. The
+    evening_spike scenario's 1.25 feed-in is FORECAST (step 0 is ordinary),
+    so a confirmed-only reserve blocks selling the reserved tranche into it."""
+    base = run_simulation(make_settings(), scenario_id="evening_spike",
+                          soc_frac=0.9, now=NOW, tz=ADELAIDE)
+    reserved = run_simulation(make_settings(spike={"reserve_soc": 0.6}),
+                              scenario_id="evening_spike",
+                              soc_frac=0.9, now=NOW, tz=ADELAIDE)
+
+    def batt_export(r):
+        return sum(iv["grid_export_kw"] for iv in r["intervals"] if iv["action"] == "discharge")
+
+    assert batt_export(reserved) < batt_export(base)
+    lever = reserved["meta"]["explanation"]["levers"]["spike_reserve"]
+    assert lever == {"soc": 0.6, "threshold": 1.0, "released": False}
+
+
 def test_api_scenarios_and_simulate(tmp_path):
     controller = _controller(tmp_path, make_settings())
     client = TestClient(create_app(AppState(), controller))

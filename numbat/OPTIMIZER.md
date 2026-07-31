@@ -264,9 +264,13 @@ spike lasts. Serving your house is never blocked — like the export reserve
 it floors sales, not the battery — so on quiet days the reserve's cost is
 only the forgone margin on energy that ends up running the house anyway.
 
-Turn it on when prices are volatile; set the threshold above your ordinary
-evening peaks so it waits for genuine spikes; size it with time travel by
-replaying a spiky recorded day with and without it.
+Turn it on when prices are volatile, and set the threshold above your
+ordinary evening peaks so it waits for genuine spikes. Size it with two
+time-travel experiments: an ordinary day with and without it gives the
+carry cost, and a replay started *at the spike instant* with the SoC the
+reserve would have held gives the payoff. (A plain full-day replay can't
+show the payoff — the replayed optimizer meets recorded spikes as
+forecasts, and forecasts never release the reserve.)
 
 ## Trust and hygiene features
 

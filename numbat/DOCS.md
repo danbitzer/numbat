@@ -330,8 +330,20 @@ carry on quiet days is just forgone sell margin, not stranded energy.
 
 Enable it manually when prices are volatile (a spiky week, a heatwave), set
 `high_price_threshold` above your ordinary evening peaks, and turn it off
-when calm returns. Time travel is the honest way to size it: replay a spiky
-recorded day with and without the reserve and compare the dollars.
+when calm returns. One nuance: the release keys off the live price the
+instant it clears the threshold — in the first seconds of an interval that
+price can still be Amber's estimate, so a release may start marginally
+early; the event-driven re-solve corrects within seconds either way.
+
+Sizing it honestly takes **two** time-travel experiments, because a plain
+full-day replay meets recorded spikes as *forecasts* — and forecasts never
+release the reserve, so that replay can only ever show the reserve losing
+money. Measure the **carry cost** by replaying an ordinary day with and
+without the reserve (the difference is the insurance premium per quiet
+day). Measure the **payoff** by replaying *from the spike instant itself*
+(say 2:00am as the $5.60 confirms) with the battery SoC overridden to what
+the reserve would have held, versus the recorded sold-down SoC — that's
+the "what if I'd been holding 30%" question the reserve exists to answer.
 
 `discharge_kw` optionally raises the discharge cap **only while the spike binary
 sensor confirms a spike, and only for the current interval** — everyday operation

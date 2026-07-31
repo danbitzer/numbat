@@ -89,7 +89,7 @@ class OptimizerInputs:
     # everywhere. Used to raise the cap during a confirmed spike interval.
     max_discharge_kw_step: np.ndarray | None = None
     # Soft daily SoC target FLOOR, length T aligned with soc[1:] (same
-    # convention as reserve_kwh); 0 = inactive. The daily full-charge
+    # convention as sell_floor_kwh); 0 = inactive. The daily full-charge
     # insurance: held across a window (target time through the evening peak),
     # so "be full for the evening" actually keeps it full for the evening, not
     # just at a single 3pm instant. The battery is free to discharge once the

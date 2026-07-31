@@ -81,7 +81,8 @@ def test_soc_percentages_omitted_without_capacity():
 
 
 def test_levers_reflect_what_armed_the_solve():
-    reserve = {"kwh": 22.0, "until": (START + timedelta(hours=3)).isoformat()}
+    # the shape api.ts requires: {soc, threshold, released}
+    reserve = {"soc": 0.3, "threshold": 1.0, "released": False}
     exp = _build(
         _plan([_iv(0, Action.IDLE, buy=0.30, sell=0.25)]),
         spike_reserve=reserve,
