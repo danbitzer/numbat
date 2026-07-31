@@ -2,9 +2,9 @@
 
 Each cycle runs the full planner pipeline (gather -> solve -> publish -> record).
 A WebSocket watcher triggers an early re-solve on ANY change of the Amber
-price sensors (value, estimate flag, or spike status) — that's how a
-confirmed price or spike reaches the plan within seconds instead of at the
-next 5-minute tick.
+price sensors (value or estimate flag) — that's how a confirmed price or a
+spike-level price reaches the plan within seconds instead of at the next
+5-minute tick.
 """
 
 from __future__ import annotations
@@ -58,25 +58,24 @@ def seconds_to_next_boundary(now_epoch: float, period: int = CYCLE_SECONDS) -> f
 
 
 class PriceWatcher:
-    """Triggers an asyncio.Event on ANY change of a watched price/spike
-    sensor — value or estimate flag. Every solve should reflect the live
-    price (a solve is ~50 ms; hysteresis stops action flapping), and an
+    """Triggers an asyncio.Event on ANY change of a watched price sensor —
+    value or estimate flag. Every solve should reflect the live price (a
+    solve is ~50 ms; hysteresis stops action flapping), and an
     estimate->confirmed flip at the SAME value must still re-solve so the
-    dashboard's "unconfirmed price" marker clears."""
+    dashboard's "unconfirmed price" marker clears. Spike detection is
+    price-based (sell above spike.high_price_threshold), so watching the
+    price entities also catches every spike within seconds."""
 
     def __init__(self, settings: Settings):
         ent = settings.entities
-        self.watched = {e for e in (ent.buy_price, ent.sell_price, ent.price_spike) if e}
+        self.watched = {e for e in (ent.buy_price, ent.sell_price) if e}
         self.trigger = asyncio.Event()
         self._last_seen: dict[str, str] = {}
 
     @staticmethod
     def _key(state: str, attrs: dict | None) -> str:
-        # spike_status included because _spike_active() treats
-        # spike_status == "spike" as live even while the binary state is
-        # still "off" — that flip alone must re-solve too.
         a = attrs or {}
-        return f"{state}|{a.get('estimate')}|{a.get('spike_status')}"
+        return f"{state}|{a.get('estimate')}"
 
     def on_change(
         self,

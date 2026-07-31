@@ -166,7 +166,8 @@ def discharge_cap_vector(
     high_price_threshold: float,
 ) -> np.ndarray | None:
     """Per-step discharge caps: the everyday wear-conscious limit, raised to
-    the spike cap at step 0 while a spike is CONFIRMED (the binary sensor),
+    the spike cap at step 0 while a spike is live (the current sell price
+    clears the release threshold — see Planner._live_spike),
     and at future steps whose forecast clears the release threshold — if
     those spikes confirm, the live cap will be raised when their interval
     arrives, so the plan should model the power it will actually have
@@ -320,7 +321,7 @@ class Planner:
             load=load_kw,
             soc0_kwh=battery.soc_frac * self._battery_params.capacity_kwh,
             sell_floor_kwh=self._sell_floor(sell),
-            max_discharge_kw_step=self._discharge_caps(sell, prices.live_spike),
+            max_discharge_kw_step=self._discharge_caps(sell, self._live_spike(prices)),
             soc_target_kwh=daily_soc_target_vector(
                 grid,
                 self._tz,
@@ -359,6 +360,15 @@ class Planner:
             ),
             vacation=vacation_info,
         )
+
+    def _live_spike(self, prices: PriceForecast) -> bool:
+        """A spike is live when the current feed-in price clears
+        spike.high_price_threshold — the same gate that releases the spike
+        reserve, so every spike behavior keys off one user-set number.
+        In an interval's first seconds that price can still be Amber's
+        estimate (same nuance as the reserve release, documented in DOCS);
+        the estimate->confirmed re-solve corrects within seconds."""
+        return prices.current_sell > self._settings.spike.high_price_threshold
 
     def _discharge_caps(self, sell: np.ndarray, live_spike: bool) -> np.ndarray | None:
         caps = discharge_cap_vector(
@@ -424,7 +434,7 @@ class Planner:
         plan = solution_to_plan(solution, data.grid, display_inputs, computed_at=now)
         if solution.status.endswith("(hysteresis)"):
             plan.solver_status = solution.status
-        plan.live_spike = data.prices.live_spike
+        plan.live_spike = self._live_spike(data.prices)
         plan = self._live_spike_guard(plan, data)
         plan.explanation = build_explanation(
             plan,
@@ -434,7 +444,7 @@ class Planner:
                 data.inputs.soc_target_kwh is not None
                 and bool(np.any(data.inputs.soc_target_kwh > 0))
             ),
-            live_spike=data.prices.live_spike,
+            live_spike=self._live_spike(data.prices),
             prices_estimated=data.prices.current_estimate,
             capacity_kwh=self._battery_params.capacity_kwh,
         )
@@ -513,7 +523,7 @@ class Planner:
 
     def _live_spike_guard(self, plan: Plan, data: CycleData) -> Plan:
         """Belt-and-braces: never grid-charge during a confirmed price spike."""
-        if not data.prices.live_spike or not plan.intervals:
+        if not self._live_spike(data.prices) or not plan.intervals:
             return plan
         step0 = plan.intervals[0]
         if step0.action == Action.CHARGE and step0.grid_import_kw > 0.01:

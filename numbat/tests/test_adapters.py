@@ -11,7 +11,6 @@ from numbat.config import Entities
 ENTITIES = Entities(
     buy_price="sensor.amber_express_general_price",
     sell_price="sensor.amber_express_feed_in_price",
-    price_spike="binary_sensor.amber_express_price_spike",
     pv_forecast_today="sensor.home_energy_production_today",
     pv_forecast_tomorrow="sensor.home_energy_production_tomorrow",
     battery_soc="sensor.battery_level",
@@ -77,14 +76,12 @@ async def test_amber_express_adapter_end_to_end():
     fake = FakeHa()
     fake.add_fixture("amber_express_feed_in_price")
     fake.add_fixture("amber_express_general_price")
-    fake.add_fixture("amber_express_price_spike")
 
     async with fake_ha_client(fake) as client:
         prices = await AmberExpressAdapter(client, ENTITIES).get_prices()
 
     assert prices.current_buy == pytest.approx(0.44)
     assert prices.current_sell == pytest.approx(0.1585)
-    assert prices.live_spike is False  # fixture: state off, spike_status none
     assert prices.sell.values[0] == pytest.approx(0.1585)
     assert prices.updated_at is not None
     assert prices.current_estimate is False  # fixture: estimate: false
@@ -94,7 +91,6 @@ async def test_amber_express_adapter_flags_unconfirmed_price():
     fake = FakeHa()
     fake.add_fixture("amber_express_feed_in_price")
     fake.add_fixture("amber_express_general_price")
-    fake.add_fixture("amber_express_price_spike")
     # right after an interval starts the sensor carries the forecast value
     fake.states["sensor.amber_express_general_price"]["attributes"]["estimate"] = True
 

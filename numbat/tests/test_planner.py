@@ -27,7 +27,6 @@ SETTINGS_DICT = {
     "entities": {
         "buy_price": "sensor.amber_express_general_price",
         "sell_price": "sensor.amber_express_feed_in_price",
-        "price_spike": "binary_sensor.amber_express_price_spike",
         "pv_forecast_today": "sensor.home_energy_production_today",
         "pv_forecast_tomorrow": "sensor.home_energy_production_tomorrow",
         "battery_soc": "sensor.battery_level",
@@ -69,7 +68,6 @@ def full_fake_ha() -> FakeHa:
     for name in (
         "amber_express_feed_in_price",
         "amber_express_general_price",
-        "amber_express_price_spike",
         "solar_production_today",
         "solar_production_tomorrow",
         "weather_henley_beach_hourly",
@@ -242,6 +240,29 @@ async def test_gather_wires_the_spike_reserve_sales_floor():
         assert off.inputs.sell_floor_kwh is None
 
 
+async def test_gather_wires_the_spike_discharge_caps():
+    """The step-0 raised cap comes from the DERIVED live spike (current sell
+    above the threshold); later steps from the solve series."""
+    fake = full_fake_ha()
+
+    def cap_settings(threshold: float) -> Settings:
+        return make_settings(spike={"discharge_kw": 15.0, "high_price_threshold": threshold})
+
+    async with fake_ha_client(fake) as client:
+        # current 0.1585 below a 0.50 threshold: everyday 5 kW cap at step 0,
+        # raised exactly where the forecast clears the threshold
+        data = await make_planner(client, cap_settings(0.50)).gather(NOW)
+        caps = data.inputs.max_discharge_kw_step
+        assert caps is not None
+        assert caps[0] == 5.0
+        raised = caps[1:] == 15.0
+        assert np.array_equal(raised, data.inputs.sell[1:] > 0.50)
+        assert raised.any()
+        # a threshold under the live price: the step-0 cap is raised too
+        live = await make_planner(client, cap_settings(0.10)).gather(NOW)
+        assert live.inputs.max_discharge_kw_step[0] == 15.0
+
+
 def synthetic_cycle_data(settings: Settings, live_spike: bool = False) -> CycleData:
     T = 12
     start = NOW
@@ -256,8 +277,13 @@ def synthetic_cycle_data(settings: Settings, live_spike: bool = False) -> CycleD
         soc0_kwh=6.4,
     )
     series = Series(times=[start], values=[0.30])
+    # A live spike is purely a price condition: current sell above
+    # spike.high_price_threshold (default $1). inputs.sell[0] deliberately
+    # stays 0.10 even then — gather would never produce that (it sets
+    # sell[0] = current_sell), but it keeps the optimizer wanting the cheap
+    # step-0 action the guard tests need to suppress.
     prices = PriceForecast(
-        buy=series, sell=series, current_buy=0.30, current_sell=0.10, live_spike=live_spike
+        buy=series, sell=series, current_buy=0.30, current_sell=1.50 if live_spike else 0.10
     )
     battery = BatteryState(soc_frac=0.5, power_kw=0.0, capacity_kwh=12.8, ts=start)
     return CycleData(grid=grid, inputs=inputs, prices=prices, battery=battery, temps=None)

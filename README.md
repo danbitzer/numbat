@@ -48,8 +48,8 @@ All via existing HA integrations — no glue automations needed:
 
 - **Prices**: [Amber Express](https://github.com/hass-energy/amber-express) in
   advanced-price mode — Numbat parses its `forecast` attribute (Amber's own
-  SmartShift prediction) and the live price-spike binary sensor. The core
-  `amberelectric` integration is not supported.
+  SmartShift prediction). The core `amberelectric` integration is not
+  supported.
 - **Solar forecast**: [Open-Meteo Solar Forecast](https://github.com/rany2/ha-open-meteo-solar-forecast)
   (`watts` attribute, 15-min resolution).
 - **Battery**: any integration exposing SoC and battery power, e.g. Sungrow

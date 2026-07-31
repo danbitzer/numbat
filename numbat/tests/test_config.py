@@ -112,6 +112,8 @@ def test_spike_reserve_defaults_and_bounds():
     config = json.loads(json.dumps(MINIMAL_CONFIG))
     config["spike"] = {"reserve_soc": 0.3, "lookahead_hours": 4, "reserve_kwh": 6.0,
                       "reserve_penalty_per_kwh": 0.5}
+    # ...as is the dropped price-spike entity (spike detection is price-based)
+    config["entities"]["price_spike"] = "binary_sensor.amber_express_price_spike"
     assert Settings.model_validate(config).spike.reserve_soc == 0.3
     # a reserve above usable capacity is rejected
     config["battery"]["soc_max"] = 0.9

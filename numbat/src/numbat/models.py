@@ -55,7 +55,6 @@ class PriceForecast:
     sell: Series
     current_buy: float  # live price sensor states (5-min updates)
     current_sell: float
-    live_spike: bool = False  # from the price-spike binary sensor
     updated_at: datetime | None = None  # oldest source last_updated, for staleness checks
     # True while the current interval's price is Amber's forecast, not the
     # AEMO-confirmed actual (the sensors' `estimate` attribute) — right after
@@ -109,8 +108,9 @@ class Plan:
     solver_status: str
     solve_ms: float
     computed_at: datetime
-    # True when the plan was computed during a confirmed price spike; published
-    # as an attribute so actuator automations can special-case spikes.
+    # True when the plan was computed while the live feed-in price was above
+    # spike.high_price_threshold (see Planner._live_spike); published as an
+    # attribute so actuator automations can special-case spikes.
     live_spike: bool = False
     # Plain-language explanation of step 0's action (see numbat.explain); surfaced
     # in the dashboard's "Why this action?" panel, not published as a sensor.

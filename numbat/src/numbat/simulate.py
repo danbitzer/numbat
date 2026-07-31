@@ -265,9 +265,10 @@ def simulate_solve(
     )
     # Spike discharge caps, same anticipation as live: a scenario step 0 above
     # the threshold counts as confirmed (its price IS the sim's live price).
+    live_spike = float(sell[0]) > settings.spike.high_price_threshold
     caps = discharge_cap_vector(
         sell_solve,
-        float(sell[0]) > settings.spike.high_price_threshold,
+        live_spike,
         settings.spike.discharge_kw,
         bp.max_discharge_kw,
         settings.spike.high_price_threshold,
@@ -320,7 +321,7 @@ def simulate_solve(
             else None
         ),
         daily_target_active=target is not None,
-        live_spike=False,
+        live_spike=live_spike,
         prices_estimated=False,
         capacity_kwh=bp.capacity_kwh,
     )

@@ -10,7 +10,7 @@ What you'll end up with:
 
 | Piece | Provides | Source |
 |---|---|---|
-| Amber Express | Buy/sell prices + Amber's advanced forecast + spike flag | HACS |
+| Amber Express | Buy/sell prices + Amber's advanced forecast | HACS |
 | Open-Meteo Solar Forecast | PV production forecast | HACS |
 | BOM weather (or any `weather.*` + outdoor temp sensor) | Hourly temperature forecast + observed outdoor temperature | HACS |
 | Battery integration | SoC %, battery power, house load (load learning) | e.g. mkaiser Sungrow |
@@ -44,7 +44,6 @@ no advanced-price mode, which is not good enough to optimize against.
 4. Note the entities it created — you'll need:
    - `sensor.amber_express_<site>_general_price` (buy)
    - `sensor.amber_express_<site>_feed_in_price` (sell)
-   - `binary_sensor.amber_express_<site>_price_spike`
 
 ## 3. Open-Meteo Solar Forecast (PV)
 
