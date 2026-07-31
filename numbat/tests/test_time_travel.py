@@ -10,7 +10,7 @@ from test_config import make_settings
 from test_simulate import _controller
 
 from numbat.ha.client import EntityNotFoundError, State
-from numbat.time_travel import run_history_simulation
+from numbat.time_travel import normalize_pv_units, run_history_simulation
 from numbat.web.app import AppState, create_app
 
 ADELAIDE = ZoneInfo("Australia/Adelaide")
@@ -99,6 +99,54 @@ async def test_replay_builds_inputs_from_history_and_solves():
     assert ivs[0]["pv_kw"] == pytest.approx(3.0)
     # the recorded cheap window made it into the replay
     assert min(iv["buy"] for iv in ivs) == pytest.approx(0.05)
+
+
+def test_normalize_pv_units_never_inflates_a_dark_day():
+    """The 2026-08-01 live regression: a replay's first UTC day held only the
+    dusk tail + night (row median ~1 W), so the load guard's median heuristic
+    scaled that day x1000, inflating the next morning's ramp into phantom
+    megawatts the optimizer then curtailed. PV's guard keys on the day's PEAK
+    and never scales up: honest kW must pass through untouched."""
+    dusk = datetime(2026, 7, 30, 8, 0, tzinfo=UTC)  # UTC day 1: dusk into night
+    ramp = datetime(2026, 7, 31, 0, 30, tzinfo=UTC)  # UTC day 2: real generation
+    rows = [
+        (dusk + timedelta(minutes=5 * i), v)
+        for i, v in enumerate([0.329, 0.2, 0.05, 0.01, 0.001, 0.0, 0.0, 0.001])
+    ] + [
+        (ramp + timedelta(minutes=30 * i), v)
+        for i, v in enumerate([0.5, 3.9, 6.3, 9.1, 7.1, 3.7, 1.0, 0.0])
+    ]
+    assert normalize_pv_units(rows, "sensor.pv_actual") == rows
+
+
+def test_normalize_pv_units_scales_down_watt_magnitudes():
+    # a kW-labelled sensor shipping watt values: the peak gives it away
+    day = datetime(2026, 7, 31, 0, 30, tzinfo=UTC)
+    rows = [
+        (day + timedelta(minutes=30 * i), v)
+        for i, v in enumerate([0.0, 3940.0, 9114.0, 1084.0])
+    ]
+    fixed = [v for _, v in normalize_pv_units(rows, "sensor.pv_actual")]
+    assert fixed == pytest.approx([0.0, 3.94, 9.114, 1.084])
+
+
+async def test_replay_pv_dark_stretch_is_not_inflated():
+    """End-to-end wiring: recorded PV that is mostly standby watts with a
+    short real ramp must reach the replay at real magnitude."""
+    settings = make_settings(entities=ENTITIES)
+    fake = stocked_client()
+    t0 = AT - timedelta(hours=1)
+    fake.history[ENTITIES["pv_power"]] = [
+        (t0 + timedelta(minutes=30 * i), "1") for i in range(12)
+    ] + [
+        (t0 + timedelta(minutes=30 * (12 + i)), w)
+        for i, w in enumerate(["2000", "4000", "3000", "500"])
+    ]
+    result = await run_history_simulation(
+        settings, fake, at=AT, soc_frac=0.5, wall_now=WALL_NOW, tz=ADELAIDE
+    )
+    peak = max(iv["pv_kw"] for iv in result["intervals"])
+    assert peak == pytest.approx(4.0, abs=0.5)
 
 
 async def test_manual_soc_override_wins_over_recorded():
