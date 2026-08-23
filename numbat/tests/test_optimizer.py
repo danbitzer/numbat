@@ -209,7 +209,10 @@ def test_spike_reserve_forecast_release_plans_the_sale():
     sell[5] = 2.0
     floor = np.full(24, 6.0)
     floor[5] = 0.0  # released by the planner: forecast cleared the threshold
-    inputs = make_inputs(buy=0.30, sell=sell, load=0.0, soc0=10.0, sell_floor=floor)
+    # soc0 just above the floor: the released-step sale alone must dip below
+    # it (10.0 would need marginal 10c pre-sales the bird-in-hand term now
+    # correctly declines — one step's discharge cap can't dip 10 below 5)
+    inputs = make_inputs(buy=0.30, sell=sell, load=0.0, soc0=7.0, sell_floor=floor)
     sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.05))
     assert sol.soc_kwh[6] < 6.0 - 1.0  # the plan sells the reserve at t=5
     assert sol.soc_kwh[1:5].min() >= 6.0 - 0.05  # but not a step earlier
@@ -314,10 +317,13 @@ def test_scenario_defer_charge_to_cheaper_window():
 
 
 def test_pin_no_charge_blocks_charging_allows_discharge():
-    # expensive import + cheap stored energy: serving load from the battery is
-    # optimal. Pinning no_charge must forbid charging yet still permit that
-    # discharge (unlike a battery-frozen pin).
-    inputs = make_inputs(T=6, buy=0.40, sell=0.05, pv=0.0, load=2.0, soc0=6.4)
+    # expensive import NOW (cheaper later) + cheap stored energy: serving load
+    # from the battery at step 0 is strictly optimal — flat prices would leave
+    # discharge timing a tie, which bird-in-hand breaks toward holding.
+    # Pinning no_charge must forbid charging yet still permit that discharge
+    # (unlike a battery-frozen pin).
+    buy = np.concatenate([[0.60], np.full(5, 0.30)])
+    inputs = make_inputs(T=6, buy=buy, sell=0.05, pv=0.0, load=2.0, soc0=6.4)
     sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.05), pin_step0="no_charge")
     assert float(sol.charge_kw[0]) == pytest.approx(0.0, abs=1e-6)  # no charging
     assert float(sol.discharge_kw[0]) > 0.0  # serving load is still allowed
@@ -612,3 +618,36 @@ def test_import_penalty_never_blocks_unavoidable_load_imports():
     )
     assert float(np.min(sol.grid_import_kw)) >= 1.5 - 1e-6  # load still fed
     assert sol.charge_kw.max() < 0.01  # and no phantom behavior appears
+
+
+def test_bird_in_hand_charges_now_not_later_for_sub_cent_gains():
+    """The 2026-08-23 morning: low battery, PV surplus all day, and selling
+    now pays a whisker more than selling later — so deferring the charge a
+    few hours was 'optimal' by ~0.05c/kWh. The bird-in-hand term must
+    collapse that to charge-now: energy in the tank beats an invisible
+    margin."""
+    T = 12
+    sell = np.concatenate([np.full(6, 0.0015), np.full(6, 0.001)])
+    inputs = make_inputs(T=T, sell=sell, pv=4.0, load=0.5, soc0=4.0)
+    sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.10))
+    # the ~3.3 kW surplus goes into the battery from step 0, not after the
+    # cheap-sell window arrives
+    assert sol.charge_kw[0] > 3.0
+    # battery full (8.8 kWh gap / ~1.6 kWh per step) well before mid-horizon
+    assert sol.soc_kwh[7] == pytest.approx(BATTERY.soc_max_kwh, abs=0.2)
+
+
+def test_bird_in_hand_yields_to_a_genuinely_better_window():
+    """Same shape but the later window is negative feed-in (~3c/kWh better
+    than exporting now earns): the deferral is real money, so it must
+    survive the bird-in-hand tiebreak — export the early surplus, charge
+    through the negative window."""
+    T = 12
+    sell = np.concatenate([np.full(6, 0.01), np.full(6, -0.02)])
+    inputs = make_inputs(T=T, sell=sell, pv=4.0, load=0.5, soc0=8.0)
+    sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.10))
+    # early surplus exported at +1c, not stored
+    assert sol.grid_export_kw[0] > 3.0
+    assert sol.charge_kw[0] < 0.1
+    # the charge lands inside the negative-price window
+    assert sol.charge_kw[6:].max() > 3.0

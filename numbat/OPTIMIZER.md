@@ -295,6 +295,19 @@ A few quieter mechanisms keep the plan sensible:
   including the spike reserve's planned releases — only the reserve's
   execution gate (the live confirmed price) is never cut. Displayed prices
   are always raw; only the plan's internal trust is tempered.
+- **Bird in hand** (fixed, not a knob): stored energy is worth a whisker
+  more *now* than the same energy later — about 0.05c per kWh per hour
+  held, baked into the objective. Its job is to stop the plan deferring a
+  charge (or spending the battery) to collect margins measured in
+  hundredths of a cent: without it, a sunny morning of +0.02c feed-in with
+  a low battery "optimally" exports for an hour so it can charge later —
+  invisible gain, real forecast risk (PV, prices and load can all move
+  against the deferral, and negative-price days tend to be
+  higher-consumption days). A genuinely better window — midday feed-in a
+  few cents lower, say — still wins comfortably: the term only decides
+  questions the real prices leave open. Side effect you may notice: at
+  dead-flat prices the battery now prefers to stay charged and let the
+  grid serve the house — same bill, fuller tank.
 - **Action switch threshold** (default $0.02): the current action only
   changes if the new plan beats sticking with the old action by more than
   this, across the whole horizon — this stops the battery flip-flopping

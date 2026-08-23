@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Bird-in-hand bias: stored energy now beats stored energy later.** A
+  small fixed term in the objective (~0.05c per kWh per hour held) stops
+  the optimizer deferring a charge — or spending the battery — for margins
+  of hundredths of a cent that carry real forecast risk (seen live
+  2026-08-23: a 21% battery exporting its morning surplus at +0.02c/kWh to
+  charge an hour later). Windows that are genuinely better by real cents,
+  like negative midday feed-in, still win. At dead-flat prices the battery
+  now prefers staying charged while the grid serves the house — same bill,
+  fuller tank.
+
 ## 0.16.0
 
 - **Load learning is recency-weighted (21-day half-life).** Bucket means and

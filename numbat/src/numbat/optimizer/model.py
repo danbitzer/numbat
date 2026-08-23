@@ -7,6 +7,7 @@ Formulation:
        + spread · Σ pd_sell·Δt               margin bar on battery-sourced export
        + ε · Σ (pc + pd)·Δt                  anti-chatter tiebreak
        + target_penalty · Σ tslack           soft daily-SoC-target shortfall
+       − β · Σ soc·Δt                        bird-in-hand: stored energy now
        − v_T · soc[T]                        terminal SoC value
 
     s.t. pv_u + pd + gi == load + pc + ge    power balance per step
@@ -42,6 +43,17 @@ log = logging.getLogger(__name__)
 
 EPSILON_CHATTER = 0.0005  # $/kWh tiebreak against pointless cycling
 SELL_BUY_MARGIN = 0.001  # enforced sell < buy gap, $/kWh
+# Bird in hand: stored energy is worth a whisker more NOW than the same
+# energy later — $/kWh per hour held. Deferring a planned charge by N hours
+# must beat charging now by ~N·β per kWh, so sub-cent "optimal" deferrals
+# (seen live 2026-08-23: a 21% battery exporting the morning surplus at
+# +0.02c to charge an hour later) collapse to charge-now, while genuinely
+# better windows (that day's −2c midday feed-in, ~3c/kWh better) still win.
+# It doubles as forecast-risk insurance: PV, prices and load can all move
+# against a deferral, and on negative-price days the house tends to consume
+# more. Kept far below any real price signal: over the whole 36 h horizon it
+# totals at most ~1.8c/kWh, under the wear cost of a single discharge.
+BIRD_IN_HAND_PER_KWH_HOUR = 0.0005
 
 
 @dataclass(frozen=True)
@@ -330,6 +342,7 @@ def solve(
         - cp.sum(cp.multiply(sell, cp.multiply(ge, dt)))
         + battery.wear_cost_per_kwh * cp.sum(cp.multiply(pd, dt))
         + EPSILON_CHATTER * cp.sum(cp.multiply(pc + pd, dt))
+        - BIRD_IN_HAND_PER_KWH_HOUR * cp.sum(cp.multiply(soc[1:], dt))
         - config.terminal_value * soc[T]
     )
     if spread_active and pd_sell is not None:
