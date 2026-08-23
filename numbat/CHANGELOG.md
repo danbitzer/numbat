@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Bird-in-hand bias: stored energy now beats stored energy later.** A
+  small fixed term in the objective (~0.05c per kWh per hour held, counted
+  over the next ~4 hours only) stops the optimizer deferring a charge — or
+  spending the battery — for margins of hundredths of a cent that carry
+  real forecast risk.
+
 ## 0.16.0
 
 - **Load learning is recency-weighted (21-day half-life).** Bucket means and

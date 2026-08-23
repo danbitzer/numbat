@@ -7,6 +7,7 @@ Formulation:
        + spread · Σ pd_sell·Δt               margin bar on battery-sourced export
        + ε · Σ (pc + pd)·Δt                  anti-chatter tiebreak
        + target_penalty · Σ tslack           soft daily-SoC-target shortfall
+       − β · Σ soc·Δt (next ~4 h only)      bird-in-hand: stored energy now
        − v_T · soc[T]                        terminal SoC value
 
     s.t. pv_u + pd + gi == load + pc + ge    power balance per step
@@ -42,6 +43,25 @@ log = logging.getLogger(__name__)
 
 EPSILON_CHATTER = 0.0005  # $/kWh tiebreak against pointless cycling
 SELL_BUY_MARGIN = 0.001  # enforced sell < buy gap, $/kWh
+# Bird in hand: stored energy is worth a whisker more NOW than the same
+# energy later — $/kWh per hour held, accrued over the next
+# BIRD_IN_HAND_WINDOW_HOURS only. Deferring a planned charge into or past
+# that window must beat charging now by up to ~window·β per kWh, so
+# sub-cent "optimal" deferrals (seen live 2026-08-23: a 21% battery
+# exporting the morning surplus at +0.02c to charge an hour later)
+# collapse to charge-now, while genuinely better windows (that day's −2c
+# midday feed-in, ~3c/kWh better) still win. It doubles as forecast-risk
+# insurance: PV, prices and load can all move against a deferral, and on
+# negative-price days the house tends to consume more.
+#
+# The window cap is load-bearing: accrued to the horizon end instead, the
+# reward would grow with distance FROM the end — sales drift to the back of
+# the plan (the same deferral risk this term exists to kill, mirrored),
+# the effective sell bar rises ~2c at the front of a 36 h horizon, and a
+# longer horizon strengthens the term. Capped, the term's total influence
+# on any decision is ≤ ~0.2c/kWh — genuinely a tiebreak.
+BIRD_IN_HAND_PER_KWH_HOUR = 0.0005
+BIRD_IN_HAND_WINDOW_HOURS = 4.0
 
 
 @dataclass(frozen=True)
@@ -172,6 +192,13 @@ def auto_terminal_value(
     low-spread horizons with no arbitrage to protect — and Amber feed-in sits
     well below buy, so it does not reopen cheap export in practice. See CHANGELOG
     for the full rationale.
+
+    Caveat: the cap's flat-day self-consumption edge is thin (wear·(1-eta_d),
+    ~0.2c/kWh), and the bird-in-hand hold bonus (window-capped at ~0.2c) can
+    eat it within the first few hours of the plan when the import-reluctance
+    toll is disabled. With the default toll on, flat-day behavior is
+    unchanged; with it off, the plan may briefly prefer holding charge while
+    the grid serves the house at near-identical cost.
 
     Scaling multiplies the rebuy anchor only (not the cap): a scaling > 1 makes
     the battery holdier without lifting the hold value past the self-consumption
@@ -325,11 +352,16 @@ def solve(
     elif pin_step0 in ("idle", "curtail"):
         constraints += self_consumption
 
+    # Bird-in-hand accrual: each step earns the hold bonus only for the part
+    # of it that falls inside the near window (fractional at the boundary).
+    elapsed = np.concatenate([[0.0], np.cumsum(inputs.dt_hours[:-1])])
+    hold_hours = np.clip(BIRD_IN_HAND_WINDOW_HOURS - elapsed, 0.0, inputs.dt_hours)
     cost = (
         cp.sum(cp.multiply(buy, cp.multiply(gi, dt)))
         - cp.sum(cp.multiply(sell, cp.multiply(ge, dt)))
         + battery.wear_cost_per_kwh * cp.sum(cp.multiply(pd, dt))
         + EPSILON_CHATTER * cp.sum(cp.multiply(pc + pd, dt))
+        - BIRD_IN_HAND_PER_KWH_HOUR * cp.sum(cp.multiply(hold_hours, soc[1:]))
         - config.terminal_value * soc[T]
     )
     if spread_active and pd_sell is not None:
