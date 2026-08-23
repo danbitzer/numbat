@@ -6,13 +6,7 @@
   small fixed term in the objective (~0.05c per kWh per hour held, counted
   over the next ~4 hours only) stops the optimizer deferring a charge — or
   spending the battery — for margins of hundredths of a cent that carry
-  real forecast risk (seen live 2026-08-23: a 21% battery exporting its
-  morning surplus at +0.02c/kWh to charge an hour later). Windows that are
-  genuinely better by real cents, like negative midday feed-in, still win:
-  the 4-hour cap bounds the term's influence on any decision to ~0.2c/kWh.
-  With the import-reluctance toll disabled the battery may hold charge on
-  a dead-flat day while the grid serves the house (tenths of a cent per
-  kWh); the default toll suppresses this.
+  real forecast risk.
 
 ## 0.16.0
 
