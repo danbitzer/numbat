@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.0
 
 - **Bird-in-hand bias: stored energy now beats stored energy later.** A
   small fixed term in the objective (~0.05c per kWh per hour held, counted

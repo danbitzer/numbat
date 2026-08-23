@@ -1,5 +1,5 @@
 name: Numbat — Energy Optimizer
-version: 0.16.0
+version: 0.17.0
 slug: numbat
 description: Battery/solar optimizer for Amber Electric dynamic pricing
 url: https://github.com/danbitzer/numbat
