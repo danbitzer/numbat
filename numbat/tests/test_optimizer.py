@@ -210,8 +210,9 @@ def test_spike_reserve_forecast_release_plans_the_sale():
     floor = np.full(24, 6.0)
     floor[5] = 0.0  # released by the planner: forecast cleared the threshold
     # soc0 just above the floor: the released-step sale alone must dip below
-    # it (10.0 would need marginal 10c pre-sales the bird-in-hand term now
-    # correctly declines — one step's discharge cap can't dip 10 below 5)
+    # it. (10.0 relied on 10c pre-sales that were only ~0.2c profitable — a
+    # tie the bird-in-hand term now breaks toward holding, and one step's
+    # discharge cap can't dip 10 below 5 on its own.)
     inputs = make_inputs(buy=0.30, sell=sell, load=0.0, soc0=7.0, sell_floor=floor)
     sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.05))
     assert sol.soc_kwh[6] < 6.0 - 1.0  # the plan sells the reserve at t=5
@@ -651,3 +652,17 @@ def test_bird_in_hand_yields_to_a_genuinely_better_window():
     assert sol.charge_kw[0] < 0.1
     # the charge lands inside the negative-price window
     assert sol.charge_kw[6:].max() > 3.0
+
+
+def test_bird_in_hand_accrual_is_window_capped():
+    """A sale with a real (sub-cent-but-visible) margin over the hold value
+    must be taken even at the FRONT of a long horizon. Uncapped horizon-end
+    accrual raised the early sell bar ~2c and pushed flat-priced sales to
+    the back of the plan; the 4-hour window bounds the shift to ~0.2c."""
+    T = 24
+    sell = np.full(T, 0.02)
+    # bar ≈ terminal/ηd + wear + window·β/ηd ≈ 0.1053 + 0.04 + 0.0021 ≈ 0.147
+    sell[1] = 0.16
+    inputs = make_inputs(T=T, sell=sell, load=0.0, soc0=10.0)
+    sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.10))
+    assert sol.discharge_kw[1] > 4.0  # taken at hour ~0.5, not deferred

@@ -297,17 +297,21 @@ A few quieter mechanisms keep the plan sensible:
   are always raw; only the plan's internal trust is tempered.
 - **Bird in hand** (fixed, not a knob): stored energy is worth a whisker
   more *now* than the same energy later — about 0.05c per kWh per hour
-  held, baked into the objective. Its job is to stop the plan deferring a
-  charge (or spending the battery) to collect margins measured in
-  hundredths of a cent: without it, a sunny morning of +0.02c feed-in with
-  a low battery "optimally" exports for an hour so it can charge later —
-  invisible gain, real forecast risk (PV, prices and load can all move
-  against the deferral, and negative-price days tend to be
-  higher-consumption days). A genuinely better window — midday feed-in a
-  few cents lower, say — still wins comfortably: the term only decides
-  questions the real prices leave open. Side effect you may notice: at
-  dead-flat prices the battery now prefers to stay charged and let the
-  grid serve the house — same bill, fuller tank.
+  held, counted over the next ~4 hours only. Its job is to stop the plan
+  deferring a charge (or spending the battery) to collect margins measured
+  in hundredths of a cent: without it, a sunny morning of +0.02c feed-in
+  with a low battery "optimally" exports for an hour so it can charge
+  later — invisible gain, real forecast risk (PV, prices and load can all
+  move against the deferral, and negative-price days tend to be
+  higher-consumption days). The 4-hour cap matters as much as the size:
+  it bounds the term's total influence on any single decision to ~0.2c/kWh
+  — a genuine tiebreak that no real price signal loses to — and stops the
+  reward from growing toward the end of the plan, which would quietly
+  push *sales* later (the very deferral risk it exists to kill). One
+  side effect worth knowing: with the import-reluctance toll switched off,
+  the battery may briefly prefer holding charge on a dead-flat day while
+  the grid serves the house — the cost difference is a couple of tenths
+  of a cent per kWh; the default toll suppresses it entirely.
 - **Action switch threshold** (default $0.02): the current action only
   changes if the new plan beats sticking with the old action by more than
   this, across the whole horizon — this stops the battery flip-flopping
