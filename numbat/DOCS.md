@@ -382,7 +382,7 @@ grid if `grid.export_limit_kw` allows it.
 | Entity | Meaning |
 |---|---|
 | `sensor.numbat_status` | `ok` / `error` / `disabled` / `unconfigured`; heartbeat with solve stats and `load_forecast`. Anything other than `ok` makes the actuator blueprint fail safe to self-consumption |
-| `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / hold / curtail (carries `power_kw`/`power_w`/`curtail` attributes, atomic with the action — `curtail` means export is withheld this interval, possibly *during* a charge; `hold` means the battery is fenced in both directions while the grid serves the house) |
+| `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / hold / curtail (carries `power_kw`/`power_w`/`curtail` attributes, atomic with the action — `curtail` means export is withheld this interval, possibly *during* a charge; `hold` means the battery is fenced in both directions while the grid — net of any PV, which most inverters route to the house first — serves the load) |
 
 Actions are **grid-coupled**: `charge` means charging *from the grid*, and
 `discharge` means exporting stored energy *to the grid* — the moves your
@@ -603,14 +603,24 @@ with a stale setpoint. Note some mkaiser versions gate the export limit
 behind `switch.sungrow_export_power_limit_mode` — if yours does, enable it in
 curtail and disable it in uncurtail instead of writing your DNSP limit back.
 
-One Sungrow honesty note for negative-**buy** windows: forced charge sources
-from PV before the grid, and the mkaiser package exposes no writable PV
-power limitation (the registers exist upstream as read-only sensors). So
-"charge with export capped" charges the battery from throttled PV rather
-than genuinely importing at the negative price — the cap eliminates the
-negative-feed-in export bleed (the expensive part), while the forgone
-import payment (|buy| × household+charge kW) remains out of reach until
-the package exposes active power limitation as writable.
+Two Sungrow honesty notes for negative-**buy** windows, both rooted in the
+same fact: PV always meets the house load before the grid does, and the
+mkaiser package exposes no writable PV power limitation (the registers
+exist upstream as read-only sensors).
+
+- Forced charge sources from PV before the grid, so "charge with export
+  capped" charges the battery from throttled PV rather than genuinely
+  importing at the negative price — the cap eliminates the negative-feed-in
+  export bleed (the expensive part), while the forgone import payment
+  (|buy| × household+charge kW) remains out of reach until the package
+  exposes active power limitation as writable.
+- Hold's "the grid serves the house" is likewise net of PV: the max-power
+  zeros fence the battery in both directions, but any PV production still
+  covers the house load first and the grid only supplies the remainder.
+  While the sun is up, hold + curtail protects the battery and stops the
+  export bleed, but the house runs on solar you could otherwise have been
+  paid to import against. Only the load PV can't cover — and everything
+  after dusk — actually imports at the negative price.
 
 **Do not create the automation until you've watched Numbat's dry-run
 recommendations for at least a few days** and they consistently make sense
