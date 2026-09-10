@@ -13,10 +13,18 @@
 #                           power 0). Numbat publishes "no_charge" to defer
 #                           storing PV to a cheaper window while the battery
 #                           still covers load dips.
-#   restore_actions       — (optional) battery max charge power back to full;
-#                           runs first, before every branch, so a lingering 0
-#                           from no_charge can't cap a later charge/idle.
-#                           Required if you use no_charge.
+#   hold_actions          — (optional) battery fully inert — no charging, no
+#                           discharging — while the GRID serves the house
+#                           (Sungrow: self-consumption + max charge power 0 +
+#                           max discharge power 0). Numbat publishes "hold"
+#                           when importing beats spending stored energy
+#                           (cheap or negative buy prices); self-consumption
+#                           alone would discharge into the load.
+#   restore_actions       — (optional) battery limits back to full (max
+#                           charge AND max discharge power); runs first,
+#                           before every branch, so a lingering 0 from
+#                           no_charge/hold can't cap a later charge, idle or
+#                           discharge. Required if you use no_charge or hold.
 #   curtail_actions       — (optional) cap export/PV for negative feed-in;
 #                           runs whenever the plan wants export WITHHELD —
 #                           the action sensor's `curtail` attribute — which
@@ -34,14 +42,15 @@
 # Inside your sequences these variables are available:
 #   power_kw  — signed battery setpoint (+charge / −discharge), float
 #   power_w   — magnitude in watts (int), handy for number.set_value
-#   action    — "charge" | "discharge" | "idle" | "no_charge" | "curtail"
+#   action    — "charge" | "discharge" | "idle" | "no_charge" | "hold" | "curtail"
 #   curtail_wanted — export withheld this interval (bool; see curtail_actions)
 #
 # Actions are grid-coupled: "charge" = charging FROM THE GRID, "discharge" =
 # exporting stored energy TO THE GRID. Battery-serves-the-house and
 # charge-from-PV-surplus arrive as "idle" — your inverter's normal
 # self-consumption mode already does those better than a forced setpoint.
-# "no_charge" is self-consumption with charging blocked.
+# "no_charge" is self-consumption with charging blocked; "hold" is its
+# mirror — both directions blocked while the grid serves the house.
 #
 # SAFETY, built in: every run first checks Numbat's heartbeat. If the add-on is
 # dead/stale (or reports an error), uncurtail + idle actions run instead — so
@@ -164,13 +173,30 @@ blueprint:
       default: []
       selector:
         action:
+    hold_actions:
+      name: Hold actions (optional)
+      description: >-
+        Make the battery fully inert — no charging, no discharging — while
+        the grid serves the house (Sungrow: max charge power 0 AND max
+        discharge power 0; the blueprint runs idle actions first, so EMS
+        mode is already self-consumption). Numbat publishes "hold" when the
+        plan prefers importing over spending stored energy. Leave empty to
+        treat hold as idle.
+      default: []
+      selector:
+        action:
     restore_actions:
       name: Restore battery-limit actions (optional)
       description: >-
-        Return the battery max charge power to full (your battery's rating in
-        watts). Runs first, before every branch, so a lingering 0 from
-        no_charge can't cap a later charge or self-consumption. Required if
-        you use no_charge; must be idempotent (guard the write).
+        Return the battery max charge AND max discharge power to full (your
+        battery's ratings in watts). Runs first, before every branch, so a
+        lingering 0 from no_charge or hold can't cap a later charge,
+        discharge or self-consumption. Required if you use no_charge or
+        hold; must be idempotent, and each guard should ALSO skip while its
+        own restraint action is active (`action` is available: e.g. restore
+        the discharge limit only when `action != 'hold'`) — otherwise every
+        re-assert restores-then-re-zeros. The failsafe publishes 'idle', so
+        a dead Numbat always restores.
       default: []
       selector:
         action:
@@ -296,6 +322,15 @@ actions:
           # previous forced mode running), then block charging
           - sequence: !input idle_actions
           - sequence: !input no_charge_actions
+      - conditions: "{{ action == 'hold' }}"
+        sequence:
+          # same shape as no_charge: idle baseline, then fence the battery
+          # in BOTH directions. The limit registers are orthogonal to the
+          # idle writes; for re-asserts to stay Modbus-silent your RESTORE
+          # guards must also skip while their restraint action is active
+          # (see the DOCS examples) — else every sweep restores-then-re-zeros.
+          - sequence: !input idle_actions
+          - sequence: !input hold_actions
     # idle, curtail (battery-idle; the cap is already applied above) and the
     # failsafe (stale/errored/missing Numbat) land here
     default:

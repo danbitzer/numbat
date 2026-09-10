@@ -365,7 +365,11 @@ def test_hysteresis_keeps_near_degenerate_previous_action():
     data.inputs.buy[0] = 0.23  # just below the 0.245 hold value: charging gains cents
     planner.previous_plan = previous_plan_with(Action.IDLE)
     plan = planner.optimize(data, NOW)
-    assert plan.intervals[0].action == Action.IDLE
+    # the marginal grid charge is refused. The kept flows (grid serves the
+    # load, battery waits) now legitimately RELABEL idle -> HOLD: the idle
+    # pin's envelope contains the hold shape, so hysteresis thresholds the
+    # flows, not the label (documented in _apply_hysteresis).
+    assert plan.intervals[0].action == Action.HOLD
     assert "hysteresis" in plan.solver_status
 
 
@@ -533,9 +537,29 @@ def test_plan_curtail_flag_follows_negative_feed_in():
     assert planner.optimize(zero, NOW).curtail_export is False
 
 
-def test_plan_curtail_flag_set_by_standalone_curtail_action():
-    # PV spill at negative feed-in with a full battery: the classic CURTAIL
-    # action must carry the flag too (it's what the actuator now acts on)
+def test_hold_plus_curtail_is_the_negative_price_combination():
+    """PV spill at negative buy AND feed-in with a full battery: the action
+    is HOLD (battery fenced, grid serves the house — self-consumption would
+    discharge into the load) and the curtail flag rides it (export capped).
+    This is the 2026-09-10 persistent-negative-day shape."""
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    planner = offline_planner(settings)
+    data = synthetic_cycle_data(settings)
+    data.inputs.pv[:] = 2.0
+    data.inputs.buy[:] = -0.02
+    data.inputs.sell[:] = -0.05
+    data.prices.current_sell = -0.05
+    data = replace(data, inputs=replace(data.inputs, soc0_kwh=12.8))
+    plan = planner.optimize(data, NOW)
+    assert plan.intervals[0].action == Action.HOLD
+    assert plan.curtail_export is True
+
+
+def test_curtail_action_survives_where_grid_import_is_not_wanted():
+    """PV spill at negative feed-in but POSITIVE buy: PV serves the house
+    (importing would cost money), the rest is spilled, the full battery
+    just sits — the classic standalone CURTAIL action, still carrying the
+    flag. No grid import means there is nothing for HOLD to guard against."""
     settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
@@ -546,6 +570,23 @@ def test_plan_curtail_flag_set_by_standalone_curtail_action():
     plan = planner.optimize(data, NOW)
     assert plan.intervals[0].action == Action.CURTAIL
     assert plan.curtail_export is True
+
+
+def test_hold_when_stored_energy_is_dearer_than_the_grid():
+    """The everyday hold: the battery is full and its energy is worth more
+    than the current buy price (a big window beyond the horizon), so the
+    plan serves the house from the grid — where 'idle' actuation would
+    quietly discharge the battery into the load."""
+    settings = make_settings(
+        optimizer={"action_switch_threshold_dollars": 0.0, "terminal_soc_value": 0.5}
+    )
+    planner = offline_planner(settings)
+    data = synthetic_cycle_data(settings)
+    data = replace(data, inputs=replace(data.inputs, soc0_kwh=12.8))
+    plan = planner.optimize(data, NOW)
+    assert plan.intervals[0].action == Action.HOLD
+    assert plan.intervals[0].grid_import_kw == pytest.approx(0.5, abs=0.05)
+    assert plan.curtail_export is False  # positive prices: no cap wanted
 
 
 def test_daily_soc_target_vector_windowed_across_days():

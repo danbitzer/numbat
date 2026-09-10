@@ -382,7 +382,7 @@ grid if `grid.export_limit_kw` allows it.
 | Entity | Meaning |
 |---|---|
 | `sensor.numbat_status` | `ok` / `error` / `disabled` / `unconfigured`; heartbeat with solve stats and `load_forecast`. Anything other than `ok` makes the actuator blueprint fail safe to self-consumption |
-| `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / curtail (carries `power_kw`/`power_w`/`curtail` attributes, atomic with the action — `curtail` means export is withheld this interval, possibly *during* a charge) |
+| `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / hold / curtail (carries `power_kw`/`power_w`/`curtail` attributes, atomic with the action — `curtail` means export is withheld this interval, possibly *during* a charge; `hold` means the battery is fenced in both directions while the grid — net of any PV, which most inverters route to the house first — serves the load) |
 
 Actions are **grid-coupled**: `charge` means charging *from the grid*, and
 `discharge` means exporting stored energy *to the grid* — the moves your
@@ -533,13 +533,40 @@ option strings against your install — they vary between package versions):
       target: {entity_id: number.sungrow_battery_max_charge_power}
       data: {value: 0}
 
-# restore_actions (optional, required with no_charge) — max charge power back
-# to full (your battery's rating); runs before every branch so no_charge's 0
-# can't cap a later charge or idle
-- if: ["{{ states('number.sungrow_battery_max_charge_power') | float(0) < 12000 }}"]
+# hold_actions (optional) — battery fully inert while the grid serves the
+# house (Numbat publishes "hold" when importing beats spending stored
+# energy — cheap or negative buy prices). The blueprint runs idle_actions
+# first, so EMS mode is already self-consumption; these zeros are on
+# registers the idle writes never touch.
+- if: ["{{ states('number.sungrow_battery_max_charge_power') | float(0) > 0 }}"]
   then:
     - action: number.set_value
       target: {entity_id: number.sungrow_battery_max_charge_power}
+      data: {value: 0}
+- if: ["{{ states('number.sungrow_battery_max_discharge_power') | float(0) > 0 }}"]
+  then:
+    - action: number.set_value
+      target: {entity_id: number.sungrow_battery_max_discharge_power}
+      data: {value: 0}
+
+# restore_actions (optional, required with no_charge or hold) — max charge
+# AND max discharge power back to full (your battery's ratings); runs before
+# EVERY branch, so each guard must ALSO skip while its own restraint action
+# is active — otherwise every 5-minute re-assert during a hold window would
+# restore-then-re-zero the limits (4 Modbus writes per sweep, and a brief
+# unfenced moment). The failsafe publishes action == 'idle', so a dead
+# Numbat still restores everything.
+- if: ["{{ states('number.sungrow_battery_max_charge_power') | float(0) < 12000
+           and action not in ['no_charge', 'hold'] }}"]
+  then:
+    - action: number.set_value
+      target: {entity_id: number.sungrow_battery_max_charge_power}
+      data: {value: 12000}
+- if: ["{{ states('number.sungrow_battery_max_discharge_power') | float(0) < 12000
+           and action != 'hold' }}"]
+  then:
+    - action: number.set_value
+      target: {entity_id: number.sungrow_battery_max_discharge_power}
       data: {value: 12000}
 
 # curtail_actions (optional) — cap export whenever the plan withholds it
@@ -563,20 +590,37 @@ option strings against your install — they vary between package versions):
       data: {value: 12000}
 ```
 
+For hold, prefer the max-power zeros over EMS "Forced mode + Stop": Stop
+does fence the battery, but it lives on the EMS register the idle baseline
+also writes, so the blueprint's idle-first pattern and its 5-minute
+re-asserts would churn Modbus writes every sweep; the limit zeros are on
+orthogonal registers, and with the action-aware restore guards above the
+re-asserts touch nothing at all when the registers already match.
+
 Set the power register **before** engaging forced mode (as above), so a
 partial failure leaves the inverter in its previous mode rather than forced
 with a stale setpoint. Note some mkaiser versions gate the export limit
 behind `switch.sungrow_export_power_limit_mode` — if yours does, enable it in
 curtail and disable it in uncurtail instead of writing your DNSP limit back.
 
-One Sungrow honesty note for negative-**buy** windows: forced charge sources
-from PV before the grid, and the mkaiser package exposes no writable PV
-power limitation (the registers exist upstream as read-only sensors). So
-"charge with export capped" charges the battery from throttled PV rather
-than genuinely importing at the negative price — the cap eliminates the
-negative-feed-in export bleed (the expensive part), while the forgone
-import payment (|buy| × household+charge kW) remains out of reach until
-the package exposes active power limitation as writable.
+Two Sungrow honesty notes for negative-**buy** windows, both rooted in the
+same fact: PV always meets the house load before the grid does, and the
+mkaiser package exposes no writable PV power limitation (the registers
+exist upstream as read-only sensors).
+
+- Forced charge sources from PV before the grid, so "charge with export
+  capped" charges the battery from throttled PV rather than genuinely
+  importing at the negative price — the cap eliminates the negative-feed-in
+  export bleed (the expensive part), while the forgone import payment
+  (|buy| × household+charge kW) remains out of reach until the package
+  exposes active power limitation as writable.
+- Hold's "the grid serves the house" is likewise net of PV: the max-power
+  zeros fence the battery in both directions, but any PV production still
+  covers the house load first and the grid only supplies the remainder.
+  While the sun is up, hold + curtail protects the battery and stops the
+  export bleed, but the house runs on solar you could otherwise have been
+  paid to import against. Only the load PV can't cover — and everything
+  after dusk — actually imports at the negative price.
 
 **Do not create the automation until you've watched Numbat's dry-run
 recommendations for at least a few days** and they consistently make sense

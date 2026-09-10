@@ -6,11 +6,14 @@ import type { Action } from "./api";
 // and curtail aren't in the handoff's four-way legend; green (the design's
 // export colour — no_charge usually means PV surplus exporting instead of
 // charging) and amber (export held back) extend it in the same family.
+// hold (battery fenced while the grid serves the house) gets teal — cool
+// and inert, distinct from both the green export family and charge blue.
 export const ACTION_COLORS: Record<Action, string> = {
   charge: "#3f7fd0",
   discharge: "#8a52c9",
   idle: "var(--seg-idle)",
   no_charge: "#2fae7a",
+  hold: "#2f9fae",
   curtail: "#efa63c",
 };
 
