@@ -181,6 +181,13 @@ triggers:
   - trigger: state
     entity_id: !input action_sensor
     to: null
+  # the curtail attribute is orthogonal to the action, so it can flip while
+  # the action string holds (feed-in crossing zero mid-charge) — an
+  # attribute trigger fires only when its VALUE changes, so the per-cycle
+  # republishes stay silent and old Numbat (no attribute) never fires it
+  - trigger: state
+    entity_id: !input action_sensor
+    attribute: curtail
   - trigger: state
     entity_id: !input setpoint_sensor
     to: null
@@ -241,10 +248,15 @@ conditions:
   # and on-grid, the sweep stands down and the state triggers handle every
   # real change — guarded (idempotent) action sequences keep the re-asserts
   # write-free when the registers already match.
+  # `or curtail_wanted`: while export is withheld the sweep keeps re-asserting
+  # (guarded writes keep it Modbus-silent) — a lost cap write heals within
+  # 5 minutes, and the cap applied by the attribute trigger is covered even
+  # though an attribute flip doesn't reset the action sensor's last_changed.
   - condition: template
     value_template: >-
       {{ trigger.platform != 'time_pattern'
          or not numbat_alive or not grid_connected
+         or curtail_wanted
          or (states[action_sensor] is not none
              and now() - states[action_sensor].last_changed < timedelta(minutes=15)) }}
 

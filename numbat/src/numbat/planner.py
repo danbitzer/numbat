@@ -568,9 +568,13 @@ class Planner:
             solve_ms=0.0,
             computed_at=prev.computed_at,
             # carry the spike and curtail flags so the published attributes
-            # stay truthful while a fallback plan is in effect
+            # stay truthful while a fallback plan is in effect. Curtail is
+            # additionally gated on the surviving step's own export intent:
+            # the live price is unknowable here, and a carried cap must not
+            # throttle a step that planned to sell (e.g. an evening export
+            # after a negative midday, solver failing at the rollover).
             live_spike=prev.live_spike,
-            curtail_export=prev.curtail_export,
+            curtail_export=prev.curtail_export and s0.grid_export_kw < 0.05,
             # The full context is gone with the failed solve; give the panel the
             # step-0 values — the "reusing previous plan" chip (stale) says why.
             explanation={

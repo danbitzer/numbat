@@ -496,6 +496,18 @@ def test_fallback_carries_the_curtail_flag():
     assert planner.fallback(NOW).curtail_export is True
 
 
+def test_fallback_drops_curtail_when_the_surviving_step_exports():
+    # a carried cap must not throttle a step that planned to sell (evening
+    # export after a negative midday, solver failing at the rollover)
+    settings = make_settings()
+    planner = offline_planner(settings)
+    prev = previous_plan_with(Action.DISCHARGE)
+    prev.curtail_export = True
+    prev.intervals[0].grid_export_kw = 4.0
+    planner.previous_plan = prev
+    assert planner.fallback(NOW).curtail_export is False
+
+
 def test_plan_curtail_flag_follows_negative_feed_in():
     """The 2026-09-10 gap: 'charge' at negative buy AND feed-in must ALSO say
     withhold export, or the actuator lifts the cap and the PV surplus pays
@@ -514,6 +526,26 @@ def test_plan_curtail_flag_follows_negative_feed_in():
     calm = synthetic_cycle_data(settings)
     calm_plan = planner.optimize(calm, NOW)
     assert calm_plan.curtail_export is False
+    # exactly zero is not negative: exporting at $0 is harmless, leave the
+    # limit open for a positive PV surprise
+    zero = synthetic_cycle_data(settings)
+    zero.prices.current_sell = 0.0
+    assert planner.optimize(zero, NOW).curtail_export is False
+
+
+def test_plan_curtail_flag_set_by_standalone_curtail_action():
+    # PV spill at negative feed-in with a full battery: the classic CURTAIL
+    # action must carry the flag too (it's what the actuator now acts on)
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    planner = offline_planner(settings)
+    data = synthetic_cycle_data(settings)
+    data.inputs.pv[:] = 2.0
+    data.inputs.sell[:] = -0.05
+    data.prices.current_sell = -0.05
+    data = replace(data, inputs=replace(data.inputs, soc0_kwh=12.8))
+    plan = planner.optimize(data, NOW)
+    assert plan.intervals[0].action == Action.CURTAIL
+    assert plan.curtail_export is True
 
 
 def test_daily_soc_target_vector_windowed_across_days():
