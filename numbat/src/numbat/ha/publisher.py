@@ -90,6 +90,10 @@ class Publisher:
                 "solver_status": plan.solver_status,
                 "valid_until": step0.end.isoformat(),
                 "live_spike": plan.live_spike,
+                # export withheld this interval (can be true DURING charge —
+                # negative buy and feed-in); actuators cap the export limit
+                # on this, not on action == "curtail"
+                "curtail": plan.curtail_export,
                 # power duplicated here so action + magnitude change in ONE
                 # atomic POST — actuator automations read these, never pairing
                 # a fresh action with the previous cycle's setpoint

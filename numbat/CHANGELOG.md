@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- **Curtailment is now orthogonal to the action — fixes paying to export
+  while grid-charging at negative prices.** The plan can want export
+  withheld *during* a charge (buy and feed-in both negative), but the old
+  blueprint lifted the export cap on entering the charge branch — seen live
+  2026-09-10: forced charge fed from PV while the surplus exported at
+  −12c/kWh. Numbat now publishes a `curtail` attribute on
+  `sensor.numbat_action` (atomic with the action; true when feed-in is
+  negative and the plan exports nothing), and the blueprint applies
+  curtail/uncurtail from that flag before every action branch — the
+  standalone curtail action still works for older combinations, and the
+  failsafe always lifts the cap. **Re-download the blueprint in HA**
+  (Blueprints → ⋮ → Re-download); your existing action sequences are
+  unchanged. Sungrow note: forced charge still sources from throttled PV
+  before the grid (the mkaiser package has no writable PV power
+  limitation), so negative-buy windows avoid the export bleed but can't
+  yet capture the full import payment.
+
 ## 0.17.0
 
 - **Bird-in-hand bias: stored energy now beats stored energy later.** A

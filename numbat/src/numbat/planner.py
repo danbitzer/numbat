@@ -435,6 +435,15 @@ class Planner:
         if solution.status.endswith("(hysteresis)"):
             plan.solver_status = solution.status
         plan.live_spike = self._live_spike(data.prices)
+        # Withhold export while feed-in is negative and the plan exports
+        # nothing: the actuator caps the export limit even mid-charge (the
+        # action alone can't say "charge AND don't export the PV surplus" —
+        # 2026-09-10: entering the charge branch lifted the cap and the
+        # surplus exported at −12c). Gated on a negative live price so a
+        # PV surprise at positive feed-in still exports freely.
+        plan.curtail_export = (
+            data.prices.current_sell < 0 and plan.intervals[0].grid_export_kw < 0.05
+        )
         plan = self._live_spike_guard(plan, data)
         plan.explanation = build_explanation(
             plan,
@@ -558,9 +567,14 @@ class Planner:
             solver_status="stale (reusing previous plan)",
             solve_ms=0.0,
             computed_at=prev.computed_at,
-            # carry the spike flag so the published live_spike attribute stays
-            # truthful while a fallback plan is in effect
+            # carry the spike and curtail flags so the published attributes
+            # stay truthful while a fallback plan is in effect. Curtail is
+            # additionally gated on the surviving step's own export intent:
+            # the live price is unknowable here, and a carried cap must not
+            # throttle a step that planned to sell (e.g. an evening export
+            # after a negative midday, solver failing at the rollover).
             live_spike=prev.live_spike,
+            curtail_export=prev.curtail_export and s0.grid_export_kw < 0.05,
             # The full context is gone with the failed solve; give the panel the
             # step-0 values — the "reusing previous plan" chip (stale) says why.
             explanation={

@@ -18,11 +18,16 @@
 #                           from no_charge can't cap a later charge/idle.
 #                           Required if you use no_charge.
 #   curtail_actions       — (optional) cap export/PV for negative feed-in;
-#                           runs AFTER idle_actions puts the battery to normal
+#                           runs whenever the plan wants export WITHHELD —
+#                           the action sensor's `curtail` attribute — which
+#                           can be true DURING a charge (negative buy AND
+#                           feed-in: forced-charge while capped, so the PV
+#                           surplus can't export at a negative price)
 #   uncurtail_actions     — (optional) restore your normal export limit; runs
-#                           before every non-curtail branch (idempotent), so
-#                           leaving curtailment — or the failsafe firing —
-#                           always lifts the cap
+#                           whenever the plan does NOT withhold export, and
+#                           always in the failsafe (idempotent), so leaving
+#                           curtailment — or a dead Numbat — always lifts
+#                           the cap
 #
 # Leave the optional inputs empty and those actions simply behave as idle.
 #
@@ -30,6 +35,7 @@
 #   power_kw  — signed battery setpoint (+charge / −discharge), float
 #   power_w   — magnitude in watts (int), handy for number.set_value
 #   action    — "charge" | "discharge" | "idle" | "no_charge" | "curtail"
+#   curtail_wanted — export withheld this interval (bool; see curtail_actions)
 #
 # Actions are grid-coupled: "charge" = charging FROM THE GRID, "discharge" =
 # exporting stored energy TO THE GRID. Battery-serves-the-house and
@@ -142,17 +148,19 @@ blueprint:
       name: Curtail actions (optional)
       description: >-
         Cap export/PV output for negative feed-in prices (e.g. set the
-        inverter's export power limit to 0). Runs after the idle actions.
-        Leave empty to treat curtail as idle.
+        inverter's export power limit to 0). Runs whenever the plan
+        withholds export (the action sensor's `curtail` attribute) — before
+        the action branch, so a charge can run with export capped. Leave
+        empty to ignore curtailment.
       default: []
       selector:
         action:
     uncurtail_actions:
       name: Un-curtail actions (optional)
       description: >-
-        Restore your normal export limit. Runs before every charge,
-        discharge, idle, and failsafe branch — must be idempotent. Required
-        if you set curtail actions, else curtailment would stick.
+        Restore your normal export limit. Runs whenever the plan does not
+        withhold export, and in every failsafe — must be idempotent.
+        Required if you set curtail actions, else curtailment would stick.
       default: []
       selector:
         action:
@@ -173,6 +181,13 @@ triggers:
   - trigger: state
     entity_id: !input action_sensor
     to: null
+  # the curtail attribute is orthogonal to the action, so it can flip while
+  # the action string holds (feed-in crossing zero mid-charge) — an
+  # attribute trigger fires only when its VALUE changes, so the per-cycle
+  # republishes stay silent and old Numbat (no attribute) never fires it
+  - trigger: state
+    entity_id: !input action_sensor
+    attribute: curtail
   - trigger: state
     entity_id: !input setpoint_sensor
     to: null
@@ -212,6 +227,17 @@ variables:
     {% set p = state_attr(action_sensor, 'power_w') %}
     {{ (p if p is not none else state_attr(setpoint_sensor, 'power_w')) | int(0)
        if numbat_alive else 0 }}
+  # Export withholding is ORTHOGONAL to the action: the plan can want zero
+  # export while CHARGING (negative buy AND feed-in — seen live 2026-09-10:
+  # the charge branch used to lift the cap first, so forced charge fed from
+  # PV while the surplus exported at −12c). Newer Numbat publishes the
+  # `curtail` attribute atomically with the action; older versions fall back
+  # to the standalone curtail action. A dead Numbat or a grid outage always
+  # uncurtails (fail-safe).
+  curtail_wanted: >-
+    {% set c = state_attr(action_sensor, 'curtail') %}
+    {{ ((c if c is not none else states(action_sensor) == 'curtail')
+        if numbat_alive and grid_connected else false) }}
 
 conditions:
   # The periodic sweep acts when Numbat is NOT healthy or the grid is down
@@ -222,10 +248,15 @@ conditions:
   # and on-grid, the sweep stands down and the state triggers handle every
   # real change — guarded (idempotent) action sequences keep the re-asserts
   # write-free when the registers already match.
+  # `or curtail_wanted`: while export is withheld the sweep keeps re-asserting
+  # (guarded writes keep it Modbus-silent) — a lost cap write heals within
+  # 5 minutes, and the cap applied by the attribute trigger is covered even
+  # though an attribute flip doesn't reset the action sensor's last_changed.
   - condition: template
     value_template: >-
       {{ trigger.platform != 'time_pattern'
          or not numbat_alive or not grid_connected
+         or curtail_wanted
          or (states[action_sensor] is not none
              and now() - states[action_sensor].last_changed < timedelta(minutes=15)) }}
 
@@ -245,32 +276,29 @@ actions:
   # charge power to 0, which would otherwise cap a later charge or idle. A
   # guarded restore is a no-op when limits are already full.
   - sequence: !input restore_actions
+  # Export-limit state next, orthogonal to the action branch: cap BEFORE a
+  # forced mode could push surplus out, lift it before branches that may
+  # export. curtail_wanted is false whenever Numbat is dead/stale or the
+  # grid is down, so the failsafe path always lifts the cap.
+  - if: "{{ curtail_wanted }}"
+    then: !input curtail_actions
+    else: !input uncurtail_actions
   - choose:
       - conditions: "{{ action == 'charge' }}"
         sequence:
-          - sequence: !input uncurtail_actions
           - sequence: !input charge_actions
       - conditions: "{{ action == 'discharge' }}"
         sequence:
-          - sequence: !input uncurtail_actions
           - sequence: !input discharge_actions
       - conditions: "{{ action == 'no_charge' }}"
         sequence:
           # idle first as the safe baseline (an empty input must never leave a
           # previous forced mode running), then block charging
-          - sequence: !input uncurtail_actions
           - sequence: !input idle_actions
           - sequence: !input no_charge_actions
-      - conditions: "{{ action == 'curtail' }}"
-        sequence:
-          # battery to normal first, then cap export — with empty curtail
-          # actions this is exactly idle
-          - sequence: !input idle_actions
-          - sequence: !input curtail_actions
-    # idle and the failsafe (stale/errored/missing Numbat) land here; lifting
-    # the export cap is part of failing safe
+    # idle, curtail (battery-idle; the cap is already applied above) and the
+    # failsafe (stale/errored/missing Numbat) land here
     default:
-      - sequence: !input uncurtail_actions
       - sequence: !input idle_actions
 
 # restart: a fresh recommendation mid-sequence supersedes the old one

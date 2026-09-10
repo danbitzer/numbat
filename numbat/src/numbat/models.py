@@ -112,6 +112,12 @@ class Plan:
     # spike.high_price_threshold (see Planner._live_spike); published as an
     # attribute so actuator automations can special-case spikes.
     live_spike: bool = False
+    # True when the plan wants grid export WITHHELD this interval (feed-in is
+    # negative and step 0 plans ~zero export) — orthogonal to the action, so
+    # the actuator can cap export DURING a charge (negative buy AND feed-in;
+    # the single-word action can't express both). Published as the action
+    # sensor's `curtail` attribute, atomic with the action.
+    curtail_export: bool = False
     # Plain-language explanation of step 0's action (see numbat.explain); surfaced
     # in the dashboard's "Why this action?" panel, not published as a sensor.
     explanation: dict | None = None

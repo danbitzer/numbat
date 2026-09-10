@@ -49,3 +49,27 @@ async def test_publish_status_posts_state():
     assert body["state"] == "ok"
     assert body["attributes"]["detail"] == "test"
     assert "heartbeat" in body["attributes"]
+
+
+async def test_publish_plan_action_carries_curtail_flag():
+    """The actuator caps export on the `curtail` attribute (atomic with the
+    action) — it must ride the action sensor, not a separate publish."""
+    from datetime import UTC, datetime
+
+    from test_planner import make_settings, offline_planner, synthetic_cycle_data
+
+    settings = make_settings()
+    planner = offline_planner(settings)
+    data = synthetic_cycle_data(settings)
+    data.prices.current_sell = -0.12
+    data.inputs.buy[:] = -0.02
+    data.inputs.sell[:] = -0.12
+    plan = planner.optimize(data, datetime(2026, 7, 15, 11, 36, 30, tzinfo=UTC))
+    assert plan.curtail_export is True
+
+    fake = FakeHa()
+    async with fake_ha_client(fake) as client:
+        await Publisher(client).publish_plan(plan, capacity_kwh=12.8)
+    action_posts = [b for e, b in fake.posted if e == "sensor.numbat_action"]
+    assert action_posts and action_posts[0]["attributes"]["curtail"] is True
+    assert action_posts[0]["state"] == "charge"
