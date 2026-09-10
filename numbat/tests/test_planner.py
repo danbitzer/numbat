@@ -485,6 +485,37 @@ def test_fallback_shifts_previous_plan():
     assert all(iv.end > NOW for iv in fallback.intervals)
 
 
+def test_fallback_carries_the_curtail_flag():
+    # like live_spike: the published attribute must stay truthful while a
+    # stale plan is being reused
+    settings = make_settings()
+    planner = offline_planner(settings)
+    prev = previous_plan_with(Action.IDLE)
+    prev.curtail_export = True
+    planner.previous_plan = prev
+    assert planner.fallback(NOW).curtail_export is True
+
+
+def test_plan_curtail_flag_follows_negative_feed_in():
+    """The 2026-09-10 gap: 'charge' at negative buy AND feed-in must ALSO say
+    withhold export, or the actuator lifts the cap and the PV surplus pays
+    to export. The flag is orthogonal to the action."""
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    planner = offline_planner(settings)
+    # negative buy and feed-in: the plan grid-charges with zero export
+    data = synthetic_cycle_data(settings)
+    data.inputs.buy[:] = -0.02
+    data.inputs.sell[:] = -0.12
+    data.prices.current_sell = -0.12
+    plan = planner.optimize(data, NOW)
+    assert plan.intervals[0].action == Action.CHARGE
+    assert plan.curtail_export is True
+    # positive feed-in: never curtail, whatever the plan exports
+    calm = synthetic_cycle_data(settings)
+    calm_plan = planner.optimize(calm, NOW)
+    assert calm_plan.curtail_export is False
+
+
 def test_daily_soc_target_vector_windowed_across_days():
     from numbat.planner import daily_soc_target_vector
     from numbat.timegrid import TimeGrid

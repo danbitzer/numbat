@@ -382,7 +382,7 @@ grid if `grid.export_limit_kw` allows it.
 | Entity | Meaning |
 |---|---|
 | `sensor.numbat_status` | `ok` / `error` / `disabled` / `unconfigured`; heartbeat with solve stats and `load_forecast`. Anything other than `ok` makes the actuator blueprint fail safe to self-consumption |
-| `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / curtail (carries `power_kw`/`power_w` attributes, atomic with the action) |
+| `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / curtail (carries `power_kw`/`power_w`/`curtail` attributes, atomic with the action — `curtail` means export is withheld this interval, possibly *during* a charge) |
 
 Actions are **grid-coupled**: `charge` means charging *from the grid*, and
 `discharge` means exporting stored energy *to the grid* — the moves your
@@ -542,8 +542,11 @@ option strings against your install — they vary between package versions):
       target: {entity_id: number.sungrow_battery_max_charge_power}
       data: {value: 12000}
 
-# curtail_actions (optional) — cap export while feed-in is negative; the
-# blueprint runs idle_actions first, so the battery is already back to normal
+# curtail_actions (optional) — cap export whenever the plan withholds it
+# (the action sensor's `curtail` attribute; negative feed-in). This can be
+# active DURING a charge — when the buy price is negative too, the plan is
+# "forced charge with export capped" and the blueprint applies the cap
+# BEFORE the charge actions.
 - if: ["{{ states('number.sungrow_export_power_limit') | float(0) > 0 }}"]
   then:
     - action: number.set_value
@@ -551,8 +554,8 @@ option strings against your install — they vary between package versions):
       data: {value: 0}
 
 # uncurtail_actions (required if you set curtail_actions) — restore your
-# normal export limit; runs before every non-curtail branch, so it must be
-# idempotent. Use your DNSP limit in watts.
+# normal export limit; runs whenever export isn't withheld, and in every
+# failsafe, so it must be idempotent. Use your DNSP limit in watts.
 - if: ["{{ states('number.sungrow_export_power_limit') | float(0) < 12000 }}"]
   then:
     - action: number.set_value
@@ -565,6 +568,15 @@ partial failure leaves the inverter in its previous mode rather than forced
 with a stale setpoint. Note some mkaiser versions gate the export limit
 behind `switch.sungrow_export_power_limit_mode` — if yours does, enable it in
 curtail and disable it in uncurtail instead of writing your DNSP limit back.
+
+One Sungrow honesty note for negative-**buy** windows: forced charge sources
+from PV before the grid, and the mkaiser package exposes no writable PV
+power limitation (the registers exist upstream as read-only sensors). So
+"charge with export capped" charges the battery from throttled PV rather
+than genuinely importing at the negative price — the cap eliminates the
+negative-feed-in export bleed (the expensive part), while the forgone
+import payment (|buy| × household+charge kW) remains out of reach until
+the package exposes active power limitation as writable.
 
 **Do not create the automation until you've watched Numbat's dry-run
 recommendations for at least a few days** and they consistently make sense
