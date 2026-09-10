@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.18.0
 
 - **Curtailment is now orthogonal to the action — fixes paying to export
   while grid-charging at negative prices.** The plan can want export
