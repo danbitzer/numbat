@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.0
 
 - **New action: `hold` — the battery fenced in both directions while the
   grid serves the house.** The plan often prefers importing over spending
