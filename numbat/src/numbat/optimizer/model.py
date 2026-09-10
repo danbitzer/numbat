@@ -349,6 +349,8 @@ def solve(
         constraints += [pc[0] == 0, pd[0] >= 0.01]
     elif pin_step0 == "no_charge":
         constraints += [*self_consumption, pc[0] == 0]  # block charging
+    elif pin_step0 == "hold":
+        constraints += [pc[0] == 0, pd[0] == 0]  # battery fully inert
     elif pin_step0 in ("idle", "curtail"):
         constraints += self_consumption
 

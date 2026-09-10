@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+- **New action: `hold` — the battery fenced in both directions while the
+  grid serves the house.** The plan often prefers importing over spending
+  stored energy (cheap middays below the hold value; negative buy prices,
+  where you're *paid* to run the house — and the cranked AC — from the
+  grid), but that intent used to publish as `idle`, and self-consumption
+  quietly discharged the battery into the load against the plan. `hold`
+  closes the long-standing NO_DISCHARGE gap: it classifies when step 0
+  wants zero battery power with grid import covering the load (and the
+  battery actually holds something — at its floor it stays `idle`), takes
+  precedence over `curtail` (the export cap rides the `curtail` attribute,
+  so `hold`+cap is the negative-price combination), and participates in
+  hysteresis pinning. The blueprint gains an optional `hold_actions` input
+  (Sungrow: max charge AND max discharge power 0 — see the DOCS example;
+  left empty, hold behaves as idle exactly like before), and
+  `restore_actions` should now restore BOTH battery power limits.
+  **Re-download the blueprint and extend your `restore_actions` (+ add
+  `hold_actions`)**; note this release requires the 0.18+ blueprint —
+  pre-0.18 blueprints keyed curtailment off the action string, which
+  `hold` now takes precedence over.
+
 ## 0.18.0
 
 - **Curtailment is now orthogonal to the action — fixes paying to export

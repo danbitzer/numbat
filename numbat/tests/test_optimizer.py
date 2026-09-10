@@ -278,13 +278,21 @@ def test_classify_action_grid_coupled_semantics():
         ((0.0, 0.0, 5.0, 1.0, 1.0), Action.CURTAIL),
         # battery flat while PV surplus is exported, not stored: defer charge
         ((0.0, 0.0, 5.0, 5.0, 2.0), Action.NO_CHARGE),
-        # battery flat while load imports (reserve held): idle for now
-        ((0.0, 0.0, 0.0, 0.0, 0.5), Action.IDLE),
+        # battery held while the grid serves the load: the NO_DISCHARGE gap,
+        # now a first-class action
+        ((0.0, 0.0, 0.0, 0.0, 0.5), Action.HOLD),
+        # hold takes precedence over curtail (negative prices: battery full,
+        # PV spilled, grid serves the house — the export cap rides the flag)
+        ((0.0, 0.0, 0.3, 0.05, 0.5), Action.HOLD),
         # nothing flowing at all
         ((0.0, 0.0, 0.0, 0.0, 0.0), Action.IDLE),
     ]
     for args, expected in cases:
         assert classify_action(*args) == expected, args
+    # a battery at its floor has nothing worth holding: stays IDLE (and the
+    # curtail classification comes back where PV is spilled)
+    assert classify_action(0.0, 0.0, 0.0, 0.0, 0.5, holdable=False) == Action.IDLE
+    assert classify_action(0.0, 0.0, 0.3, 0.05, 0.5, holdable=False) == Action.CURTAIL
 
 
 def test_scenario_defer_charge_to_cheaper_window():
@@ -666,3 +674,22 @@ def test_bird_in_hand_accrual_is_window_capped():
     inputs = make_inputs(T=T, sell=sell, load=0.0, soc0=10.0)
     sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.10))
     assert sol.discharge_kw[1] > 4.0  # taken at hour ~0.5, not deferred
+
+
+def test_pin_hold_keeps_battery_inert_grid_serves_load():
+    """Hysteresis pinning for the new action: pc[0] == pd[0] == 0, so the
+    load must come off the grid even where free-solving would discharge."""
+    from numbat.models import Action
+    from numbat.optimizer.result import classify_action
+
+    buy = np.concatenate([[0.60], np.full(5, 0.30)])
+    inputs = make_inputs(T=6, buy=buy, sell=0.05, pv=0.0, load=2.0, soc0=6.4)
+    sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.05), pin_step0="hold")
+    assert float(sol.charge_kw[0]) == pytest.approx(0.0, abs=1e-6)
+    assert float(sol.discharge_kw[0]) == pytest.approx(0.0, abs=1e-6)
+    assert float(sol.grid_import_kw[0]) >= 2.0 - 1e-6
+    step0 = classify_action(
+        float(sol.charge_kw[0]), float(sol.discharge_kw[0]),
+        float(inputs.pv[0]), float(sol.pv_used_kw[0]), float(inputs.load[0]),
+    )
+    assert step0 == Action.HOLD

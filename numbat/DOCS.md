@@ -382,7 +382,7 @@ grid if `grid.export_limit_kw` allows it.
 | Entity | Meaning |
 |---|---|
 | `sensor.numbat_status` | `ok` / `error` / `disabled` / `unconfigured`; heartbeat with solve stats and `load_forecast`. Anything other than `ok` makes the actuator blueprint fail safe to self-consumption |
-| `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / curtail (carries `power_kw`/`power_w`/`curtail` attributes, atomic with the action — `curtail` means export is withheld this interval, possibly *during* a charge) |
+| `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / hold / curtail (carries `power_kw`/`power_w`/`curtail` attributes, atomic with the action — `curtail` means export is withheld this interval, possibly *during* a charge; `hold` means the battery is fenced in both directions while the grid serves the house) |
 
 Actions are **grid-coupled**: `charge` means charging *from the grid*, and
 `discharge` means exporting stored energy *to the grid* — the moves your
@@ -533,13 +533,34 @@ option strings against your install — they vary between package versions):
       target: {entity_id: number.sungrow_battery_max_charge_power}
       data: {value: 0}
 
-# restore_actions (optional, required with no_charge) — max charge power back
-# to full (your battery's rating); runs before every branch so no_charge's 0
-# can't cap a later charge or idle
+# hold_actions (optional) — battery fully inert while the grid serves the
+# house (Numbat publishes "hold" when importing beats spending stored
+# energy — cheap or negative buy prices). The blueprint runs idle_actions
+# first, so EMS mode is already self-consumption; these zeros are on
+# registers the idle writes never touch, keeping re-asserts Modbus-silent.
+- if: ["{{ states('number.sungrow_battery_max_charge_power') | float(0) > 0 }}"]
+  then:
+    - action: number.set_value
+      target: {entity_id: number.sungrow_battery_max_charge_power}
+      data: {value: 0}
+- if: ["{{ states('number.sungrow_battery_max_discharge_power') | float(0) > 0 }}"]
+  then:
+    - action: number.set_value
+      target: {entity_id: number.sungrow_battery_max_discharge_power}
+      data: {value: 0}
+
+# restore_actions (optional, required with no_charge or hold) — max charge
+# AND max discharge power back to full (your battery's ratings); runs before
+# every branch so a lingering 0 can't cap a later charge, discharge or idle
 - if: ["{{ states('number.sungrow_battery_max_charge_power') | float(0) < 12000 }}"]
   then:
     - action: number.set_value
       target: {entity_id: number.sungrow_battery_max_charge_power}
+      data: {value: 12000}
+- if: ["{{ states('number.sungrow_battery_max_discharge_power') | float(0) < 12000 }}"]
+  then:
+    - action: number.set_value
+      target: {entity_id: number.sungrow_battery_max_discharge_power}
       data: {value: 12000}
 
 # curtail_actions (optional) — cap export whenever the plan withholds it
@@ -562,6 +583,12 @@ option strings against your install — they vary between package versions):
       target: {entity_id: number.sungrow_export_power_limit}
       data: {value: 12000}
 ```
+
+For hold, prefer the max-power zeros over EMS "Forced mode + Stop": Stop
+does fence the battery, but it lives on the EMS register the idle baseline
+also writes, so the blueprint's idle-first pattern and its 5-minute
+re-asserts would churn Modbus writes every sweep; the limit zeros are on
+orthogonal registers and stay silent.
 
 Set the power register **before** engaging forced mode (as above), so a
 partial failure leaves the inverter in its previous mode rather than forced

@@ -46,6 +46,7 @@ const ACTION_LABEL: Record<string, string> = {
   charge: "charging",
   discharge: "discharging",
   no_charge: "no charge",
+  hold: "holding",
   idle: "idle",
   curtail: "curtailing",
 };
@@ -54,6 +55,7 @@ const ACTION_SUB: Record<string, string> = {
   charge: "charging from the grid",
   discharge: "exporting stored energy",
   no_charge: "self-consumption, charging blocked",
+  hold: "battery held — the grid serves the house",
   idle: "self-consumption",
   curtail: "export capped — negative feed-in",
 };

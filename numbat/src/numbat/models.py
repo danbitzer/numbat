@@ -78,9 +78,14 @@ class Action(StrEnum):
     # instead of stored, to defer the charge to a cheaper window. Block
     # charging but still let the battery cover a load dip.
     # Actuate: self-consumption + battery max-charge-power 0.
-    # (The mirror case — block discharging to hold the reserve under load — is
-    # a possible future NO_DISCHARGE action; for now it stays IDLE.)
     NO_CHARGE = "no_charge"
+    # The mirror of NO_CHARGE: battery fully held (no charge, no discharge)
+    # while the GRID serves the house — the plan prefers importing (cheap or
+    # negative buy) over spending stored energy, but self-consumption would
+    # discharge into the load. Only classified while the battery actually
+    # has charge worth holding (above its floor).
+    # Actuate: self-consumption + battery max charge AND discharge power 0.
+    HOLD = "hold"
     CURTAIL = "curtail"
 
 

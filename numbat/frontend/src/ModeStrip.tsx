@@ -61,6 +61,7 @@ export function ModeStrip({ rows, domain }: { rows: Row[]; domain: [number, numb
             { label: "charge", color: ACTION_COLORS.charge },
             { label: "discharge", color: ACTION_COLORS.discharge },
             { label: "no charge", color: ACTION_COLORS.no_charge },
+            { label: "hold", color: ACTION_COLORS.hold },
             { label: "idle", color: idleSegmentColor(dark) },
             { label: "curtail", color: ACTION_COLORS.curtail },
           ]}

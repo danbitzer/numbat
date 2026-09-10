@@ -431,7 +431,14 @@ class Planner:
         display_inputs = (
             replace(data.inputs, sell=data.sell_raw) if data.sell_raw is not None else data.inputs
         )
-        plan = solution_to_plan(solution, data.grid, display_inputs, computed_at=now)
+        plan = solution_to_plan(
+            solution,
+            data.grid,
+            display_inputs,
+            computed_at=now,
+            # HOLD only while the battery has something worth holding
+            hold_floor_kwh=self._battery_params.soc_min_kwh + 0.1,
+        )
         if solution.status.endswith("(hysteresis)"):
             plan.solver_status = solution.status
         plan.live_spike = self._live_spike(data.prices)
@@ -510,6 +517,7 @@ class Planner:
             float(data.inputs.pv[0]),
             float(free.pv_used_kw[0]),
             float(data.inputs.load[0]),
+            holdable=float(free.soc_kwh[0]) > self._battery_params.soc_min_kwh + 0.1,
         )
         if free_action == prev_action:
             return free

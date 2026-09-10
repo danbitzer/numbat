@@ -7,7 +7,14 @@
 
 import { z } from "zod";
 
-export const ActionSchema = z.enum(["charge", "discharge", "idle", "no_charge", "curtail"]);
+export const ActionSchema = z.enum([
+  "charge",
+  "discharge",
+  "idle",
+  "no_charge",
+  "hold",
+  "curtail",
+]);
 export type Action = z.infer<typeof ActionSchema>;
 
 export const PlanIntervalSchema = z.object({

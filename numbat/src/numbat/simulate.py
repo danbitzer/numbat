@@ -307,7 +307,13 @@ def simulate_solve(
     )
 
     solution = solve(inputs, bp, grid_params, opt_config)
-    plan = solution_to_plan(solution, grid, replace(inputs, sell=sell), computed_at=now)
+    plan = solution_to_plan(
+        solution,
+        grid,
+        replace(inputs, sell=sell),
+        computed_at=now,
+        hold_floor_kwh=bp.soc_min_kwh + 0.1,
+    )
     plan.explanation = build_explanation(
         plan,
         hold_value=terminal,
