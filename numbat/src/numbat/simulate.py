@@ -24,7 +24,7 @@ from numbat.optimizer.model import (
     auto_terminal_value,
     solve,
 )
-from numbat.optimizer.result import solution_to_plan
+from numbat.optimizer.result import hold_floor_kwh, solution_to_plan
 from numbat.planner import (
     battery_params,
     daily_soc_target_vector,
@@ -312,7 +312,7 @@ def simulate_solve(
         grid,
         replace(inputs, sell=sell),
         computed_at=now,
-        hold_floor_kwh=bp.soc_min_kwh + 0.1,
+        hold_floor_kwh=hold_floor_kwh(bp.soc_min_kwh, bp.capacity_kwh),
     )
     plan.explanation = build_explanation(
         plan,

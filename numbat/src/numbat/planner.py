@@ -40,7 +40,7 @@ from numbat.optimizer.model import (
     auto_terminal_value,
     solve,
 )
-from numbat.optimizer.result import classify_action, solution_to_plan
+from numbat.optimizer.result import classify_action, hold_floor_kwh, solution_to_plan
 from numbat.timegrid import TimeGrid, coverage, resample_mean, resample_previous
 
 log = logging.getLogger(__name__)
@@ -437,7 +437,9 @@ class Planner:
             display_inputs,
             computed_at=now,
             # HOLD only while the battery has something worth holding
-            hold_floor_kwh=self._battery_params.soc_min_kwh + 0.1,
+            hold_floor_kwh=hold_floor_kwh(
+                self._battery_params.soc_min_kwh, self._battery_params.capacity_kwh
+            ),
         )
         if solution.status.endswith("(hysteresis)"):
             plan.solver_status = solution.status
@@ -505,7 +507,17 @@ class Planner:
         """Only switch away from the previous action if the free solution beats
         the action-pinned solution by more than the configured threshold —
         compared on the FULL solver objective (energy + wear + terminal value),
-        not just the energy bill."""
+        not just the energy bill.
+
+        Known one-way seam: some pins define an ENVELOPE that contains other
+        actions' flows — pin "idle" (self-consumption) admits the hold shape
+        (pc=pd=0, grid serves load), and pin "hold" admits no_charge's at a
+        PV ramp — so a kept pinned solution can still RELABEL (idle->hold,
+        hold->no_charge) without paying the threshold. That is accepted:
+        those transitions swap only battery-limit registers (cheap, guarded),
+        the exits that matter (anything -> charge/discharge) are always
+        thresholded, and the reverse relabels can't oscillate because the
+        tighter pin does hold its own label."""
         threshold = self._settings.optimizer.action_switch_threshold_dollars
         prev = self.previous_plan
         if prev is None or not prev.intervals or threshold <= 0:
@@ -517,7 +529,10 @@ class Planner:
             float(data.inputs.pv[0]),
             float(free.pv_used_kw[0]),
             float(data.inputs.load[0]),
-            holdable=float(free.soc_kwh[0]) > self._battery_params.soc_min_kwh + 0.1,
+            holdable=float(free.soc_kwh[0])
+            > hold_floor_kwh(
+                self._battery_params.soc_min_kwh, self._battery_params.capacity_kwh
+            ),
         )
         if free_action == prev_action:
             return free

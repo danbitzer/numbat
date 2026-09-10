@@ -537,7 +537,7 @@ option strings against your install — they vary between package versions):
 # house (Numbat publishes "hold" when importing beats spending stored
 # energy — cheap or negative buy prices). The blueprint runs idle_actions
 # first, so EMS mode is already self-consumption; these zeros are on
-# registers the idle writes never touch, keeping re-asserts Modbus-silent.
+# registers the idle writes never touch.
 - if: ["{{ states('number.sungrow_battery_max_charge_power') | float(0) > 0 }}"]
   then:
     - action: number.set_value
@@ -551,13 +551,19 @@ option strings against your install — they vary between package versions):
 
 # restore_actions (optional, required with no_charge or hold) — max charge
 # AND max discharge power back to full (your battery's ratings); runs before
-# every branch so a lingering 0 can't cap a later charge, discharge or idle
-- if: ["{{ states('number.sungrow_battery_max_charge_power') | float(0) < 12000 }}"]
+# EVERY branch, so each guard must ALSO skip while its own restraint action
+# is active — otherwise every 5-minute re-assert during a hold window would
+# restore-then-re-zero the limits (4 Modbus writes per sweep, and a brief
+# unfenced moment). The failsafe publishes action == 'idle', so a dead
+# Numbat still restores everything.
+- if: ["{{ states('number.sungrow_battery_max_charge_power') | float(0) < 12000
+           and action not in ['no_charge', 'hold'] }}"]
   then:
     - action: number.set_value
       target: {entity_id: number.sungrow_battery_max_charge_power}
       data: {value: 12000}
-- if: ["{{ states('number.sungrow_battery_max_discharge_power') | float(0) < 12000 }}"]
+- if: ["{{ states('number.sungrow_battery_max_discharge_power') | float(0) < 12000
+           and action != 'hold' }}"]
   then:
     - action: number.set_value
       target: {entity_id: number.sungrow_battery_max_discharge_power}
@@ -588,7 +594,8 @@ For hold, prefer the max-power zeros over EMS "Forced mode + Stop": Stop
 does fence the battery, but it lives on the EMS register the idle baseline
 also writes, so the blueprint's idle-first pattern and its 5-minute
 re-asserts would churn Modbus writes every sweep; the limit zeros are on
-orthogonal registers and stay silent.
+orthogonal registers, and with the action-aware restore guards above the
+re-asserts touch nothing at all when the registers already match.
 
 Set the power register **before** engaging forced mode (as above), so a
 partial failure leaves the inverter in its previous mode rather than forced

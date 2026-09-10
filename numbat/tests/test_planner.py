@@ -365,10 +365,11 @@ def test_hysteresis_keeps_near_degenerate_previous_action():
     data.inputs.buy[0] = 0.23  # just below the 0.245 hold value: charging gains cents
     planner.previous_plan = previous_plan_with(Action.IDLE)
     plan = planner.optimize(data, NOW)
-    # the marginal grid charge is refused; the kept state (grid serves the
-    # load, battery waits) now legitimately classifies as HOLD, so pin the
-    # intent — no flip to CHARGE — rather than the exact label
-    assert plan.intervals[0].action != Action.CHARGE
+    # the marginal grid charge is refused. The kept flows (grid serves the
+    # load, battery waits) now legitimately RELABEL idle -> HOLD: the idle
+    # pin's envelope contains the hold shape, so hysteresis thresholds the
+    # flows, not the label (documented in _apply_hysteresis).
+    assert plan.intervals[0].action == Action.HOLD
     assert "hysteresis" in plan.solver_status
 
 

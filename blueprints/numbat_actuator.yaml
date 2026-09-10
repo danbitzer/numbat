@@ -192,7 +192,11 @@ blueprint:
         battery's ratings in watts). Runs first, before every branch, so a
         lingering 0 from no_charge or hold can't cap a later charge,
         discharge or self-consumption. Required if you use no_charge or
-        hold; must be idempotent (guard the writes).
+        hold; must be idempotent, and each guard should ALSO skip while its
+        own restraint action is active (`action` is available: e.g. restore
+        the discharge limit only when `action != 'hold'`) — otherwise every
+        re-assert restores-then-re-zeros. The failsafe publishes 'idle', so
+        a dead Numbat always restores.
       default: []
       selector:
         action:
@@ -321,8 +325,10 @@ actions:
       - conditions: "{{ action == 'hold' }}"
         sequence:
           # same shape as no_charge: idle baseline, then fence the battery
-          # in BOTH directions (registers orthogonal to the idle writes, so
-          # the self-healing re-asserts stay Modbus-silent)
+          # in BOTH directions. The limit registers are orthogonal to the
+          # idle writes; for re-asserts to stay Modbus-silent your RESTORE
+          # guards must also skip while their restraint action is active
+          # (see the DOCS examples) — else every sweep restores-then-re-zeros.
           - sequence: !input idle_actions
           - sequence: !input hold_actions
     # idle, curtail (battery-idle; the cap is already applied above) and the

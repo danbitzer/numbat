@@ -16,7 +16,10 @@
   hysteresis pinning. The blueprint gains an optional `hold_actions` input
   (Sungrow: max charge AND max discharge power 0 — see the DOCS example;
   left empty, hold behaves as idle exactly like before), and
-  `restore_actions` should now restore BOTH battery power limits.
+  `restore_actions` should now restore BOTH battery power limits, with
+  each guard skipping while its own restraint action is active (see the
+  DOCS examples — else every 5-minute re-assert during a hold window
+  restores-then-re-zeros the limits).
   **Re-download the blueprint and extend your `restore_actions` (+ add
   `hold_actions`)**; note this release requires the 0.18+ blueprint —
   pre-0.18 blueprints keyed curtailment off the action string, which

@@ -14,6 +14,20 @@ POWER_TOL_KW = 0.01
 CURTAIL_TOL_KW = 0.05
 
 
+def hold_floor_kwh(soc_min_kwh: float, capacity_kwh: float) -> float:
+    """SoC at/below which HOLD stops being classified.
+
+    The margin must clear SoC sensor quantization: a 1%-granularity sensor
+    on a 12.8 kWh pack steps 0.128 kWh, and a smaller margin flaps
+    hold<->idle on single-percent jitter (each flap actuates limit writes).
+    Two percent of capacity clears two sensor steps. Assumes the inverter's
+    own reserve sits at/above soc_min: a battery honestly BELOW the floor
+    (BMS recalibration) classifies IDLE, whose self-consumption actuation
+    may drain to the inverter's own reserve — fine when that reserve is
+    the same floor, which is the typical mirrored configuration."""
+    return soc_min_kwh + max(0.1, 0.02 * capacity_kwh)
+
+
 def classify_action(
     charge_kw: float,
     discharge_kw: float,
