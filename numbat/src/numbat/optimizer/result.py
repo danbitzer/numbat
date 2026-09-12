@@ -28,6 +28,15 @@ def hold_floor_kwh(soc_min_kwh: float, capacity_kwh: float) -> float:
     return soc_min_kwh + max(0.1, 0.02 * capacity_kwh)
 
 
+def charge_ceiling_kwh(soc_max_kwh: float, capacity_kwh: float) -> float:
+    """SoC at/above which the battery counts as FULL for classification (the
+    mirror of hold_floor_kwh, same sensor-quantization margin): a battery
+    with less room than this can't usefully take a charge, so solar the plan
+    spills next to it is CURTAIL (nowhere to put it), not NO_CHARGE (a
+    decision to keep the room)."""
+    return soc_max_kwh - max(0.1, 0.02 * capacity_kwh)
+
+
 def classify_action(
     charge_kw: float,
     discharge_kw: float,
@@ -35,6 +44,7 @@ def classify_action(
     pv_used_kw: float,
     load_kw: float,
     holdable: bool = True,
+    chargeable: bool = True,
 ) -> Action:
     """Grid-coupled semantics: charge/discharge are reserved for battery moves
     a self-consumption inverter mode would NOT make on its own.
@@ -50,9 +60,19 @@ def classify_action(
       action must carry (the export cap rides the orthogonal `curtail`
       attribute). `holdable` gates it: a battery at its floor has nothing
       worth holding, so that case stays IDLE.
-    - NO_CHARGE: battery idle while PV surplus is EXPORTED rather than stored —
-      i.e. self-consumption would charge, but the plan defers the charge to a
-      cheaper window. Block charging, still cover load dips.
+    - NO_CHARGE: the battery is not charging although there is PV surplus it
+      could take and room to take it — i.e. self-consumption WOULD charge,
+      but the plan keeps the room (a cheaper or paid fill later: a negative
+      buy price, or a better solar window). The surplus is exported or, at
+      negative feed-in, spilled under the `curtail` attribute — either way
+      the actuation is "block charging, still cover load dips"; plain
+      self-consumption + cap would fill the battery and defeat the plan
+      (seen in a 2026-09-10 replay: draining into the house and spilling
+      8.9 kW at −8c to be paid 15c to refill from the grid at 12:30).
+      `chargeable` gates it: a full battery spilling solar is CURTAIL.
+      Checked after HOLD (the stronger fence) and before CURTAIL.
+    - CURTAIL: PV spilled with nowhere to put it — the battery is full or
+      already charging at its maximum.
     - IDLE: everything else self-consumption-shaped (running the house off the
       battery, charging from excess PV) — the inverter's native mode does
       this with second-by-second load tracking a 5-min setpoint can't match.
@@ -71,10 +91,11 @@ def classify_action(
         and pv_used_kw < load_kw - POWER_TOL_KW
     ):
         return Action.HOLD  # grid serves the house; keep the battery out of it
+    surplus = pv_kw - load_kw > POWER_TOL_KW
+    if chargeable and charge_kw <= POWER_TOL_KW and surplus:
+        return Action.NO_CHARGE  # room and surplus, yet not charging: keep the room
     if pv_kw > CURTAIL_TOL_KW and pv_used_kw < pv_kw - CURTAIL_TOL_KW:
         return Action.CURTAIL
-    if battery_inactive and pv_used_kw - load_kw > POWER_TOL_KW:
-        return Action.NO_CHARGE  # surplus exported, not stored: defer the charge
     return Action.IDLE
 
 
@@ -84,9 +105,12 @@ def solution_to_plan(
     inputs: OptimizerInputs,
     computed_at: datetime | None = None,
     hold_floor_kwh: float = 0.0,
+    charge_ceiling_kwh: float = float("inf"),
 ) -> Plan:
     """hold_floor_kwh: SoC at/below which HOLD stops being classified (the
-    battery floor plus a small margin) — holding an empty battery is noise."""
+    battery floor plus a small margin) — holding an empty battery is noise.
+    charge_ceiling_kwh: SoC at/above which NO_CHARGE stops being classified
+    (the battery is full: spilled solar is CURTAIL, not a kept room)."""
     intervals: list[PlanInterval] = []
     net_battery = solution.charge_kw - solution.discharge_kw
     dt = inputs.dt_hours
@@ -105,6 +129,7 @@ def solution_to_plan(
                     solution.pv_used_kw[i],
                     inputs.load[i],
                     holdable=float(solution.soc_kwh[i]) > hold_floor_kwh,
+                    chargeable=float(solution.soc_kwh[i]) < charge_ceiling_kwh,
                 ),
                 power_kw=float(net_battery[i]),
                 soc_start=float(solution.soc_kwh[i]),

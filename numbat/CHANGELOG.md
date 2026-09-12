@@ -28,6 +28,28 @@
   automations, template sensors and both blueprints are untouched. DOCS has
   the full flow → action + attributes reference and a template-sensor
   recipe for the friendly words in HA history.
+- **`no_charge` now covers every "keep the room" case, not only exported
+  surplus.** The classifier used to publish `curtail` whenever solar was
+  spilled, even when the battery had room and the plan was deliberately
+  not filling it (2026-09-10 replay, 10:00: draining into the house and
+  spilling 8.9 kW at −8c feed-in to be *paid* 15c/kWh to refill from the
+  grid at 12:30). `curtail` actuates as plain self-consumption + export
+  cap, so the real inverter filled the battery from solar and defeated
+  the plan. Now: battery not charging + solar surplus + room ⇒
+  `no_charge` (with the `curtail` attribute when feed-in is negative);
+  `curtail` is reserved for solar with nowhere to go (battery full or
+  charging at its maximum). Both blueprints already actuate `no_charge`
+  (generic: your `no_charge_actions`; sungrow: the `no_charge` mode) —
+  **if your generic automation has no `no_charge_actions`, add them** or
+  these intervals behave as idle exactly as before.
+- **Free solar fills land as early as possible.** Within a window where
+  spilled solar is worthless either way, the solver used to be
+  indifferent to *when* the battery filled from it and could show it
+  sitting idle beside spilled solar for hours (the inverter would have
+  been storing it). A tiny tail of the bird-in-hand term now runs past
+  its 4-hour window to the horizon end (≤ ~0.04c/kWh total — a pure
+  tie-break, below any price the plan trades on), and the solver's MIP
+  gap is tightened from 1e-4 to 1e-6 so tie-breaks that small decide.
 - Fix: a live-spike-suppressed grid charge left the interval's numbers
   (grid import, end-of-interval SoC, meter cost) as if the charge still
   happened. Step 0 is now re-stated as what `idle` actuates during a

@@ -307,7 +307,15 @@ A few quieter mechanisms keep the plan sensible:
   it bounds the term's total influence on any single decision to ~0.2c/kWh
   — a genuine tiebreak that no real price signal loses to — and stops the
   reward from growing toward the end of the plan, which would quietly
-  push *sales* later (the very deferral risk it exists to kill). One
+  push *sales* later (the very deferral risk it exists to kill). Beyond
+  the 4 hours a far smaller tail of the same term (about 0.001c per kWh
+  per hour, ≤ ~0.04c/kWh over the whole horizon) runs to the end of the
+  plan as a pure tie-break: filling the battery from solar that would
+  otherwise be thrown away is worth the same at 10:00 as at 12:00, and
+  without the tail the solver picks either — showing a battery sitting
+  idle beside spilled solar that the inverter would in fact be storing.
+  With it, a free fill lands as early as it can, and the solver's
+  optimality gap is tightened so tie-breaks this small actually decide. One
   side effect worth knowing: with the import-reluctance toll switched off,
   the battery may briefly prefer holding charge on a dead-flat day while
   the grid serves the house — the cost difference is a couple of tenths

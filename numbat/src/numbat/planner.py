@@ -45,6 +45,7 @@ from numbat.optimizer.model import (
 )
 from numbat.optimizer.result import (
     POWER_TOL_KW,
+    charge_ceiling_kwh,
     classify_action,
     hold_floor_kwh,
     solution_to_plan,
@@ -475,6 +476,9 @@ class Planner:
             hold_floor_kwh=hold_floor_kwh(
                 self._battery_params.soc_min_kwh, self._battery_params.capacity_kwh
             ),
+            charge_ceiling_kwh=charge_ceiling_kwh(
+                self._battery_params.soc_max_kwh, self._battery_params.capacity_kwh
+            ),
         )
         if solution.status.endswith("(hysteresis)"):
             plan.solver_status = solution.status
@@ -587,6 +591,10 @@ class Planner:
             holdable=float(free.soc_kwh[0])
             > hold_floor_kwh(
                 self._battery_params.soc_min_kwh, self._battery_params.capacity_kwh
+            ),
+            chargeable=float(free.soc_kwh[0])
+            < charge_ceiling_kwh(
+                self._battery_params.soc_max_kwh, self._battery_params.capacity_kwh
             ),
         )
         if free_action == prev_action:

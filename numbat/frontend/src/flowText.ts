@@ -132,6 +132,13 @@ export function flowWords(
       : null;
   const later = useSays ?? `${cents(v.buy)} now`;
   const paused = pvOff ? "; panels paused" : "";
+  // the next fill in words: "from solar at 12:00", "from the grid at 12:30
+  // — paid 15c/kWh" (a negative buy price is the whole point of waiting)
+  const fillSays = f.next_fill_time
+    ? `from ${f.next_fill_source === "grid" ? "the grid" : "solar"} at ${when(f.next_fill_time)}${
+        f.next_fill_price != null && f.next_fill_price < 0 ? ` — paid ${cents(-f.next_fill_price)}/kWh` : ""
+      }`
+    : null;
   let words: FlowWords;
   switch (f.key) {
     case "storing_solar":
@@ -159,9 +166,7 @@ export function flowWords(
         opts.action === "no_charge" && f.next_fill_time
           ? {
               label: "Selling solar now, filling later",
-              sub: `selling at ${cents(v.sell)} now; the battery fills from ${
-                f.next_fill_source === "grid" ? "the grid" : "solar"
-              } at ${when(f.next_fill_time)}`,
+              sub: `selling at ${cents(v.sell)} now; the battery fills ${fillSays}`,
             }
           : {
               label: "Selling solar",
@@ -176,8 +181,8 @@ export function flowWords(
         ? ""
         : charging
           ? "; the battery is charging at its maximum"
-          : f.next_fill_time
-            ? `; the battery fills at ${when(f.next_fill_time)}`
+          : fillSays
+            ? `; the battery fills ${fillSays}`
             : "; the battery isn't charging yet";
       words = {
         label: full ? "Battery full, holding back solar" : "Holding back solar",
@@ -203,12 +208,20 @@ export function flowWords(
       break;
     }
     case "selling_stored_energy":
-      words = {
-        label: "Selling stored energy",
-        sub: `${opts.liveSpike ? "price spike — " : ""}${kw(v.grid_export_kw)} at ${cents(v.sell)}${
-          f.soc_min_ahead_pct != null ? ` · keeps at least ${Math.round(f.soc_min_ahead_pct)}% over the next 12 h` : ""
-        }`,
-      };
+      // selling at a loss only makes sense to make room for a paid grid
+      // fill: say so, or the tile looks like a bug
+      words =
+        v.sell < 0 && f.next_fill_price != null && f.next_fill_price < 0 && fillSays
+          ? {
+              label: "Making room to be paid to refill",
+              sub: `exporting ${kw(v.grid_export_kw)} at ${cents(v.sell)} now; the battery refills ${fillSays}`,
+            }
+          : {
+              label: "Selling stored energy",
+              sub: `${opts.liveSpike ? "price spike — " : ""}${kw(v.grid_export_kw)} at ${cents(v.sell)}${
+                f.soc_min_ahead_pct != null ? ` · keeps at least ${Math.round(f.soc_min_ahead_pct)}% over the next 12 h` : ""
+              }`,
+            };
       break;
     case "running_on_grid":
       words =
@@ -226,9 +239,7 @@ export function flowWords(
       words = f.next_fill_time
         ? {
             label: f.next_fill_source === "grid" ? "Waiting for a cheap price" : "Waiting for sun",
-            sub: `battery at ${soc ?? "its floor"} — fills from ${
-              f.next_fill_source === "grid" ? "the grid" : "solar"
-            } at ${when(f.next_fill_time)}`,
+            sub: `battery at ${soc ?? "its floor"} — fills ${fillSays}`,
           }
         : { label: "Waiting", sub: `battery at ${soc ?? "its floor"}; waiting for sun or a cheap price` };
       break;

@@ -29,8 +29,8 @@ FLOWS = (
     "charging_from_grid",  # action charge: forced charge, grid-side kW beyond any solar
     "selling_stored_energy",  # action discharge: forced discharge to the grid
     "running_on_grid",  # action hold: battery fenced, the house imports
-    "holding_back_solar",  # action curtail: solar spilled, export capped
-    "selling_solar",  # action no_charge, or idle with the surplus exported (battery full)
+    "holding_back_solar",  # curtail, or no_charge spilling: solar thrown away
+    "selling_solar",  # no_charge exporting, or idle with the surplus exported (battery full)
     "storing_solar",  # idle, battery charging from the surplus
     "running_on_battery",  # idle, battery discharging into the house
     "solar_running_house",  # idle, solar covers the house, battery untouched
@@ -51,7 +51,10 @@ def flow_for(iv: PlanInterval) -> str:
         case Action.CURTAIL:
             return "holding_back_solar"
         case Action.NO_CHARGE:
-            return "selling_solar"
+            # the room is being kept either way; what the surplus does
+            # (exported, or spilled under the cap) is what the user sees
+            spilled = iv.pv_kw - iv.pv_used_kw > CURTAIL_TOL_KW
+            return "holding_back_solar" if spilled else "selling_solar"
     # idle: self-consumption, whatever the inverter does with it
     if iv.power_kw > POWER_TOL_KW:
         return "storing_solar"
@@ -108,8 +111,11 @@ def details(plan: Plan, capacity_kwh: float | None) -> dict | None:
     later = plan.intervals[1:]
     fill = next((iv for iv in later if iv.power_kw > POWER_TOL_KW), None)
     if fill is not None:
+        grid = fill.action == Action.CHARGE
         out["next_fill_time"] = fill.start.isoformat()
-        out["next_fill_source"] = "grid" if fill.action == Action.CHARGE else "solar"
+        out["next_fill_source"] = "grid" if grid else "solar"
+        if grid:
+            out["next_fill_price"] = fill.buy  # negative = paid to take it
     use = next((iv for iv in later if iv.power_kw < -POWER_TOL_KW), None)
     if use is not None:
         # what the stored energy is next spent on: the house (the buy price

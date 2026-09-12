@@ -725,6 +725,34 @@ def test_fallback_carries_pv_off_only_while_the_step_plans_no_pv():
     assert planner.fallback(NOW).pv_off is False
 
 
+def test_no_charge_keeps_the_room_for_a_paid_grid_fill():
+    """The 2026-09-10 08:30 replay: solar surplus at negative feed-in with
+    room in the battery, and a deep negative BUY price a few hours out.
+    The plan spills the solar now to be paid to refill from the grid
+    later. Publishing `curtail` would actuate as self-consumption + cap —
+    the inverter would fill the battery from solar and forfeit the paid
+    fill — so the action must be `no_charge` (cap on the attribute) and
+    the dashboard says the battery fills from the grid later."""
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    planner = offline_planner(settings)
+    data = synthetic_cycle_data(settings)
+    data.inputs.pv[:] = 4.0
+    data.inputs.sell[:] = -0.05
+    data.inputs.buy[:] = 0.09
+    data.inputs.buy[6:] = -0.15  # paid to import from 3 h out
+    data.prices.current_sell = -0.05
+    data = replace(data, inputs=replace(data.inputs, soc0_kwh=9.6))  # 75%
+    plan = planner.optimize(data, NOW)
+    s0 = plan.intervals[0]
+    assert s0.action == Action.NO_CHARGE
+    assert s0.pv_spill_kw > 3.0
+    assert plan.curtail_export is True
+    assert s0.flow == "holding_back_solar"
+    fl = plan.explanation["flow"]
+    assert fl["next_fill_source"] == "grid"
+    assert any(iv.action == Action.CHARGE for iv in plan.intervals[6:])
+
+
 def test_curtail_action_survives_where_grid_import_is_not_wanted():
     """PV spill at negative feed-in but POSITIVE buy: PV serves the house
     (importing would cost money), the rest is spilled, the full battery

@@ -274,10 +274,17 @@ def test_classify_action_grid_coupled_semantics():
         ((3.0, 0.0, 5.0, 5.0, 2.0), Action.IDLE),
         # charging beyond the PV surplus: grid charge
         ((5.0, 0.0, 2.0, 2.0, 1.0), Action.CHARGE),
-        # spilling PV on purpose (negative feed-in)
-        ((0.0, 0.0, 5.0, 1.0, 1.0), Action.CURTAIL),
+        # spilling PV with room in the battery and not charging: the plan is
+        # keeping the room (self-consumption + cap would fill it) — block
+        # charging; the cap rides the curtail attribute
+        ((0.0, 0.0, 5.0, 1.0, 1.0), Action.NO_CHARGE),
+        # spilling PV while charging at the battery's maximum: nowhere to
+        # put the rest — curtail
+        ((5.0, 0.0, 9.0, 7.0, 1.0), Action.CURTAIL),
         # battery flat while PV surplus is exported, not stored: defer charge
         ((0.0, 0.0, 5.0, 5.0, 2.0), Action.NO_CHARGE),
+        # discharging into the house while spilling: still keeping the room
+        ((0.0, 0.2, 5.0, 0.0, 0.2), Action.NO_CHARGE),
         # battery held while the grid serves the load: the NO_DISCHARGE gap,
         # now a first-class action
         ((0.0, 0.0, 0.0, 0.0, 0.5), Action.HOLD),
@@ -292,7 +299,15 @@ def test_classify_action_grid_coupled_semantics():
     # a battery at its floor has nothing worth holding: stays IDLE (and the
     # curtail classification comes back where PV is spilled)
     assert classify_action(0.0, 0.0, 0.0, 0.0, 0.5, holdable=False) == Action.IDLE
+    # (a dawn trickle below the load isn't a surplus to keep room for)
     assert classify_action(0.0, 0.0, 0.3, 0.05, 0.5, holdable=False) == Action.CURTAIL
+    assert classify_action(0.0, 0.0, 5.0, 1.0, 1.0, holdable=False) == Action.NO_CHARGE
+    # a FULL battery spilling PV has no room to keep: curtail, whatever the
+    # surplus; and full + exporting is plain idle (self-consumption exports)
+    assert classify_action(0.0, 0.0, 5.0, 1.0, 1.0, chargeable=False) == Action.CURTAIL
+    assert classify_action(0.0, 0.0, 5.0, 5.0, 2.0, chargeable=False) == Action.IDLE
+    floor_and_full = classify_action(0.0, 0.0, 0.3, 0.05, 0.5, holdable=False, chargeable=False)
+    assert floor_and_full == Action.CURTAIL
 
 
 def test_scenario_defer_charge_to_cheaper_window():
@@ -660,6 +675,23 @@ def test_bird_in_hand_yields_to_a_genuinely_better_window():
     assert sol.charge_kw[0] < 0.1
     # the charge lands inside the negative-price window
     assert sol.charge_kw[6:].max() > 3.0
+
+
+def test_free_solar_fill_lands_as_early_as_possible():
+    """A negative-feed-in window 6 h out (beyond the bird-in-hand window)
+    with solar surplus and room: filling now or at the window's end costs
+    the same — the spilled solar is worthless either way — so without a
+    tie-break the solver picks either, and showed the battery idle beside
+    spilled solar (the inverter would have been storing it). The tail
+    settles it: the fill starts when the surplus does."""
+    T = 24
+    sell = np.concatenate([np.full(12, 0.05), np.full(12, -0.03)])
+    pv = np.concatenate([np.zeros(12), np.full(12, 6.0)])
+    soc0 = 0.75 * BATTERY.capacity_kwh
+    inputs = make_inputs(T=T, sell=sell, buy=0.09, pv=pv, load=1.0, soc0=soc0)
+    sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.10))
+    assert sol.charge_kw[12] > 4.5
+    assert sol.charge_kw[12:16].min() > 4.0  # the room (3.2 kWh) fills without a gap
 
 
 def test_bird_in_hand_accrual_is_window_capped():

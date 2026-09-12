@@ -74,10 +74,11 @@ class Action(StrEnum):
     CHARGE = "charge"  # from the grid
     DISCHARGE = "discharge"  # exporting stored energy
     IDLE = "idle"  # self-consumption territory
-    # Battery idle where self-consumption WOULD charge: PV surplus exported
-    # instead of stored, to defer the charge to a cheaper window. Block
-    # charging but still let the battery cover a load dip.
-    # Actuate: self-consumption + battery max-charge-power 0.
+    # Battery not charging where self-consumption WOULD: there is PV surplus
+    # and room, and the plan keeps the room (a cheaper or paid fill later).
+    # The surplus is exported, or spilled under the `curtail` attribute at
+    # negative feed-in. Block charging but still let the battery cover a
+    # load dip. Actuate: self-consumption + battery max-charge-power 0.
     NO_CHARGE = "no_charge"
     # The mirror of NO_CHARGE: battery fully held (no charge, no discharge)
     # while the GRID serves the house — the plan prefers importing (cheap or

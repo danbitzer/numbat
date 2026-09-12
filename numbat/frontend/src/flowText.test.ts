@@ -72,7 +72,7 @@ describe("flowWords", () => {
       { now: T0 },
     );
     expect(deferred.label).toBe("Holding back solar");
-    expect(deferred.sub).toContain("the battery fills at");
+    expect(deferred.sub).toContain("the battery fills from solar at");
     const lim = flowWords({ key: "holding_back_solar", pv_spill_kw: 3 }, values({ sell: 0.08, battery_kw: 4, soc_start_pct: 75, soc_max_pct: 95 }));
     expect(lim.label).toBe("Holding back solar");
     expect(lim.sub).toContain("export limit reached");
@@ -143,6 +143,22 @@ describe("flowWords", () => {
       { now: T0 },
     );
     expect(sale.sub).toContain("to sell at 60c at");
+  });
+  test("selling at a loss to make room for a paid refill says so", () => {
+    const w = flowWords(
+      { key: "selling_stored_energy", next_fill_time: later(4), next_fill_source: "grid", next_fill_price: -0.15 },
+      values({ sell: -0.008, battery_kw: -10, grid_export_kw: 8.6 }),
+      { now: T0 },
+    );
+    expect(w.label).toBe("Making room to be paid to refill");
+    expect(w.sub).toContain("paid 15c/kWh");
+    const deferred = flowWords(
+      { key: "holding_back_solar", export_capped: true, pv_spill_kw: 8.9, next_fill_time: later(2.5), next_fill_source: "grid", next_fill_price: -0.15 },
+      values({ sell: -0.083, battery_kw: -0.2, soc_start_pct: 41, soc_max_pct: 100 }),
+      { now: T0 },
+    );
+    expect(deferred.sub).toContain("fills from the grid at");
+    expect(deferred.sub).toContain("paid 15c/kWh");
   });
   test("S11 an empty battery waits for what fills it next", () => {
     const sun = flowWords({ key: "battery_empty", next_fill_time: later(4), next_fill_source: "solar" }, values({ soc_start_pct: 5 }), { now: T0 });

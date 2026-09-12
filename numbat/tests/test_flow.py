@@ -148,6 +148,13 @@ def test_annotate_fills_modifiers_and_spill_per_interval():
     assert (night.export_capped, night.pv_off, night.pv_spill_kw) == (False, False, 0.0)
 
 
+def test_no_charge_reads_as_what_the_surplus_does():
+    # exported surplus: selling solar; spilled surplus (cap on): holding back
+    exported = iv(Action.NO_CHARGE, pv_kw=4.0, pv_used_kw=4.0, grid_export_kw=3.0)
+    assert flow_for(exported) == "selling_solar"
+    assert flow_for(iv(Action.NO_CHARGE, pv_kw=4.0, pv_used_kw=1.0)) == "holding_back_solar"
+
+
 def test_curtail_at_positive_feed_in_is_an_export_limit_cut():
     # the export limit, not a negative price, spills the solar: the flow is
     # still holding_back_solar but nothing is "capped" by price
@@ -225,6 +232,8 @@ def test_details_quote_the_look_ahead_facts():
     )
     annotate(g)
     assert details(g, 44.8)["next_fill_source"] == "grid"
+    assert details(g, 44.8)["next_fill_price"] == 0.30
+    assert "next_fill_price" not in d  # a solar fill has no price
     lone = plan(iv(Action.IDLE, 0, load_kw=0.0))
     annotate(lone)
     assert "next_fill_time" not in details(lone, 44.8)
