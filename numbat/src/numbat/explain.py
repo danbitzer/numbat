@@ -13,6 +13,7 @@ what was actually published.
 
 from __future__ import annotations
 
+from numbat.flow import details as flow_details
 from numbat.models import Plan
 
 
@@ -63,4 +64,7 @@ def build_explanation(
             "curtail": curtail,
             "pv_off": pv_off,
         },
+        # what the energy is doing, in household words, plus the look-ahead
+        # facts the tile quotes (numbat.flow)
+        "flow": flow_details(plan, capacity_kwh),
     }

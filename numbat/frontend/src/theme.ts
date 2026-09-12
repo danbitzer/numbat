@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { Action } from "./api";
+import type { FlowFamily } from "./flowText";
 
 // Design 1A ("HA Cards") palette. Actions: charge = HA-blue accent,
 // discharge = purple action accent, idle = neutral segment grey. no_charge
@@ -15,6 +16,18 @@ export const ACTION_COLORS: Record<Action, string> = {
   no_charge: "#2fae7a",
   hold: "#2f9fae",
   curtail: "#efa63c",
+};
+
+// The Planned-mode strip and the Action-now tile colour by flow FAMILY (see
+// flowText.ts): the self-consumption flows share the idle grey, the five
+// overrides keep the action colours they map onto.
+export const FLOW_COLORS: Record<FlowFamily, string> = {
+  self: "var(--seg-idle)",
+  selling_solar: "#2fae7a",
+  holding_back_solar: "#efa63c",
+  charging_from_grid: "#3f7fd0",
+  selling_stored_energy: "#8a52c9",
+  running_on_grid: "#2f9fae",
 };
 
 // Series colours are theme-independent per the handoff.

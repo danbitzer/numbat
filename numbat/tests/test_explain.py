@@ -90,6 +90,9 @@ def test_levers_reflect_what_armed_the_solve():
         live_spike=True,
         prices_estimated=True,
     )
+    assert exp["flow"]["key"] == "" or exp["flow"]["key"] in (
+        "waiting", "battery_empty", "running_on_battery", "storing_solar"
+    )
     assert exp["levers"] == {
         "spike_reserve": reserve,
         "daily_target": True,

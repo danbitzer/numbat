@@ -166,6 +166,10 @@ def create_app(
                         "grid_export_kw": iv.grid_export_kw,
                         "interval_cost": iv.interval_cost,
                         "pv_used_kw": iv.pv_used_kw,
+                        "flow": iv.flow,
+                        "export_capped": iv.export_capped,
+                        "pv_off": iv.pv_off,
+                        "pv_spill_kw": iv.pv_spill_kw,
                     }
                     for iv in plan.intervals
                 ],

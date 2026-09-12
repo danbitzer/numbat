@@ -29,6 +29,9 @@ from numbat.adapters.sungrow import SungrowAdapter
 from numbat.adapters.weather import WeatherAdapter
 from numbat.config import Settings
 from numbat.explain import build_explanation
+from numbat.flow import PV_OFF_ENTRY_BUY
+from numbat.flow import annotate as annotate_flows
+from numbat.flow import details as flow_details
 from numbat.forecast.load import LoadForecaster
 from numbat.models import Action, BatteryState, Plan, PlanInterval, PriceForecast, Series
 from numbat.optimizer.model import (
@@ -211,13 +214,12 @@ class CycleData:
     vacation: dict | None = None
 
 
-# Enter PV-off only once the live buy price is at least this negative. Each
-# clear costs ~40–50 s of generation (the MPPT restart), so a price hovering
-# around zero on a 5-minute site must not toggle the actuator every
-# interval; a cent below zero is roughly where an hour of paid import for a
-# 1 kW house covers one restart. Once on, it stays on while the buy price is
-# negative at all (asymmetric, like a thermostat).
-PV_OFF_ENTRY_BUY = -0.01  # $/kWh
+# PV_OFF_ENTRY_BUY (numbat.flow): enter PV-off only once the live buy price
+# is at least a cent negative. Each clear costs ~40–50 s of generation (the
+# MPPT restart), so a price hovering around zero on a 5-minute site must not
+# toggle the actuator every interval; a cent below zero is roughly where an
+# hour of paid import for a 1 kW house covers one restart. Once on, it stays
+# on while the buy price is negative at all (asymmetric, like a thermostat).
 
 
 def pv_off_wanted(
@@ -503,6 +505,7 @@ class Planner:
             previously=self.previous_plan.pv_off if self.previous_plan else False,
             estimate=data.prices.current_estimate,
         )
+        annotate_flows(plan)
         plan.explanation = build_explanation(
             plan,
             hold_value=terminal,
@@ -612,7 +615,11 @@ class Planner:
         if step0.action == Action.CHARGE and step0.grid_import_kw > 0.01:
             log.warning("live spike active: suppressing planned grid charge")
             step0.action = Action.IDLE
+            # keep the interval's numbers consistent with the new action: the
+            # suppressed charge no longer comes in over the meter
+            step0.grid_import_kw = max(0.0, step0.grid_import_kw - step0.power_kw)
             step0.power_kw = 0.0
+            step0.soc_end = step0.soc_start
         return plan
 
     async def run_cycle(self, now: datetime | None = None) -> Plan:
@@ -635,7 +642,7 @@ class Planner:
         if not remaining:
             raise SolverError("solver failed and previous plan is fully elapsed")
         s0 = remaining[0]
-        return Plan(
+        plan = Plan(
             intervals=remaining,
             objective_cost=prev.objective_cost,
             solver_status="stale (reusing previous plan)",
@@ -672,6 +679,9 @@ class Planner:
                 "stale": True,
             },
         )
+        annotate_flows(plan)
+        plan.explanation["flow"] = flow_details(plan, self._battery_params.capacity_kwh)
+        return plan
 
 
 def battery_params(settings: Settings) -> BatteryParams:

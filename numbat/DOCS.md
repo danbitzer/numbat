@@ -384,7 +384,7 @@ grid if `grid.export_limit_kw` allows it.
 | Entity | Meaning |
 |---|---|
 | `sensor.numbat_status` | `ok` / `error` / `disabled` / `unconfigured`; heartbeat with solve stats and `load_forecast`. Anything other than `ok` makes the actuator blueprint fail safe to self-consumption |
-| `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / hold / curtail (carries `power_kw`/`power_w`/`curtail` attributes, atomic with the action — `curtail` means export is withheld this interval, possibly *during* a charge; `hold` means the battery is fenced in both directions while the grid — net of any PV, which most inverters route to the house first — serves the load; `pv_off` means the plan wants PV generation STOPPED this interval — the buy price is negative, so the house and any charge should draw from the grid, which pays — for inverters that can switch PV off; with it, `hold` really is "the grid serves the house" and `charge` really is grid charging) |
+| `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / hold / curtail (carries `power_kw`/`power_w`/`curtail` attributes, atomic with the action — `curtail` means export is withheld this interval, possibly *during* a charge; `hold` means the battery is fenced in both directions while the grid — net of any PV, which most inverters route to the house first — serves the load; `pv_off` means the plan wants PV generation STOPPED this interval — the buy price is negative, so the house and any charge should draw from the grid, which pays — for inverters that can switch PV off; with it, `hold` really is "the grid serves the house" and `charge` really is grid charging; `flow` is the same interval in household words — see the flow vocabulary below — and `pv_spill_kw` the solar the plan throws away) |
 
 Actions are **grid-coupled**: `charge` means charging *from the grid*, and
 `discharge` means exporting stored energy *to the grid* — the moves your
@@ -415,6 +415,50 @@ These sensors are republished every cycle and disappear on HA restart until the 
 cycle (~5 min). The full interval-by-interval plan is not published as a sensor —
 it's a lot of data for the recorder to store every 5 minutes; view it on the
 dashboard instead.
+
+### The flow vocabulary (what the dashboard says)
+
+The action strings above are a contract for automations, and they are
+battery-centric: `charge` means *forced charge from the grid*, `idle`
+means *self-consumption — whatever the inverter does with it*. That makes
+`idle` the busiest mode on the system (solar filling the battery, the
+battery running the house) and the worst word for it. So the dashboard
+speaks a second vocabulary, the **flow**: what the energy is doing this
+interval, derived from the plan **action-first** — the action decides the
+family, the plan's numbers only refine within self-consumption — so the tile
+can never disagree with the instruction the action sensor published. It is
+also published, additively, as the `flow` attribute of `sensor.numbat_action`
+and per interval in `/api/plan`. Every state the system can be in:
+
+| `flow` | dashboard label | action sensor state · attributes | what is happening |
+|---|---|---|---|
+| `charging_from_grid` | Charging from the grid · *Getting paid to fill the battery* (buy < 0) | `charge` · `power_w` = battery setpoint; `pv_off` may be true | forced charge; the grid supplies whatever solar doesn't. Sub-label quotes the grid-side kW and "8c now, 30c at 7 am" |
+| `selling_stored_energy` | Selling stored energy | `discharge` · `power_w` | forced discharge to the grid; "price spike —" when `live_spike`; "keeps at least N% over the next 12 h" |
+| `running_on_grid` | Saving the battery for 6 am · *Getting paid to use the grid* (buy < 0) | `hold` · `pv_off` may be true, `curtail` may be true | battery fenced both ways; the house imports (net of any solar unless PV is off) |
+| `holding_back_solar` | Holding back solar · *Battery full, holding back solar* | `curtail` · `curtail` true, `pv_spill_kw` > 0 | export capped and the plan spills solar (battery full or charging at its maximum) |
+| `selling_solar` | Selling solar · *Selling solar now, filling later* | `no_charge` (surplus exported instead of stored, to fill later) — or `idle` with the surplus exported because the battery is full | solar → house, the rest → grid |
+| `storing_solar` | Storing solar · *Storing solar, not exporting* (`curtail` true) | `idle` | self-consumption: solar → house, surplus → battery; with the cap on, nothing goes out |
+| `solar_running_house` | Solar running the house | `idle` | solar covers the house exactly; battery untouched |
+| `running_on_battery` | Running on the battery | `idle` | self-consumption: battery → house |
+| `battery_empty` | Waiting for sun · Waiting for a cheap price | `idle` | battery at its floor, the house imports; sub-label says when it next fills and from what |
+| `waiting` | Nothing flowing | `idle` | nothing moving at all |
+
+Two modifiers ride any flow and are shown as words in the sub-label
+("panels paused", "· export capped") and as a stripe on the strip: the
+`curtail` attribute (export withheld — negative feed-in) and the `pv_off`
+attribute (solar generation stopped — negative buy price). `pv_spill_kw`
+is the solar the plan throws away this interval (all of it under `pv_off`).
+
+Home Assistant's history graph of `sensor.numbat_action` still shows the
+contract words. For the friendly words in history, a template sensor is one
+line and changes state only when the flow changes:
+
+```yaml
+template:
+  - sensor:
+      - name: Numbat flow
+        state: "{{ state_attr('sensor.numbat_action', 'flow') }}"
+```
 
 ## Dashboard
 

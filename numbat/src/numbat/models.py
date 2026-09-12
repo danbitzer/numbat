@@ -107,6 +107,14 @@ class PlanInterval:
     # PV the plan actually uses this interval (the rest is curtailed);
     # 0 with pv_kw > 0 means the plan wants PV OFF (see Plan.pv_off).
     pv_used_kw: float = 0.0
+    # The flow vocabulary (numbat.flow): what the energy is doing, in
+    # household words, derived action-first from this interval; plus the two
+    # orthogonal modifiers as they would apply to this interval (step 0
+    # mirrors the plan's live-price-gated flags) and the solar thrown away.
+    flow: str = ""
+    export_capped: bool = False
+    pv_off: bool = False
+    pv_spill_kw: float = 0.0
 
 
 @dataclass

@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+- **The dashboard now speaks the flow vocabulary.** The action sensor's
+  words are a contract for automations (`charge` = forced charge from the
+  grid, `idle` = self-consumption, …) and they stay exactly as they are —
+  but `idle` is the busiest, most valuable mode (solar filling the
+  battery, the battery running the house) and read as "the add-on has
+  stopped", `no_charge` read as a fault, and a negative-price day showed
+  `idle` with a curtail island once the battery filled. The Action-now tile
+  and the Planned-mode strip now show what the energy is *doing*, derived
+  action-first from the plan (so the tile can never disagree with the
+  published instruction): *Storing solar · Solar running the house · Running
+  on the battery · Selling solar (now, filling later) · Holding back solar ·
+  Charging from the grid / Getting paid to fill the battery · Selling stored
+  energy · Saving the battery for 6 am / Getting paid to use the grid ·
+  Waiting for sun / a cheap price*, each with the price or time that is the
+  "why" on the second line. The strip colours by family (one grey for the
+  four solar-&-battery flows, the battery chart underneath shows which),
+  stripes any interval where export is capped or PV is off, and its tooltip
+  (tap on touch screens) names the flow. "More info" gains a raw
+  reconciliation line — the exact state and attributes published, the
+  solver status and validity — for trace hunting. Additive attributes on
+  `sensor.numbat_action`: `flow` (the vocabulary key) and `pv_spill_kw` (solar
+  the plan throws away); every `/api/plan` interval carries `flow`,
+  `export_capped`, `pv_off`, `pv_spill_kw`. Nothing existing is renamed —
+  automations, template sensors and both blueprints are untouched. DOCS has
+  the full flow → action + attributes reference and a template-sensor
+  recipe for the friendly words in HA history.
+- Fix: a live-spike-suppressed grid charge left the interval's grid-import
+  and end-of-interval SoC numbers as if the charge still happened.
+
 ## 0.20.0
 
 - **PV off: a `pv_off` flag on the action sensor, and a blueprint for the

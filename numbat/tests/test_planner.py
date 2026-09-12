@@ -396,7 +396,14 @@ def test_live_spike_guard_suppresses_grid_charge():
     data = synthetic_cycle_data(settings, live_spike=True)
     data.inputs.buy[0] = -0.10  # would normally trigger a grid charge now
     plan = planner.optimize(data, NOW)
-    assert plan.intervals[0].action != Action.CHARGE
+    step0 = plan.intervals[0]
+    assert step0.action != Action.CHARGE
+    # the suppressed charge no longer comes in over the meter: the numbers
+    # (and the flow the dashboard derives from them) match the new action
+    assert step0.power_kw == 0.0
+    assert step0.grid_import_kw < 1.0  # the house load only, not load + charge
+    assert step0.soc_end == step0.soc_start
+    assert step0.flow != "charging_from_grid"
 
 
 def test_sell_floor_vector_release_semantics():

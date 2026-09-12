@@ -102,3 +102,7 @@ async def test_publish_plan_action_carries_pv_off_flag():
     assert action_posts and action_posts[0]["attributes"]["pv_off"] is True
     assert action_posts[0]["attributes"]["curtail"] is True
     assert action_posts[0]["state"] == "charge"
+    # the flow vocabulary rides along, additive: household words + the
+    # solar thrown away (all of it here — PV off)
+    assert action_posts[0]["attributes"]["flow"] == "charging_from_grid"
+    assert action_posts[0]["attributes"]["pv_spill_kw"] == 2.0

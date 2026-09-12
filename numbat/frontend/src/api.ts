@@ -33,6 +33,13 @@ export const PlanIntervalSchema = z.object({
   interval_cost: z.number(),
   // PV the plan uses this interval (the rest is curtailed); older backends omit it
   pv_used_kw: z.number().optional(),
+  // the flow vocabulary (numbat/flow.py): household words for what the
+  // energy is doing, the two modifiers as they apply to this interval, and
+  // the solar thrown away
+  flow: z.string().optional(),
+  export_capped: z.boolean().optional(),
+  pv_off: z.boolean().optional(),
+  pv_spill_kw: z.number().optional(),
 });
 export type PlanInterval = z.infer<typeof PlanIntervalSchema>;
 
@@ -106,6 +113,20 @@ export const ExplanationSchema = z.object({
     })
     .optional(),
   stale: z.boolean().optional(),
+  // step 0's flow plus the look-ahead facts the tile's sub-label quotes
+  flow: z
+    .looseObject({
+      key: z.string(),
+      export_capped: z.boolean().optional(),
+      pv_off: z.boolean().optional(),
+      pv_spill_kw: z.number().optional(),
+      next_fill_time: z.string().optional(),
+      next_fill_source: z.enum(["grid", "solar"]).optional(),
+      next_use_time: z.string().optional(),
+      next_use_buy: z.number().optional(),
+      soc_min_ahead_pct: z.number().optional(),
+    })
+    .nullish(),
 });
 export type Explanation = z.infer<typeof ExplanationSchema>;
 

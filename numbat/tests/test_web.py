@@ -45,6 +45,9 @@ def test_health_and_plan_endpoints():
     assert body["solver_status"] == "optimal"
     assert body["intervals"][0]["action"] == "discharge"
     assert body["intervals"][0]["power_kw"] == -3.2
+    # the flow vocabulary rides every interval (empty when never annotated)
+    for key in ("flow", "export_capped", "pv_off", "pv_spill_kw", "pv_used_kw"):
+        assert key in body["intervals"][0]
 
 
 def test_dashboard_served_from_dist(tmp_path):

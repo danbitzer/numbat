@@ -17,6 +17,7 @@ import numpy as np
 
 from numbat.config import Settings
 from numbat.explain import build_explanation
+from numbat.flow import annotate as annotate_flows
 from numbat.optimizer.model import (
     GridParams,
     OptimizerConfig,
@@ -320,6 +321,7 @@ def simulate_solve(
     # dashboard would.
     plan.curtail_export = float(sell[0]) < 0 and plan.intervals[0].grid_export_kw < 0.05
     plan.pv_off = pv_off_wanted(float(buy[0]), plan.intervals[0], previously=False)
+    annotate_flows(plan)
     plan.explanation = build_explanation(
         plan,
         hold_value=terminal,

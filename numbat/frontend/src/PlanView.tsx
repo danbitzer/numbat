@@ -1,5 +1,6 @@
 import type { PlanResponse } from "./api";
 import { BatteryChart, ForecastChart, PricesChart, type Row, SocChart } from "./charts";
+import { flowOf } from "./flowText";
 import { ModeStrip } from "./ModeStrip";
 import { Hero, Stats } from "./Tiles";
 
@@ -22,6 +23,9 @@ export function PlanView({ plan, info }: { plan: PlanResponse; info?: string | n
     gridImport: iv.grid_import_kw,
     gridExport: -iv.grid_export_kw,
     soc: iv.soc_end,
+    flow: flowOf(iv.flow, iv.action),
+    exportCapped: !!iv.export_capped,
+    pvOff: !!iv.pv_off,
   }));
 
   // Step charts need a closing point at the final interval's END, or every
