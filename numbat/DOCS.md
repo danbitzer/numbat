@@ -474,7 +474,7 @@ Import the raw GitHub URL, then create an automation from it):
   Numbat's `entities` at the integration's sensors (they are prefixed with
   the device name, e.g. `sensor.sungrow_sh15t_load_power`,
   `sensor.sungrow_sh15t_battery_level`, `sensor.sungrow_sh15t_battery_power`
-  and, for Test mode, `sensor.sungrow_sh15t_total_dc_power`) and check the
+  and, for Test mode, `sensor.sungrow_sh15t_pv_power`) and check the
   battery power sign against `battery.power_convention` — the integration
   reports positive = discharging, the same as mkaiser (`charge_negative`).
 - **`numbat_actuator.yaml`** — generic, for any inverter. You supply three
