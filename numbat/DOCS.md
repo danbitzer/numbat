@@ -444,7 +444,8 @@ and per interval in `/api/plan`. Every state the system can be in:
 | `waiting` | Nothing flowing | `idle` | nothing moving at all |
 
 Two modifiers ride any flow and are shown as words in the sub-label
-("panels paused", "· export capped") and as a stripe on the strip: the
+("panels paused", "· export capped") and as patterns on the strip —
+diagonal stripes for export capped, dots for solar off, both when both: the
 `curtail` attribute (export withheld — negative feed-in) and the `pv_off`
 attribute (solar generation stopped — negative buy price). `pv_spill_kw`
 is the solar the plan throws away this interval (all of it under `pv_off`).

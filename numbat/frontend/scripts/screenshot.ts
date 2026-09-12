@@ -65,27 +65,34 @@ function makePlan() {
     const pv = hod > 7 && hod < 17.5 ? Math.round(80 * Math.sin(((hod - 7) / 10.5) * Math.PI)) / 10 : 0;
     let sell = Math.max(0.01, buy - 0.08);
     if (pv > 4) sell = Math.min(sell, 0.04); // midday solar glut
+    if (hod >= 11 && hod < 15) sell = -0.03; // negative feed-in: export capped
     sell = Math.round(sell * 1000) / 1000;
+    const paidToImport = hod >= 12.5 && hod < 13.5; // negative buy: solar off, house on the grid
     const load = 0.5 + (hod >= 17 && hod < 21.5 ? 0.9 : 0) + (hod >= 6.5 && hod < 9 ? 0.4 : 0);
 
     let action = "idle";
     let power = 0;
     if (hod >= 17 && hod < 20) [action, power] = ["discharge", -8];
     else if (hod >= 2 && hod < 4) [action, power] = ["charge", 5]; // cheap grid top-up
+    else if (paidToImport) [action, power] = ["hold", 0]; // battery held, grid serves the house
     else if (hod >= 9 && hod < 15.5 && pv > 4.5) [action, power] = ["idle", 4]; // storing solar
     const soc_start = soc;
     soc = Math.min(CAPACITY * 0.95, Math.max(CAPACITY * 0.1, soc + (power > 0 ? power * 0.95 : power) * 0.5));
 
-    const surplus = pv - load - Math.max(0, power) + Math.max(0, -power);
+    const pv_used_kw = paidToImport ? 0 : sell < 0 ? Math.min(pv, load + Math.max(0, power)) : pv;
+    const surplus = pv_used_kw - load - Math.max(0, power) + Math.max(0, -power);
     const grid_export_kw = Math.round(Math.max(0, surplus) * 10) / 10;
     const grid_import_kw = Math.round(Math.max(0, -surplus) * 10) / 10;
     const interval_cost = Math.round((buy * grid_import_kw - sell * grid_export_kw) * 0.5 * 100) / 100;
     objective += interval_cost;
     // the flow vocabulary, mirroring numbat/flow.py (action-first)
-    const pv_used_kw = pv;
+    const pv_spill_kw = Math.round((pv - pv_used_kw) * 100) / 100;
+    if (action === "idle" && pv_spill_kw > 0.05) action = "curtail";
     const flow =
       action === "charge" ? "charging_from_grid"
       : action === "discharge" ? "selling_stored_energy"
+      : action === "hold" ? "running_on_grid"
+      : action === "curtail" ? "holding_back_solar"
       : power > 0.01 ? "storing_solar"
       : grid_export_kw > 0.05 ? "selling_solar"
       : power < -0.01 ? "running_on_battery"
@@ -96,7 +103,8 @@ function makePlan() {
       start: start.toISOString(), end: end.toISOString(), action,
       power_kw: power, soc_start, soc_end: soc, buy, sell,
       pv_kw: pv, load_kw: load, grid_import_kw, grid_export_kw, interval_cost,
-      pv_used_kw, flow, export_capped: false, pv_off: false, pv_spill_kw: 0,
+      pv_used_kw, flow, export_capped: sell < 0 && grid_export_kw < 0.05 && pv > 0,
+      pv_off: paidToImport, pv_spill_kw,
     });
   }
   const s0 = intervals[0];

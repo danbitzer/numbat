@@ -15,23 +15,36 @@ import {
 interface Segment {
   family: FlowFamily;
   flow: string; // the first flow of the run, for the tooltip
-  override: boolean; // export capped or PV off anywhere in the run
+  capped: boolean; // export capped (negative feed-in)
+  pvOff: boolean; // solar generation switched off (negative buy)
   startMs: number;
   endMs: number;
 }
 
-// Contiguous runs of the same family and the same override state: a
-// negative-price hold splits from a plain hold so the stripe has an edge.
+// Contiguous runs of the same family and the same modifiers: a
+// negative-price hold splits from a plain hold so the pattern has an edge.
 function mergeSegments(rows: Row[]): Segment[] {
   const out: Segment[] = [];
   for (const row of rows) {
     const family = familyOf(row.flow);
-    const override = row.exportCapped || row.pvOff;
     const last = out[out.length - 1];
-    if (last && last.family === family && last.override === override && last.endMs === row.t) {
+    if (
+      last &&
+      last.family === family &&
+      last.capped === row.exportCapped &&
+      last.pvOff === row.pvOff &&
+      last.endMs === row.t
+    ) {
       last.endMs = row.end;
     } else if (row.end > row.t) {
-      out.push({ family, flow: row.flow, override, startMs: row.t, endMs: row.end });
+      out.push({
+        family,
+        flow: row.flow,
+        capped: row.exportCapped,
+        pvOff: row.pvOff,
+        startMs: row.t,
+        endMs: row.end,
+      });
     }
   }
   return out;
@@ -46,9 +59,20 @@ const FAMILIES: FlowFamily[] = [
   "self",
 ];
 
-// The override stripe: a translucent diagonal hatch over the family colour.
-const STRIPE =
-  "repeating-linear-gradient(135deg, rgba(0,0,0,0.22) 0 3px, transparent 3px 7px)";
+// The two modifiers as translucent patterns over the family colour: diagonal
+// stripes for export capped, dots for solar off — layered when both apply.
+const STRIPE = "repeating-linear-gradient(135deg, rgba(0,0,0,0.22) 0 3px, transparent 3px 7px)";
+const DOTS = "radial-gradient(rgba(0,0,0,0.38) 1.2px, transparent 1.6px) 0 0 / 6px 6px";
+
+function paint(base: string, capped: boolean, pvOff: boolean): string {
+  const layers = [...(pvOff ? [DOTS] : []), ...(capped ? [STRIPE] : []), base];
+  return layers.join(", ");
+}
+
+function modifierText(seg: { capped: boolean; pvOff: boolean }): string {
+  const parts = [...(seg.capped ? ["export capped"] : []), ...(seg.pvOff ? ["solar off"] : [])];
+  return parts.length ? ` · ${parts.join(" · ")}` : "";
+}
 
 // Keep the local tooltip's center clamped this far from the strip edges so
 // the translate(-50%) panel stays inside the card.
@@ -88,7 +112,8 @@ export function ModeStrip({ rows, domain }: { rows: Row[]; domain: [number, numb
               label: FLOW_FAMILY_LABEL[f],
               color: f === "self" ? idleSegmentColor(dark) : FLOW_COLORS[f],
             })),
-            { label: "export capped / solar off", color: `${STRIPE}, ${idleSegmentColor(dark)}` },
+            { label: "export capped", color: paint(idleSegmentColor(dark), true, false) },
+            { label: "solar off", color: paint(idleSegmentColor(dark), false, true) },
           ]}
         />
       }
@@ -115,7 +140,7 @@ export function ModeStrip({ rows, domain }: { rows: Row[]; domain: [number, numb
                   style={{
                     left: `${pct(seg.startMs)}%`,
                     width: `${pct(seg.endMs) - pct(seg.startMs)}%`,
-                    background: seg.override ? `${STRIPE}, ${base}` : base,
+                    background: paint(base, seg.capped, seg.pvOff),
                   }}
                 />
               );
@@ -138,7 +163,7 @@ export function ModeStrip({ rows, domain }: { rows: Row[]; domain: [number, numb
               <TooltipPanel>
                 <span className="font-semibold whitespace-nowrap">
                   {FLOW_SHORT[local.seg.flow] ?? local.seg.flow.replace(/_/g, " ")}
-                  {local.seg.override ? " · export capped / solar off" : ""}
+                  {modifierText(local.seg)}
                 </span>
                 <span className="text-muted-foreground whitespace-nowrap">
                   {" "}

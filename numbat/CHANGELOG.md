@@ -18,8 +18,8 @@
   Waiting for sun / a cheap price*, each with the price or time that is the
   "why" on the second line. The strip colours by family (one grey for the
   four solar-&-battery flows, the battery chart underneath shows which),
-  stripes any interval where export is capped or PV is off, and its tooltip
-  (tap on touch screens) names the flow. "More info" gains a raw
+  patterns the modifiers — diagonal stripes where export is capped, dots
+  where PV is off — and its tooltip (tap on touch screens) names the flow. "More info" gains a raw
   reconciliation line — the exact state and attributes published, the
   solver status and validity — for trace hunting. Additive attributes on
   `sensor.numbat_action`: `flow` (the vocabulary key) and `pv_spill_kw` (solar
