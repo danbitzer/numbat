@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.21.0
 
 - **The dashboard now speaks the flow vocabulary.** The action sensor's
   words are a contract for automations (`charge` = forced charge from the
