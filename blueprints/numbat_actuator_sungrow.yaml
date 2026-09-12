@@ -1,0 +1,255 @@
+# Numbat actuator for the `sungrow` Home Assistant integration
+# (github.com/danbitzer/hass-sungrow-modbus — Sungrow SH-T hybrids).
+#
+# The generic blueprint (numbat_actuator.yaml) asks YOU for action sequences
+# and, for Sungrow, those grew guard/restore/ordering logic the mkaiser YAML
+# package can't provide. The `sungrow` integration does that job in tested
+# code: one action call puts the battery into a mode, another caps export,
+# a third stops PV — each guarded (a register is written only when its last-
+# polled value differs, so the 5-minute re-asserts are Modbus-silent by
+# construction), ordered (restore → fence → power → command → EMS mode),
+# and verified by read-back. So this blueprint takes two inputs and no
+# sequences: every run is three calls.
+#
+# Numbat itself never writes to your inverter — this automation (which YOU
+# own, can read, edit, trace, and disable) is the only thing that does.
+#
+# Actions are grid-coupled: "charge" = forced charge FROM THE GRID,
+# "discharge" = forced discharge TO THE GRID; battery-serves-the-house and
+# charge-from-PV-surplus arrive as "idle" (self-consumption). "no_charge" is
+# self-consumption with charging blocked; "hold" is both directions blocked
+# while the grid serves the house. Two flags ride the action, orthogonal to
+# it: `curtail` (export withheld — negative feed-in) and `pv_off` (PV
+# generation stopped — negative buy: the house, and any charge, should draw
+# from the grid, which pays).
+#
+# SAFETY, built in: every run first checks Numbat's heartbeat. If the add-on
+# is dead/stale (or reports an error), the run applies self-consumption,
+# restores the export limit and allows PV — so a crashed Numbat can never
+# leave the inverter in forced mode, capped, or with PV off. The check runs
+# every 5 minutes even without sensor changes, and also covers the sensors
+# disappearing entirely (HA restart while Numbat is down). Optionally point
+# it at the integration's grid-connected sensor: during a grid outage the
+# inverter likewise reverts to self-consumption — forced grid moves make no
+# sense islanded.
+#
+# SELF-HEALING: the integration reads every write back, and the 5-minute
+# sweep re-asserts the current action for 15 minutes after each change (and
+# for as long as a flag is active), so a lost write is repaired within
+# 5 minutes. Re-asserts write nothing when the registers already match.
+#
+# A failed call raises and the run errors (the trace shows the integration's
+# message, e.g. "forced_charge power of 16000 W is outside 0–15000 W"); the
+# next sweep tries again. Do not wrap the calls in continue_on_error. Note
+# the calls are sequential: a failing export or PV call ends the run before
+# the battery-mode call — an erroring trace on every sweep means the
+# inverter is not following the plan at all, not just missing one flag.
+#
+# Disabling this automation is the master off-switch: Numbat goes back to
+# being a pure recommendation engine.
+blueprint:
+  name: Numbat actuator (sungrow integration) — follow Numbat's battery plan
+  description: >-
+    Applies sensor.numbat_action (with its power_w, curtail and pv_off
+    attributes) to a Sungrow SH-T hybrid through the `sungrow` integration's
+    guarded actions: set_export_limit, set_pv_limitation, set_battery_mode.
+    Built-in heartbeat failsafe (self-consumption, export limit restored, PV
+    allowed when Numbat is stale, errored, or gone), self-healing 5-minute
+    re-asserts, optional grid-outage revert. No action sequences to write.
+  homeassistant:
+    min_version: 2024.10.0
+  domain: automation
+  input:
+    sungrow_device:
+      name: Sungrow inverter
+      description: The inverter device from the `sungrow` integration.
+      selector:
+        device:
+          filter:
+            - integration: sungrow
+    export_limit_w:
+      name: Normal export limit (W)
+      description: >-
+        The export limit to restore whenever the plan does not withhold
+        export, and in every failsafe. Your inverter's rating, or your DNSP
+        cap if you have one (e.g. 15000, 10000, 5000).
+      selector:
+        number:
+          min: 0
+          max: 30000
+          step: 100
+          unit_of_measurement: W
+          mode: box
+    curtail_limit_w:
+      name: Curtailed export limit (W)
+      description: >-
+        The export limit applied while the plan withholds export (negative
+        feed-in). Not 0: a 0 W feed-in limit makes the SH series hunt (a
+        constant 100–150 W import); 50 W is the usual value.
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 10
+          unit_of_measurement: W
+          mode: box
+    action_sensor:
+      name: Numbat action sensor
+      selector:
+        entity:
+          domain: sensor
+      default: sensor.numbat_action
+    setpoint_sensor:
+      name: Numbat power setpoint sensor
+      selector:
+        entity:
+          domain: sensor
+      default: sensor.numbat_power_setpoint
+    status_sensor:
+      name: Numbat status sensor
+      selector:
+        entity:
+          domain: sensor
+      default: sensor.numbat_status
+    max_heartbeat_age_minutes:
+      name: Maximum heartbeat age (minutes)
+      description: Older than this and the failsafe (self-consumption) runs.
+      selector:
+        number:
+          min: 5
+          max: 60
+          unit_of_measurement: min
+      default: 10
+    grid_sensor:
+      name: Grid connection sensor (optional)
+      description: >-
+        A binary sensor that is ON while the grid is up — pick the
+        integration's grid_connected sensor (e.g.
+        binary_sensor.sungrow_sh15t_grid_connected). When it reads OFF the
+        inverter reverts to self-consumption with export and PV restored.
+        Unavailable/unknown is treated as connected, so a flaky sensor can't
+        idle your plan. Leave at the default (a nonexistent entity) to
+        disable the check.
+      default: binary_sensor.none
+      selector:
+        entity:
+          domain: binary_sensor
+
+triggers:
+  # to: null -> fire on state VALUE changes only; the sensors' attributes are
+  # republished every cycle and must not re-run the actions
+  - trigger: state
+    entity_id: !input action_sensor
+    to: null
+  # the flags are orthogonal to the action, so they can flip while the
+  # action string holds (a price crossing zero mid-charge) — an attribute
+  # trigger fires only when its VALUE changes, so the per-cycle republishes
+  # stay silent
+  - trigger: state
+    entity_id: !input action_sensor
+    attribute: curtail
+  - trigger: state
+    entity_id: !input action_sensor
+    attribute: pv_off
+  - trigger: state
+    entity_id: !input setpoint_sensor
+    to: null
+  # grid drops (or returns): react immediately, not at the next plan change
+  # (the default binary_sensor.none doesn't exist, so this never fires)
+  - trigger: state
+    entity_id: !input grid_sensor
+    to: null
+  # failsafe sweep: catches a dead/stale Numbat even when no sensor ever
+  # changes again (including the sensors disappearing after an HA restart)
+  - trigger: time_pattern
+    minutes: "/5"
+
+variables:
+  action_sensor: !input action_sensor
+  setpoint_sensor: !input setpoint_sensor
+  status_sensor: !input status_sensor
+  max_heartbeat_age_minutes: !input max_heartbeat_age_minutes
+  grid_sensor: !input grid_sensor
+  export_limit_w: !input export_limit_w
+  curtail_limit_w: !input curtail_limit_w
+  numbat_alive: >-
+    {% set s = states(status_sensor) %}
+    {% set hb = state_attr(status_sensor, 'heartbeat') %}
+    {{ s == 'ok' and hb is not none
+       and (now() - (hb | as_datetime)) < timedelta(minutes=max_heartbeat_age_minutes | int) }}
+  # connected unless the sensor explicitly says OFF (unavailable/unknown/
+  # nonexistent != outage)
+  grid_connected: "{{ states(grid_sensor) != 'off' }}"
+  # the failsafe is simply action == 'idle' with both flags false: the same
+  # three calls below then restore self-consumption, the export limit and PV
+  action: >-
+    {{ states(action_sensor) if numbat_alive and grid_connected else 'idle' }}
+  # power is read from the ACTION sensor's attributes (published atomically
+  # with the action, so they can never disagree); the setpoint sensor is the
+  # fallback for older Numbat versions
+  power_w: >-
+    {% set p = state_attr(action_sensor, 'power_w') %}
+    {{ (p if p is not none else state_attr(setpoint_sensor, 'power_w')) | int(0)
+       if numbat_alive else 0 }}
+  curtail_wanted: >-
+    {% set c = state_attr(action_sensor, 'curtail') %}
+    {{ ((c if c is not none else states(action_sensor) == 'curtail')
+        if numbat_alive and grid_connected else false) }}
+  pv_off_wanted: >-
+    {% set p = state_attr(action_sensor, 'pv_off') %}
+    {{ (p | bool(false)) if numbat_alive and grid_connected else false }}
+  # forced modes need a setpoint; a forced action arriving without one
+  # (attribute missing) falls back to self-consumption rather than an
+  # inert forced mode at 0 W
+  battery_mode: >-
+    {%- set forced = {'charge': 'forced_charge', 'discharge': 'forced_discharge'} -%}
+    {%- if action in forced and power_w > 0 -%} {{ forced[action] }}
+    {%- else -%} {{ {'no_charge': 'no_charge', 'hold': 'hold'}.get(action, 'self_consumption') }}
+    {%- endif -%}
+
+conditions:
+  # The periodic sweep acts when Numbat is NOT healthy or the grid is down
+  # (failsafe re-assert), while a flag is active, and for 15 minutes after
+  # the last recommendation change (self-healing). Beyond that, while
+  # healthy and on-grid, it stands down and the state triggers handle every
+  # real change. The integration's guarded calls keep re-asserts write-free.
+  - condition: template
+    value_template: >-
+      {{ trigger.platform != 'time_pattern'
+         or not numbat_alive or not grid_connected
+         or curtail_wanted or pv_off_wanted
+         or (states[action_sensor] is not none
+             and now() - states[action_sensor].last_changed < timedelta(minutes=15)) }}
+
+actions:
+  # Settle delay: Numbat publishes the setpoint and action sensors as two
+  # updates ~50 ms apart, so every plan change fires this automation twice;
+  # with mode: restart the second trigger lands here and the double-fire
+  # coalesces into one run that reads settled sensors. (The integration
+  # finishes a call the automation cancelled, so a restart mid-call cannot
+  # leave the inverter between two states.)
+  - delay:
+      milliseconds: 1000
+  # Export cap first, orthogonal to the battery mode: cap BEFORE a forced
+  # mode could push surplus out, lift it before anything that may export.
+  - action: sungrow.set_export_limit
+    data:
+      device_id: !input sungrow_device
+      limit_w: "{{ curtail_limit_w if curtail_wanted else export_limit_w }}"
+  # PV next: off BEFORE a forced charge so it draws from the grid, back
+  # before anything that expects generation.
+  - action: sungrow.set_pv_limitation
+    data:
+      device_id: !input sungrow_device
+      limit: "{{ pv_off_wanted }}"
+  # Battery mode last. power_w is ignored for the non-forced modes.
+  - action: sungrow.set_battery_mode
+    data:
+      device_id: !input sungrow_device
+      mode: "{{ battery_mode }}"
+      power_w: "{{ power_w }}"
+
+# restart: a fresh recommendation mid-sequence supersedes the old one
+mode: restart
+max_exceeded: silent

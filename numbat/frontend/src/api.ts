@@ -31,6 +31,8 @@ export const PlanIntervalSchema = z.object({
   grid_import_kw: z.number(),
   grid_export_kw: z.number(),
   interval_cost: z.number(),
+  // PV the plan uses this interval (the rest is curtailed); older backends omit it
+  pv_used_kw: z.number().optional(),
 });
 export type PlanInterval = z.infer<typeof PlanIntervalSchema>;
 
@@ -97,6 +99,10 @@ export const ExplanationSchema = z.object({
       daily_target: z.boolean().optional(),
       live_spike: z.boolean().optional(),
       prices_estimated: z.boolean().optional(),
+      // the orthogonal flags riding the action (the action sensor's
+      // `curtail` / `pv_off` attributes)
+      curtail: z.boolean().optional(),
+      pv_off: z.boolean().optional(),
     })
     .optional(),
   stale: z.boolean().optional(),

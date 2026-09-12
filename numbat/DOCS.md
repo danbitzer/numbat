@@ -15,6 +15,8 @@ nothing is written to your inverter.
   its forecast attribute has 1c price resolution and no advanced-price mode)
 - [Open-Meteo Solar Forecast](https://github.com/rany2/ha-open-meteo-solar-forecast)
 - Battery SoC/power sensors (e.g. the
+  [`sungrow` integration](https://github.com/danbitzer/hass-sungrow-modbus) for
+  Sungrow SH-T, or the
   [mkaiser Sungrow Modbus package](https://github.com/mkaiser/Sungrow-SHx-Inverter-Modbus-Home-Assistant))
 - Optionally, any `weather.*` entity with hourly forecasts (enables the
   learned temperature response)
@@ -382,7 +384,7 @@ grid if `grid.export_limit_kw` allows it.
 | Entity | Meaning |
 |---|---|
 | `sensor.numbat_status` | `ok` / `error` / `disabled` / `unconfigured`; heartbeat with solve stats and `load_forecast`. Anything other than `ok` makes the actuator blueprint fail safe to self-consumption |
-| `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / hold / curtail (carries `power_kw`/`power_w`/`curtail` attributes, atomic with the action — `curtail` means export is withheld this interval, possibly *during* a charge; `hold` means the battery is fenced in both directions while the grid — net of any PV, which most inverters route to the house first — serves the load) |
+| `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / hold / curtail (carries `power_kw`/`power_w`/`curtail` attributes, atomic with the action — `curtail` means export is withheld this interval, possibly *during* a charge; `hold` means the battery is fenced in both directions while the grid — net of any PV, which most inverters route to the house first — serves the load; `pv_off` means the plan wants PV generation STOPPED this interval — the buy price is negative, so the house and any charge should draw from the grid, which pays — for inverters that can switch PV off; with it, `hold` really is "the grid serves the house" and `charge` really is grid charging) |
 
 Actions are **grid-coupled**: `charge` means charging *from the grid*, and
 `discharge` means exporting stored energy *to the grid* — the moves your
@@ -457,16 +459,36 @@ Numbat never writes to your inverter. It publishes recommendations; a Home
 Assistant automation that **you** own turns them into control — inspectable,
 traceable, editable, and disabling it is the master off-switch.
 
-Import `blueprints/numbat_actuator.yaml` from this repo (Settings → Automations →
-Blueprints → Import), then create an automation from it. You supply three
-action sequences for your hardware — plus two optional ones for curtailment —
-and inside them the variables `power_kw` (signed, +charge/−discharge),
-`power_w` (magnitude in watts), and `action` are available. The blueprint has
-the failsafe built in: if Numbat's heartbeat is stale, its status reports an
-error, or the sensors
-are missing (HA restarted while Numbat was down), your *idle* actions run (after
-lifting any export cap) — so a dead add-on can never leave the inverter stuck
-in forced mode or curtailed. Keep the idle sequence simple and idempotent.
+Two blueprints ship in `blueprints/` (Settings → Automations → Blueprints →
+Import the raw GitHub URL, then create an automation from it):
+
+- **`numbat_actuator_sungrow.yaml`** — for Sungrow SH-T hybrids driven by
+  the [`sungrow` integration](https://github.com/danbitzer/hass-sungrow-modbus).
+  No action sequences: pick the inverter device, enter your normal export
+  limit (and optionally the curtailed one, default 50 W), and every run is
+  three guarded, ordered, read-back-verified calls —
+  `sungrow.set_export_limit` → `sungrow.set_pv_limitation` →
+  `sungrow.set_battery_mode`. Re-asserts write nothing when the registers
+  already match, and `pv_off` is actuated with nothing to write. Point its
+  grid sensor at the integration's `grid_connected` binary sensor. Point
+  Numbat's `entities` at the integration's sensors (they are prefixed with
+  the device name, e.g. `sensor.sungrow_sh15t_load_power`,
+  `sensor.sungrow_sh15t_battery_level`, `sensor.sungrow_sh15t_battery_power`
+  and, for Test mode, `sensor.sungrow_sh15t_pv_power`) and check the
+  battery power sign against `battery.power_convention` — the integration
+  reports positive = discharging, the same as mkaiser (`charge_negative`).
+- **`numbat_actuator.yaml`** — generic, for any inverter. You supply three
+  action sequences for your hardware — plus optional ones for no_charge,
+  hold, curtailment and PV-off — and inside them the variables `power_kw`
+  (signed, +charge/−discharge), `power_w` (magnitude in watts), `action`,
+  `curtail_wanted` and `pv_off_wanted` are available. The rest of this
+  section is about this blueprint.
+
+Both have the failsafe built in: if Numbat's heartbeat is stale, its status
+reports an error, or the sensors are missing (HA restarted while Numbat was
+down), the *idle* path runs (after lifting any export cap and restoring PV)
+— so a dead add-on can never leave the inverter stuck in forced mode,
+curtailed, or with PV off. Keep the idle sequence simple and idempotent.
 
 It is also **self-healing**: inverter writes can occasionally be lost (a
 Modbus hiccup at the wrong instant), so for 15 minutes after every
@@ -588,6 +610,15 @@ option strings against your install — they vary between package versions):
     - action: number.set_value
       target: {entity_id: number.sungrow_export_power_limit}
       data: {value: 12000}
+
+# pv_off_actions / pv_restore_actions — the mkaiser package has no PV-off
+# control (the SH-T "PV power limitation" register is not exposed), so
+# leave these empty with mkaiser. With the sungrow integration use its
+# blueprint instead; if you must mix, these are the calls:
+#   - action: sungrow.set_pv_limitation
+#     data: {device_id: <your inverter device id>, limit: true}   # pv_off
+#   - action: sungrow.set_pv_limitation
+#     data: {device_id: <your inverter device id>, limit: false}  # restore
 ```
 
 For hold, prefer the max-power zeros over EMS "Forced mode + Stop": Stop
@@ -603,17 +634,18 @@ with a stale setpoint. Note some mkaiser versions gate the export limit
 behind `switch.sungrow_export_power_limit_mode` — if yours does, enable it in
 curtail and disable it in uncurtail instead of writing your DNSP limit back.
 
-Two Sungrow honesty notes for negative-**buy** windows, both rooted in the
-same fact: PV always meets the house load before the grid does, and the
-mkaiser package exposes no writable PV power limitation (the registers
-exist upstream as read-only sensors).
+Two honesty notes for negative-**buy** windows **with the mkaiser package**,
+both rooted in the same fact: PV always meets the house load before the
+grid does, and mkaiser exposes no writable PV power limitation. (The
+`sungrow` integration does — its blueprint actuates `pv_off`, and both
+notes stop applying: PV is genuinely off, so the house imports at the
+negative price and a forced charge draws from the grid.)
 
 - Forced charge sources from PV before the grid, so "charge with export
   capped" charges the battery from throttled PV rather than genuinely
   importing at the negative price — the cap eliminates the negative-feed-in
   export bleed (the expensive part), while the forgone import payment
-  (|buy| × household+charge kW) remains out of reach until the package
-  exposes active power limitation as writable.
+  (|buy| × household+charge kW) remains out of reach.
 - Hold's "the grid serves the house" is likewise net of PV: the max-power
   zeros fence the battery in both directions, but any PV production still
   covers the house load first and the grid only supplies the remainder.

@@ -94,6 +94,11 @@ class Publisher:
                 # negative buy and feed-in); actuators cap the export limit
                 # on this, not on action == "curtail"
                 "curtail": plan.curtail_export,
+                # PV generation withheld this interval (negative buy: the
+                # house/charge should draw from the grid, which pays);
+                # actuators that can stop PV key off this, atomic with the
+                # action it rides (hold or charge)
+                "pv_off": plan.pv_off,
                 # power duplicated here so action + magnitude change in ONE
                 # atomic POST — actuator automations read these, never pairing
                 # a fresh action with the previous cycle's setpoint

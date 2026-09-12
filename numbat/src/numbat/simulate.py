@@ -30,6 +30,7 @@ from numbat.planner import (
     daily_soc_target_vector,
     discharge_cap_vector,
     haircut_sell,
+    pv_off_wanted,
     sell_floor_vector,
 )
 from numbat.timegrid import TimeGrid
@@ -314,6 +315,11 @@ def simulate_solve(
         computed_at=now,
         hold_floor_kwh=hold_floor_kwh(bp.soc_min_kwh, bp.capacity_kwh),
     )
+    # The orthogonal flags, same gates as live (step 0's scenario price IS
+    # the sim's live price), so test mode shows them the way the live
+    # dashboard would.
+    plan.curtail_export = float(sell[0]) < 0 and plan.intervals[0].grid_export_kw < 0.05
+    plan.pv_off = pv_off_wanted(float(buy[0]), plan.intervals[0], previously=False)
     plan.explanation = build_explanation(
         plan,
         hold_value=terminal,
@@ -330,6 +336,8 @@ def simulate_solve(
         live_spike=live_spike,
         prices_estimated=False,
         capacity_kwh=bp.capacity_kwh,
+        curtail=plan.curtail_export,
+        pv_off=plan.pv_off,
     )
 
     return {
