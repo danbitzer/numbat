@@ -104,6 +104,9 @@ class PlanInterval:
     grid_import_kw: float
     grid_export_kw: float
     interval_cost: float
+    # PV the plan actually uses this interval (the rest is curtailed);
+    # 0 with pv_kw > 0 means the plan wants PV OFF (see Plan.pv_off).
+    pv_used_kw: float = 0.0
 
 
 @dataclass
@@ -123,6 +126,14 @@ class Plan:
     # the single-word action can't express both). Published as the action
     # sensor's `curtail` attribute, atomic with the action.
     curtail_export: bool = False
+    # True when the plan wants PV generation STOPPED this interval: the live
+    # buy price is negative and step 0 has PV available but uses none of it
+    # (the house — and any charge — should draw from the grid, which pays).
+    # Orthogonal to the action like `curtail`: rides `hold` (paid to run the
+    # house) or `charge` (true grid charging). Published as the action
+    # sensor's `pv_off` attribute, atomic with the action; actuators that
+    # can stop PV (Sungrow SH-T "PV power limitation") key off it.
+    pv_off: bool = False
     # Plain-language explanation of step 0's action (see numbat.explain); surfaced
     # in the dashboard's "Why this action?" panel, not published as a sensor.
     explanation: dict | None = None

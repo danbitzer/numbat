@@ -24,7 +24,7 @@ from numbat.optimizer.model import (
     auto_terminal_value,
     solve,
 )
-from numbat.optimizer.result import hold_floor_kwh, solution_to_plan
+from numbat.optimizer.result import POWER_TOL_KW, hold_floor_kwh, solution_to_plan
 from numbat.planner import (
     battery_params,
     daily_soc_target_vector,
@@ -314,6 +314,15 @@ def simulate_solve(
         computed_at=now,
         hold_floor_kwh=hold_floor_kwh(bp.soc_min_kwh, bp.capacity_kwh),
     )
+    # The orthogonal flags, same gates as live (step 0's scenario price IS
+    # the sim's live price), so test mode shows them the way the live
+    # dashboard would.
+    plan.curtail_export = float(sell[0]) < 0 and plan.intervals[0].grid_export_kw < 0.05
+    plan.pv_off = (
+        float(buy[0]) < 0
+        and plan.intervals[0].pv_kw > POWER_TOL_KW
+        and plan.intervals[0].pv_used_kw < POWER_TOL_KW
+    )
     plan.explanation = build_explanation(
         plan,
         hold_value=terminal,
@@ -330,6 +339,8 @@ def simulate_solve(
         live_spike=live_spike,
         prices_estimated=False,
         capacity_kwh=bp.capacity_kwh,
+        curtail=plan.curtail_export,
+        pv_off=plan.pv_off,
     )
 
     return {

@@ -555,6 +555,93 @@ def test_hold_plus_curtail_is_the_negative_price_combination():
     assert plan.curtail_export is True
 
 
+def test_pv_off_rides_hold_at_negative_buy():
+    """Negative buy AND feed-in with a full battery: the plan serves the
+    house from the grid (paid to) and uses none of its PV — that intent
+    used to be unactuatable (PV serves the house first on every hybrid);
+    with a PV-off actuator it is published as `pv_off`, riding HOLD."""
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    planner = offline_planner(settings)
+    data = synthetic_cycle_data(settings)
+    data.inputs.pv[:] = 2.0
+    data.inputs.buy[:] = -0.02
+    data.inputs.sell[:] = -0.05
+    data.prices.current_buy = -0.02
+    data.prices.current_sell = -0.05
+    data = replace(data, inputs=replace(data.inputs, soc0_kwh=12.8))
+    plan = planner.optimize(data, NOW)
+    assert plan.intervals[0].action == Action.HOLD
+    assert plan.intervals[0].pv_used_kw < 0.01
+    assert plan.curtail_export is True
+    assert plan.pv_off is True
+
+
+def test_pv_off_rides_charge_for_true_grid_charging():
+    """Room in the battery at negative buy: the plan grid-charges with PV
+    off — CHARGE + pv_off is the combination that finally draws the charge
+    from the grid instead of throttled PV."""
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    planner = offline_planner(settings)
+    data = synthetic_cycle_data(settings)
+    data.inputs.pv[:] = 2.0
+    data.inputs.buy[:] = -0.02
+    data.inputs.sell[:] = -0.12
+    data.prices.current_buy = -0.02
+    data.prices.current_sell = -0.12
+    plan = planner.optimize(data, NOW)
+    assert plan.intervals[0].action == Action.CHARGE
+    assert plan.intervals[0].pv_used_kw < 0.01
+    assert plan.pv_off is True
+
+
+def test_pv_off_is_gated_on_the_live_buy_price():
+    """pv_used = 0 alone is not enough: a solver tie around buy ≈ 0 must not
+    flip a 40 s-recovery actuator, so the flag needs a NEGATIVE live buy.
+    And nothing to withhold at night (no PV) means no flag either."""
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    planner = offline_planner(settings)
+    # the horizon says negative buy (the plan uses no PV) but the live price
+    # sensor says positive, or exactly zero: no PV-off
+    for live_buy in (0.30, 0.0):
+        data = synthetic_cycle_data(settings)
+        data.inputs.pv[:] = 2.0
+        data.inputs.buy[:] = -0.02
+        data.inputs.sell[:] = -0.05
+        data.prices.current_buy = live_buy
+        data.prices.current_sell = -0.05
+        data = replace(data, inputs=replace(data.inputs, soc0_kwh=12.8))
+        plan = planner.optimize(data, NOW)
+        assert plan.intervals[0].pv_used_kw < 0.01
+        assert plan.pv_off is False
+    # negative buy but no PV to withhold (night)
+    night = synthetic_cycle_data(settings)
+    night.inputs.buy[:] = -0.02
+    night.prices.current_buy = -0.02
+    assert planner.optimize(night, NOW).pv_off is False
+    # positive buy: PV serves the house, never withheld
+    calm = synthetic_cycle_data(settings)
+    calm.inputs.pv[:] = 2.0
+    assert planner.optimize(calm, NOW).pv_off is False
+
+
+def test_fallback_carries_pv_off_only_while_the_step_plans_no_pv():
+    # like curtail: the live price is unknowable in a fallback, so the
+    # carried flag is kept only while the surviving step itself uses no PV
+    settings = make_settings()
+    planner = offline_planner(settings)
+    prev = previous_plan_with(Action.HOLD)
+    prev.pv_off = True
+    prev.intervals[0].pv_kw = 2.0
+    prev.intervals[0].pv_used_kw = 0.0
+    planner.previous_plan = prev
+    assert planner.fallback(NOW).pv_off is True
+    prev.intervals[0].pv_used_kw = 0.5
+    assert planner.fallback(NOW).pv_off is False
+    prev.intervals[0].pv_used_kw = 0.0
+    prev.pv_off = False
+    assert planner.fallback(NOW).pv_off is False
+
+
 def test_curtail_action_survives_where_grid_import_is_not_wanted():
     """PV spill at negative feed-in but POSITIVE buy: PV serves the house
     (importing would cost money), the rest is spilled, the full battery

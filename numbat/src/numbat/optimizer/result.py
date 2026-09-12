@@ -116,6 +116,7 @@ def solution_to_plan(
                 grid_import_kw=float(solution.grid_import_kw[i]),
                 grid_export_kw=float(solution.grid_export_kw[i]),
                 interval_cost=float(interval_cost[i]),
+                pv_used_kw=float(solution.pv_used_kw[i]),
             )
         )
     return Plan(

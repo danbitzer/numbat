@@ -215,6 +215,8 @@ function MoreInfo({ explanation, plan }: { explanation: Explanation; plan?: Plan
     ),
     l?.daily_target && <Chip key="target">daily charge target</Chip>,
     l?.live_spike && <Chip key="spike">spike live</Chip>,
+    l?.curtail && <Chip key="curtail">export withheld</Chip>,
+    l?.pv_off && <Chip key="pvoff">PV off</Chip>,
     l?.prices_estimated && <Chip key="estimate">price still an estimate</Chip>,
     stale && <Chip key="stale">reusing previous plan</Chip>,
   ].filter(Boolean);

@@ -165,6 +165,7 @@ def create_app(
                         "grid_import_kw": iv.grid_import_kw,
                         "grid_export_kw": iv.grid_export_kw,
                         "interval_cost": iv.interval_cost,
+                        "pv_used_kw": iv.pv_used_kw,
                     }
                     for iv in plan.intervals
                 ],

@@ -73,3 +73,32 @@ async def test_publish_plan_action_carries_curtail_flag():
     action_posts = [b for e, b in fake.posted if e == "sensor.numbat_action"]
     assert action_posts and action_posts[0]["attributes"]["curtail"] is True
     assert action_posts[0]["state"] == "charge"
+    # no PV at night: nothing to withhold, the flag is published (false)
+    assert action_posts[0]["attributes"]["pv_off"] is False
+
+
+async def test_publish_plan_action_carries_pv_off_flag():
+    """PV-off rides the action sensor too (atomic with charge/hold), so an
+    actuator that can stop PV never pairs it with a stale action."""
+    from datetime import UTC, datetime
+
+    from test_planner import make_settings, offline_planner, synthetic_cycle_data
+
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    planner = offline_planner(settings)
+    data = synthetic_cycle_data(settings)
+    data.inputs.pv[:] = 2.0
+    data.inputs.buy[:] = -0.02
+    data.inputs.sell[:] = -0.12
+    data.prices.current_buy = -0.02
+    data.prices.current_sell = -0.12
+    plan = planner.optimize(data, datetime(2026, 7, 15, 11, 36, 30, tzinfo=UTC))
+    assert plan.pv_off is True
+
+    fake = FakeHa()
+    async with fake_ha_client(fake) as client:
+        await Publisher(client).publish_plan(plan, capacity_kwh=12.8)
+    action_posts = [b for e, b in fake.posted if e == "sensor.numbat_action"]
+    assert action_posts and action_posts[0]["attributes"]["pv_off"] is True
+    assert action_posts[0]["attributes"]["curtail"] is True
+    assert action_posts[0]["state"] == "charge"

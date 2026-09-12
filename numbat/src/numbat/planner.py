@@ -30,7 +30,7 @@ from numbat.adapters.weather import WeatherAdapter
 from numbat.config import Settings
 from numbat.explain import build_explanation
 from numbat.forecast.load import LoadForecaster
-from numbat.models import Action, BatteryState, Plan, PriceForecast, Series
+from numbat.models import Action, BatteryState, Plan, PlanInterval, PriceForecast, Series
 from numbat.optimizer.model import (
     BatteryParams,
     GridParams,
@@ -40,7 +40,12 @@ from numbat.optimizer.model import (
     auto_terminal_value,
     solve,
 )
-from numbat.optimizer.result import classify_action, hold_floor_kwh, solution_to_plan
+from numbat.optimizer.result import (
+    POWER_TOL_KW,
+    classify_action,
+    hold_floor_kwh,
+    solution_to_plan,
+)
 from numbat.timegrid import TimeGrid, coverage, resample_mean, resample_previous
 
 log = logging.getLogger(__name__)
@@ -204,6 +209,16 @@ class CycleData:
     # {baseline_kw, until} while vacation mode is active, else None — drives
     # the dashboard banner and binary_sensor.numbat_vacation_mode
     vacation: dict | None = None
+
+
+def _pv_off_wanted(current_buy: float, step0: PlanInterval) -> bool:
+    """PV generation should be stopped this interval: the live buy price is
+    negative and the step has PV available but the plan uses none of it."""
+    return (
+        current_buy < 0
+        and step0.pv_kw > POWER_TOL_KW
+        and step0.pv_used_kw < POWER_TOL_KW
+    )
 
 
 class Planner:
@@ -453,6 +468,16 @@ class Planner:
         plan.curtail_export = (
             data.prices.current_sell < 0 and plan.intervals[0].grid_export_kw < 0.05
         )
+        # Stop PV while the buy price is negative and the plan uses none of
+        # it: the optimizer's PV usage is free (0 ≤ pv_used ≤ pv), so at a
+        # negative buy it already serves the house — and any charge — from
+        # the grid, which pays; the hardware just couldn't follow until an
+        # actuator could switch PV off (Sungrow SH-T, 2026-09-11). Gated on
+        # the LIVE buy price like curtail on feed-in: pv_used = 0 also shows
+        # up in cost ties around buy ≈ 0, and a solver tie must not flip a
+        # 40 s-recovery actuator. Not while the plan still uses some PV —
+        # e.g. an import limit that the house alone would exceed.
+        plan.pv_off = _pv_off_wanted(data.prices.current_buy, plan.intervals[0])
         plan = self._live_spike_guard(plan, data)
         plan.explanation = build_explanation(
             plan,
@@ -465,6 +490,8 @@ class Planner:
             live_spike=self._live_spike(data.prices),
             prices_estimated=data.prices.current_estimate,
             capacity_kwh=self._battery_params.capacity_kwh,
+            curtail=plan.curtail_export,
+            pv_off=plan.pv_off,
         )
         return plan
 
@@ -598,6 +625,10 @@ class Planner:
             # after a negative midday, solver failing at the rollover).
             live_spike=prev.live_spike,
             curtail_export=prev.curtail_export and s0.grid_export_kw < 0.05,
+            # same shape for PV: the live buy price is unknowable here, so a
+            # carried PV-off is kept only while the surviving step itself
+            # planned to use no PV (buy < 0 is what made it plan that way)
+            pv_off=prev.pv_off and _pv_off_wanted(-1.0, s0),
             # The full context is gone with the failed solve; give the panel the
             # step-0 values — the "reusing previous plan" chip (stale) says why.
             explanation={

@@ -25,6 +25,8 @@ def build_explanation(
     live_spike: bool,
     prices_estimated: bool,
     capacity_kwh: float | None,
+    curtail: bool = False,
+    pv_off: bool = False,
 ) -> dict | None:
     if not plan.intervals:
         return None
@@ -57,5 +59,8 @@ def build_explanation(
             "daily_target": daily_target_active,
             "live_spike": live_spike,
             "prices_estimated": prices_estimated,
+            # the two orthogonal flags that ride the action (see Plan)
+            "curtail": curtail,
+            "pv_off": pv_off,
         },
     }

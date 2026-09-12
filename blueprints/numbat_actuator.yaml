@@ -36,6 +36,17 @@
 #                           always in the failsafe (idempotent), so leaving
 #                           curtailment — or a dead Numbat — always lifts
 #                           the cap
+#   pv_off_actions        — (optional) stop ALL PV generation; runs whenever
+#                           the plan wants PV withheld — the action sensor's
+#                           `pv_off` attribute (negative BUY prices: the
+#                           house, and any charge, should draw from the
+#                           grid, which pays). Rides hold or charge. Only
+#                           inverters that can switch PV off (Sungrow SH-T
+#                           via the `sungrow` integration) — most can't;
+#                           leave empty and PV keeps serving the house first
+#   pv_restore_actions    — (optional) allow PV again; runs whenever the plan
+#                           does NOT withhold PV, and always in the failsafe
+#                           (idempotent). Required if you set pv_off actions
 #
 # Leave the optional inputs empty and those actions simply behave as idle.
 #
@@ -44,6 +55,7 @@
 #   power_w   — magnitude in watts (int), handy for number.set_value
 #   action    — "charge" | "discharge" | "idle" | "no_charge" | "hold" | "curtail"
 #   curtail_wanted — export withheld this interval (bool; see curtail_actions)
+#   pv_off_wanted  — PV generation withheld this interval (bool; see pv_off_actions)
 #
 # Actions are grid-coupled: "charge" = charging FROM THE GRID, "discharge" =
 # exporting stored energy TO THE GRID. Battery-serves-the-house and
@@ -80,8 +92,9 @@ blueprint:
     reverts to idle when Numbat is stale, errored, or gone, and a self-healing
     sweep that re-asserts the current action for 15 minutes after each change
     so a lost inverter write can't stick. Optional curtail sequences cap
-    export during negative feed-in; optional grid-connection sensors revert
-    to idle during a grid outage.
+    export during negative feed-in, optional PV-off sequences stop PV during
+    negative buy prices; optional grid-connection sensors revert to idle
+    during a grid outage.
   homeassistant:
     min_version: 2024.10.0  # the `sequence:` grouping action
   domain: automation
@@ -173,6 +186,30 @@ blueprint:
       default: []
       selector:
         action:
+    pv_off_actions:
+      name: PV-off actions (optional)
+      description: >-
+        Stop ALL PV generation. Runs whenever the plan withholds PV (the
+        action sensor's `pv_off` attribute: the buy price is negative, so
+        the house — and any charge — should draw from the grid, which pays).
+        Runs after the export cap and before the action branch, so a charge
+        starts with PV already off (true grid charging). Only for inverters
+        that can switch PV off (Sungrow SH-T: `sungrow.set_pv_limitation`
+        with `limit: true`; the mkaiser package has no such control). Leave
+        empty to ignore.
+      default: []
+      selector:
+        action:
+    pv_restore_actions:
+      name: PV-restore actions (optional)
+      description: >-
+        Allow PV generation again. Runs whenever the plan does not withhold
+        PV, and in every failsafe — must be idempotent. Required if you set
+        PV-off actions, else PV would stay off. PV takes ~40–50 s to come
+        back after a restore.
+      default: []
+      selector:
+        action:
     hold_actions:
       name: Hold actions (optional)
       description: >-
@@ -214,6 +251,10 @@ triggers:
   - trigger: state
     entity_id: !input action_sensor
     attribute: curtail
+  # same for the PV-off flag (buy crossing zero while the action holds)
+  - trigger: state
+    entity_id: !input action_sensor
+    attribute: pv_off
   - trigger: state
     entity_id: !input setpoint_sensor
     to: null
@@ -264,6 +305,12 @@ variables:
     {% set c = state_attr(action_sensor, 'curtail') %}
     {{ ((c if c is not none else states(action_sensor) == 'curtail')
         if numbat_alive and grid_connected else false) }}
+  # PV withholding likewise rides the action (the `pv_off` attribute, since
+  # 0.20; older Numbat never publishes it, so this stays false). A dead
+  # Numbat or a grid outage always restores PV (fail-safe).
+  pv_off_wanted: >-
+    {% set p = state_attr(action_sensor, 'pv_off') %}
+    {{ (p | bool(false)) if numbat_alive and grid_connected else false }}
 
 conditions:
   # The periodic sweep acts when Numbat is NOT healthy or the grid is down
@@ -274,15 +321,16 @@ conditions:
   # and on-grid, the sweep stands down and the state triggers handle every
   # real change — guarded (idempotent) action sequences keep the re-asserts
   # write-free when the registers already match.
-  # `or curtail_wanted`: while export is withheld the sweep keeps re-asserting
-  # (guarded writes keep it Modbus-silent) — a lost cap write heals within
-  # 5 minutes, and the cap applied by the attribute trigger is covered even
-  # though an attribute flip doesn't reset the action sensor's last_changed.
+  # `or curtail_wanted` / `or pv_off_wanted`: while export or PV is withheld
+  # the sweep keeps re-asserting (guarded writes keep it Modbus-silent) — a
+  # lost write heals within 5 minutes, and a flag applied by an attribute
+  # trigger is covered even though an attribute flip doesn't reset the
+  # action sensor's last_changed.
   - condition: template
     value_template: >-
       {{ trigger.platform != 'time_pattern'
          or not numbat_alive or not grid_connected
-         or curtail_wanted
+         or curtail_wanted or pv_off_wanted
          or (states[action_sensor] is not none
              and now() - states[action_sensor].last_changed < timedelta(minutes=15)) }}
 
@@ -309,6 +357,13 @@ actions:
   - if: "{{ curtail_wanted }}"
     then: !input curtail_actions
     else: !input uncurtail_actions
+  # PV-off state next, also orthogonal: PV off BEFORE a forced charge so it
+  # draws from the grid, PV back before anything that expects generation.
+  # pv_off_wanted is false whenever Numbat is dead/stale or the grid is
+  # down, so the failsafe path always restores PV.
+  - if: "{{ pv_off_wanted }}"
+    then: !input pv_off_actions
+    else: !input pv_restore_actions
   - choose:
       - conditions: "{{ action == 'charge' }}"
         sequence:

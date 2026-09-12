@@ -95,6 +95,8 @@ def test_levers_reflect_what_armed_the_solve():
         "daily_target": True,
         "live_spike": True,
         "prices_estimated": True,
+        "curtail": False,
+        "pv_off": False,
     }
 
 

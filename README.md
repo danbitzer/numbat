@@ -53,6 +53,8 @@ All via existing HA integrations — no glue automations needed:
 - **Solar forecast**: [Open-Meteo Solar Forecast](https://github.com/rany2/ha-open-meteo-solar-forecast)
   (`watts` attribute, 15-min resolution).
 - **Battery**: any integration exposing SoC and battery power, e.g. Sungrow
+  SH-T via the [`sungrow` integration](https://github.com/danbitzer/hass-sungrow-modbus)
+  (with which the actuator is two inputs and no action sequences) or Sungrow
   SHx via the [mkaiser Modbus package](https://github.com/mkaiser/Sungrow-SHx-Inverter-Modbus-Home-Assistant).
 - **Load**: learned daily from your actual consumption — recency-weighted
   hour-of-day averages
@@ -100,17 +102,20 @@ its pitfalls — and is the doc to read when a plan surprises you.
 ## Outputs
 
 Published every cycle (REST sensors): `sensor.numbat_action`
-(charge/discharge/idle/curtail), `sensor.numbat_power_setpoint` (signed kW, with
-`power_w` attribute), `sensor.numbat_soc_target`, `sensor.numbat_horizon_cost`,
-and `sensor.numbat_status` (heartbeat).
+(charge/discharge/idle/no_charge/hold/curtail, with `power_w`, `curtail` and
+`pv_off` attributes), `sensor.numbat_power_setpoint` (signed kW),
+`sensor.numbat_soc_target`, `sensor.numbat_horizon_cost`, and
+`sensor.numbat_status` (heartbeat).
 An ingress dashboard charts the plan: prices, PV/load forecasts, planned
 battery power, and the SoC trajectory.
 
-Actuation = your automation from
-[blueprints/numbat_actuator.yaml](blueprints/numbat_actuator.yaml): it maps
-action + setpoint onto your inverter's controls, and reverts to
-self-consumption when Numbat's heartbeat goes stale. See
-[numbat/DOCS.md](numbat/DOCS.md) for a complete Sungrow example.
+Actuation = your automation from a shipped blueprint:
+[numbat_actuator_sungrow.yaml](blueprints/numbat_actuator_sungrow.yaml) for
+the `sungrow` integration (pick the device, enter your export limit — done),
+or the generic [numbat_actuator.yaml](blueprints/numbat_actuator.yaml), which
+maps action + setpoint onto action sequences you write for any inverter.
+Both revert to self-consumption when Numbat's heartbeat goes stale. See
+[numbat/DOCS.md](numbat/DOCS.md) for details and a complete mkaiser example.
 
 ## Under the hood
 
