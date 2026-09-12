@@ -52,6 +52,7 @@ def _build(plan, **overrides):
         live_spike=False,
         prices_estimated=False,
         capacity_kwh=44.8,
+        soc_max_kwh=44.8 * 0.95,
     )
     kw.update(overrides)
     return build_explanation(plan, **kw)

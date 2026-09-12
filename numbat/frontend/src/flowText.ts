@@ -105,10 +105,15 @@ export function flowWords(
   const pvOff = !!f.pv_off;
   const soc = v.soc_start_pct != null ? `${Math.round(v.soc_start_pct)}%` : null;
   const socEnd = v.soc_end_pct != null ? `${Math.round(v.soc_end_pct)}%` : null;
-  // "full" is about whether the battery is taking charge, not a SoC number
-  // (soc_max is configurable): a battery that isn't charging while solar is
-  // being held back is full for all practical purposes
+  // "full" means at the configured ceiling (soc_max, not 100%); without it
+  // in the payload, a battery that isn't charging and has no fill ahead is
+  // full for all practical purposes. A battery with room that ISN'T
+  // charging while solar is held back is the plan deferring the fill.
   const charging = v.battery_kw > 0.05;
+  const full =
+    v.soc_start_pct != null && v.soc_max_pct != null
+      ? v.soc_start_pct >= v.soc_max_pct - 1
+      : !charging && !f.next_fill_time;
   const when = (iso: string) => at(iso, opts.now);
   // the stored energy's next use, when the plan knows it: the house at a
   // dearer buy price ("12c now, 38c at 6 am") or a forced export at a
@@ -160,21 +165,26 @@ export function flowWords(
             }
           : {
               label: "Selling solar",
-              sub: `${charging ? "" : "battery full; "}exporting the surplus at ${cents(v.sell)}`,
+              sub: `${full ? "battery full; " : ""}exporting the surplus at ${cents(v.sell)}`,
             };
       break;
     case "holding_back_solar": {
       const spill = f.pv_spill_kw != null && f.pv_spill_kw > 0 ? `${kw(f.pv_spill_kw)} of solar` : "solar";
+      // why the battery isn't taking the spill: full, charging as fast as
+      // it can, or the plan is deferring the fill (a later free window)
+      const battery = full
+        ? ""
+        : charging
+          ? "; the battery is charging at its maximum"
+          : f.next_fill_time
+            ? `; the battery fills at ${when(f.next_fill_time)}`
+            : "; the battery isn't charging yet";
       words = {
-        label: charging ? "Holding back solar" : "Battery full, holding back solar",
+        label: full ? "Battery full, holding back solar" : "Holding back solar",
         sub:
           v.sell < 0
-            ? `selling price is ${cents(v.sell)} — exporting would cost you${
-                charging ? "; the battery is charging at its maximum" : ""
-              }`
-            : `export limit reached — ${spill} has nowhere to go${
-                charging ? "; the battery is charging at its maximum" : ""
-              }`,
+            ? `selling price is ${cents(v.sell)} — exporting would cost you${battery}`
+            : `export limit reached — ${spill} has nowhere to go${battery}`,
       };
       break;
     }

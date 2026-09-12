@@ -58,10 +58,22 @@ describe("flowWords", () => {
     expect(w.sub).not.toContain("export capped");
   });
   test("S3 holding back solar at negative feed-in vs an export-limit cut", () => {
-    const neg = flowWords({ key: "holding_back_solar", export_capped: true, pv_spill_kw: 6.2 }, values({ sell: -0.03 }));
+    const neg = flowWords(
+      { key: "holding_back_solar", export_capped: true, pv_spill_kw: 6.2 },
+      values({ sell: -0.03, soc_start_pct: 95, soc_max_pct: 95 }),
+    );
     expect(neg.label).toBe("Battery full, holding back solar");
     expect(neg.sub).toContain("exporting would cost you");
-    const lim = flowWords({ key: "holding_back_solar", pv_spill_kw: 3 }, values({ sell: 0.08, battery_kw: 4 }));
+    expect(neg.sub).not.toContain("battery fills");
+    // 75% and not charging: the plan is deferring the fill, not full
+    const deferred = flowWords(
+      { key: "holding_back_solar", export_capped: true, pv_spill_kw: 4, next_fill_time: later(3), next_fill_source: "solar" },
+      values({ sell: -0.03, soc_start_pct: 75, soc_max_pct: 95 }),
+      { now: T0 },
+    );
+    expect(deferred.label).toBe("Holding back solar");
+    expect(deferred.sub).toContain("the battery fills at");
+    const lim = flowWords({ key: "holding_back_solar", pv_spill_kw: 3 }, values({ sell: 0.08, battery_kw: 4, soc_start_pct: 75, soc_max_pct: 95 }));
     expect(lim.label).toBe("Holding back solar");
     expect(lim.sub).toContain("export limit reached");
     expect(lim.sub).toContain("3.0 kW of solar");

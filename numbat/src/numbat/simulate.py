@@ -340,6 +340,7 @@ def simulate_solve(
         capacity_kwh=bp.capacity_kwh,
         curtail=plan.curtail_export,
         pv_off=plan.pv_off,
+        soc_max_kwh=bp.soc_max_kwh,
     )
 
     return {

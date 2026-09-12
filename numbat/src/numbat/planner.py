@@ -519,6 +519,7 @@ class Planner:
             capacity_kwh=self._battery_params.capacity_kwh,
             curtail=plan.curtail_export,
             pv_off=plan.pv_off,
+            soc_max_kwh=self._battery_params.soc_max_kwh,
         )
         return plan
 

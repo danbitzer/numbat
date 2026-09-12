@@ -28,6 +28,7 @@ def build_explanation(
     capacity_kwh: float | None,
     curtail: bool = False,
     pv_off: bool = False,
+    soc_max_kwh: float | None = None,
 ) -> dict | None:
     if not plan.intervals:
         return None
@@ -48,6 +49,9 @@ def build_explanation(
     if capacity_kwh:
         values["soc_start_pct"] = round(100 * s0.soc_start / capacity_kwh, 1)
         values["soc_end_pct"] = round(100 * s0.soc_end / capacity_kwh, 1)
+        if soc_max_kwh is not None:
+            # the configured ceiling: "full" on the tile means this, not 100%
+            values["soc_max_pct"] = round(100 * soc_max_kwh / capacity_kwh, 1)
 
     return {
         "values": values,

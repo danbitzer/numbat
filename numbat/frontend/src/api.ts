@@ -83,6 +83,7 @@ export const ExplanationSchema = z.object({
     soc_end_kwh: z.number(),
     soc_start_pct: z.number().optional(),
     soc_end_pct: z.number().optional(),
+    soc_max_pct: z.number().optional(), // the configured ceiling ("full")
     battery_kw: z.number(),
     grid_import_kw: z.number(),
     grid_export_kw: z.number(),
