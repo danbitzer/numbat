@@ -229,8 +229,9 @@ def pv_off_wanted(
     """PV generation should be stopped this interval: the plan uses none of
     the PV the step has (at a negative buy the optimizer serves the house —
     and any charge — from the grid, which pays; the flag then rides hold or
-    charge, or idle/curtail in the edge cases of a battery at its floor or a
-    dawn trickle — all safe with PV off, since the plan uses none), and the
+    charge, or no_charge/curtail/idle in the edge cases of a battery at its
+    floor or a dawn trickle — all safe with PV off, since the plan uses
+    none and a charge block is a no-op with nothing to charge from), and the
     live buy price is negative: below PV_OFF_ENTRY_BUY to switch on, below
     zero to stay on. While the live price is still an Amber estimate the
     previous state is kept — the confirmed price re-solves within seconds,
@@ -576,7 +577,15 @@ class Planner:
         those transitions swap only battery-limit registers (cheap, guarded),
         the exits that matter (anything -> charge/discharge) are always
         thresholded, and the reverse relabels can't oscillate because the
-        tighter pin does hold its own label."""
+        tighter pin does hold its own label.
+
+        The reverse direction is made free on purpose: leaving no_charge for
+        idle/curtail/hold also swaps only a limit register, and no_charge is
+        BINDING (it blocks the inverter's own charging) — thresholded, a
+        pinned no_charge would hold its own label for a gain of a tenth of
+        a cent per cycle and block a free solar fill for hours (found in
+        review, 2026-09-13). So when the free solve wants to charge from
+        solar after a no_charge, it charges."""
         threshold = self._settings.optimizer.action_switch_threshold_dollars
         prev = self.previous_plan
         if prev is None or not prev.intervals or threshold <= 0:
@@ -599,6 +608,12 @@ class Planner:
         )
         if free_action == prev_action:
             return free
+        if prev_action == Action.NO_CHARGE and free_action in (
+            Action.IDLE,
+            Action.CURTAIL,
+            Action.HOLD,
+        ):
+            return free  # a limit-register restore, never worth holding out for
         try:
             pinned = solve(
                 data.inputs,

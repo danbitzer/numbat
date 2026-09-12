@@ -1,5 +1,7 @@
 """Qualitative MILP scenarios: the behaviors the money depends on."""
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -159,13 +161,18 @@ def test_spike_reserve_blocks_ordinary_sales_but_serves_the_house():
     only down to it, while the house keeps drawing through it to the hard
     floor — insurance that still runs your home."""
     # Without a floor this exact setup drains to soc_min (control):
-    free = solve(make_inputs(buy=0.60, sell=0.50, soc0=12.0), BATTERY, GRID,
-                 config(terminal_value=0.05))
+    free = solve(
+        make_inputs(buy=0.60, sell=0.50, soc0=12.0), BATTERY, GRID, config(terminal_value=0.05)
+    )
     assert free.soc_kwh[-1] == pytest.approx(BATTERY.soc_min_kwh, abs=0.05)
 
     floor = np.full(24, 6.0)
-    held = solve(make_inputs(buy=0.60, sell=0.50, soc0=12.0, sell_floor=floor),
-                 BATTERY, GRID, config(terminal_value=0.05))
+    held = solve(
+        make_inputs(buy=0.60, sell=0.50, soc0=12.0, sell_floor=floor),
+        BATTERY,
+        GRID,
+        config(terminal_value=0.05),
+    )
     # every selling step ends at/above the floor…
     sells = held.grid_export_kw > 0.01
     assert sells.any()  # the free tranche above the floor still sells
@@ -408,7 +415,11 @@ def test_daily_target_fills_in_cheap_window():
 
     # floor across soc[8], soc[9] (window steps 7..8)
     inputs = make_inputs(
-        T=12, buy=buy, sell=0.0, load=0.0, soc0=2.0,
+        T=12,
+        buy=buy,
+        sell=0.0,
+        load=0.0,
+        soc0=2.0,
         soc_target=_target_window(12, 7, 9, BATTERY.soc_max_kwh),
     )
     sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.0, target_penalty=0.30))
@@ -421,7 +432,11 @@ def test_daily_target_yields_when_filling_costs_more_than_the_premium():
     """Soft, not dumb: at buy 0.40 the marginal fill costs ~0.42/kWh; a small
     premium (0.10/kWh-hour over a 1h window) doesn't justify overpaying."""
     inputs = make_inputs(
-        T=12, buy=0.40, sell=0.0, load=0.0, soc0=2.0,
+        T=12,
+        buy=0.40,
+        sell=0.0,
+        load=0.0,
+        soc0=2.0,
         soc_target=_target_window(12, 7, 9, BATTERY.soc_max_kwh),
     )
     sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.0, target_penalty=0.10))
@@ -439,7 +454,11 @@ def test_daily_target_holds_through_window_then_frees():
     sell[9:] = 0.50  # good export window AFTER the target window ends
     # floor across soc[7], soc[8], soc[9] (window steps 6..8)
     inputs = make_inputs(
-        T=12, buy=buy, sell=sell, load=0.0, soc0=2.0,
+        T=12,
+        buy=buy,
+        sell=sell,
+        load=0.0,
+        soc0=2.0,
         soc_target=_target_window(12, 6, 9, BATTERY.soc_max_kwh),
     )
     sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.0, target_penalty=0.30))
@@ -489,8 +508,7 @@ def test_higher_wear_reduces_export_not_increases_it():
     for wear in (0.02, 0.25):
         b = BatteryParams(**{**BATTERY.__dict__, "wear_cost_per_kwh": wear})
         hv = auto_terminal_value(buy, b)
-        sol = solve(make_inputs(buy=buy, sell=sell, soc0=10.0), b, GRID,
-                    config(terminal_value=hv))
+        sol = solve(make_inputs(buy=buy, sell=sell, soc0=10.0), b, GRID, config(terminal_value=hv))
         if sol.grid_export_kw[12] < 0.05:
             kept += 1
     assert kept == 1  # low wear exports into the bump, high wear holds
@@ -509,7 +527,9 @@ def test_export_spread_is_dynamic_solar_refill_day_still_sells():
     pv[6:16] = 6.0  # 30 kWh of midday solar: refills the battery, then exports
     inputs = make_inputs(buy=0.32, sell=sell, pv=pv, load=0.5, soc0=10.0)
     sol = solve(
-        inputs, BATTERY, GRID,
+        inputs,
+        BATTERY,
+        GRID,
         OptimizerConfig(terminal_value=0.22, solver_timeout_s=30, min_battery_export_spread=0.05),
     )
     # Sells hard into the blip (load 0.5, pv 0 -> export is battery-sourced)...
@@ -527,9 +547,12 @@ def test_min_battery_export_spread_suppresses_thin_export():
     inputs = make_inputs(buy=buy, sell=0.14, pv=0.0, load=0.5, soc0=10.0)
     hv = auto_terminal_value(buy, BATTERY)
     thin = solve(inputs, BATTERY, GRID, config(terminal_value=hv))
-    guarded = solve(inputs, BATTERY, GRID,
-                    OptimizerConfig(terminal_value=hv, solver_timeout_s=30,
-                                    min_battery_export_spread=0.02))
+    guarded = solve(
+        inputs,
+        BATTERY,
+        GRID,
+        OptimizerConfig(terminal_value=hv, solver_timeout_s=30, min_battery_export_spread=0.02),
+    )
     assert thin.grid_export_kw.max() > 1.0  # would export without the margin bar
     assert guarded.grid_export_kw.max() < 0.01  # the margin bar holds it
 
@@ -540,9 +563,12 @@ def test_export_spread_never_taxes_serving_the_house():
     penalty applied to total pd survives the rest of the suite but freezes
     self-consumption here.)"""
     inputs = make_inputs(buy=0.40, sell=0.05, pv=0.0, load=2.0, soc0=6.4)
-    sol = solve(inputs, BATTERY, GRID,
-                OptimizerConfig(terminal_value=0.05, solver_timeout_s=30,
-                                min_battery_export_spread=5.0))
+    sol = solve(
+        inputs,
+        BATTERY,
+        GRID,
+        OptimizerConfig(terminal_value=0.05, solver_timeout_s=30, min_battery_export_spread=5.0),
+    )
     assert sol.discharge_kw.sum() * 0.5 > 1.0  # house still served from battery
     assert sol.grid_export_kw.max() < 0.01
 
@@ -556,9 +582,12 @@ def test_export_spread_is_per_kwh_not_per_step():
     buy[:6] = 0.08
     inputs = make_inputs(buy=buy, sell=0.155, pv=0.0, load=0.5, soc0=10.0)
     hv = auto_terminal_value(buy, BATTERY)
-    sol = solve(inputs, BATTERY, GRID,
-                OptimizerConfig(terminal_value=hv, solver_timeout_s=30,
-                                min_battery_export_spread=0.02))
+    sol = solve(
+        inputs,
+        BATTERY,
+        GRID,
+        OptimizerConfig(terminal_value=hv, solver_timeout_s=30, min_battery_export_spread=0.02),
+    )
     assert sol.grid_export_kw.max() > 1.0  # the ~+0.6c margin clears a true 2c bar
 
 
@@ -610,7 +639,9 @@ def test_import_penalty_suppresses_marginal_import_arbitrage():
     inputs = make_inputs(buy=buy, sell=sell, load=0.0, soc0=2.0)
     free = solve(inputs, BATTERY, GRID, config(terminal_value=0.05))
     tolled = solve(
-        inputs, BATTERY, GRID,
+        inputs,
+        BATTERY,
+        GRID,
         OptimizerConfig(terminal_value=0.05, solver_timeout_s=30, import_penalty_per_kwh=0.08),
     )
     assert free.charge_kw[0:6].sum() > 3.0  # takes the thin bet
@@ -624,7 +655,9 @@ def test_import_penalty_skips_negative_buy_prices():
     buy[0:6] = -0.05
     inputs = make_inputs(buy=buy, sell=0.02, soc0=2.0)
     sol = solve(
-        inputs, BATTERY, GRID,
+        inputs,
+        BATTERY,
+        GRID,
         OptimizerConfig(terminal_value=0.25, solver_timeout_s=30, import_penalty_per_kwh=0.10),
     )
     assert sol.charge_kw[0:6].sum() > 4.0  # still gets paid to charge
@@ -637,7 +670,9 @@ def test_import_penalty_never_blocks_unavoidable_load_imports():
     inputs = make_inputs(buy=0.30, sell=0.10, load=1.5, soc0=0.0)
     terminal = auto_terminal_value(inputs.buy, BATTERY)
     sol = solve(
-        inputs, BATTERY, GRID,
+        inputs,
+        BATTERY,
+        GRID,
         OptimizerConfig(terminal_value=terminal, solver_timeout_s=30, import_penalty_per_kwh=0.10),
     )
     assert float(np.min(sol.grid_import_kw)) >= 1.5 - 1e-6  # load still fed
@@ -694,6 +729,30 @@ def test_free_solar_fill_lands_as_early_as_possible():
     assert sol.charge_kw[12:16].min() > 4.0  # the room (3.2 kWh) fills without a gap
 
 
+def test_early_fill_survives_a_large_objective():
+    """The tie-break is worth well under a cent; on a ~$10+ objective HiGHS's
+    default 1e-4 relative gap ($0.001+ of slack) can let the solver stop
+    before honouring it. Same free-fill tie as above, with a large,
+    battery-independent import bill in front of it (the battery may not
+    discharge through the night here, so it cannot serve that load)."""
+    T = 24
+    sell = np.concatenate([np.full(12, 0.05), np.full(12, -0.03)])
+    pv = np.concatenate([np.zeros(12), np.full(12, 11.0)])
+    soc0 = 0.75 * BATTERY.capacity_kwh
+    inputs = make_inputs(T=T, sell=sell, buy=0.30, pv=pv, load=6.0, soc0=soc0)
+    inputs = replace(
+        inputs, max_discharge_kw_step=np.concatenate([np.zeros(12), np.full(12, 5.0)])
+    )
+    sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.10))
+    assert sol.objective > 9  # the point of the test: ~$9.50 of import bill
+    # the 5 kW surplus goes in from the first step and the 3.2 kWh of room
+    # fills in two steps (at the default gap the solver leaves 1.7 kW of it
+    # to the last step of the window)
+    assert sol.charge_kw[12] > 4.5
+    assert sol.charge_kw[13] > 1.5
+    assert sol.charge_kw[14:].max() < 0.1
+
+
 def test_bird_in_hand_accrual_is_window_capped():
     """A sale with a real (sub-cent-but-visible) margin over the hold value
     must be taken even at the FRONT of a long horizon. Uncapped horizon-end
@@ -721,7 +780,10 @@ def test_pin_hold_keeps_battery_inert_grid_serves_load():
     assert float(sol.discharge_kw[0]) == pytest.approx(0.0, abs=1e-6)
     assert float(sol.grid_import_kw[0]) >= 2.0 - 1e-6
     step0 = classify_action(
-        float(sol.charge_kw[0]), float(sol.discharge_kw[0]),
-        float(inputs.pv[0]), float(sol.pv_used_kw[0]), float(inputs.load[0]),
+        float(sol.charge_kw[0]),
+        float(sol.discharge_kw[0]),
+        float(inputs.pv[0]),
+        float(sol.pv_used_kw[0]),
+        float(inputs.load[0]),
     )
     assert step0 == Action.HOLD

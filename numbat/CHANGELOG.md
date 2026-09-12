@@ -46,10 +46,14 @@
   spilled solar is worthless either way, the solver used to be
   indifferent to *when* the battery filled from it and could show it
   sitting idle beside spilled solar for hours (the inverter would have
-  been storing it). A tiny tail of the bird-in-hand term now runs past
-  its 4-hour window to the horizon end (≤ ~0.04c/kWh total — a pure
-  tie-break, below any price the plan trades on), and the solver's MIP
-  gap is tightened from 1e-4 to 1e-6 so tie-breaks that small decide.
+  been storing it) — and with `no_charge` now binding, that indifference
+  would have blocked a charge for nothing. A charge-side tie-break (a
+  reward per charged kWh shrinking from 0.025c at the start of the
+  horizon to zero at its end — half the anti-chatter epsilon, so it can
+  never pay for a cycle, and on charging only, so it can't move a sale)
+  settles it, and the solver's MIP gap is tightened from 1e-4 to 1e-6 so
+  a tie-break that small decides. Leaving `no_charge` for a solar fill is
+  never held back by the action-switch hysteresis.
 - Fix: a live-spike-suppressed grid charge left the interval's numbers
   (grid import, end-of-interval SoC, meter cost) as if the charge still
   happened. Step 0 is now re-stated as what `idle` actuates during a

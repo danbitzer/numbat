@@ -62,18 +62,23 @@ SELL_BUY_MARGIN = 0.001  # enforced sell < buy gap, $/kWh
 # on any decision is ≤ ~0.2c/kWh — genuinely a tiebreak.
 BIRD_IN_HAND_PER_KWH_HOUR = 0.0005
 BIRD_IN_HAND_WINDOW_HOURS = 4.0
-# Beyond the window, a far smaller tail of the same term runs to the horizon
-# end: a pure tie-break so "fill from otherwise-spilled solar at 10:00" beats
-# "the same fill at 12:00" — self-consumption would do the former anyway, so
-# a plan that defers a free fill for nothing lies about the inverter and, if
-# actuated as no_charge, blocks a charge for no reason. At 1e-5 $/kWh·h its
-# total pull over a 36 h horizon is ≤ ~0.036c/kWh: below the smallest price
-# margin the plan trades on, so it cannot reverse a real decision — but it
-# is also below HiGHS's default MIP gap, hence MIP_REL_GAP below.
-BIRD_IN_HAND_TAIL_PER_KWH_HOUR = 1e-5
-# HiGHS stops at a 1e-4 relative gap by default; on a ~$25 objective that
-# is a $0.0025 slack — larger than every tie-break above. Tightened so the
-# tie-breaks actually decide (solves stay tens of ms at this size).
+# Early-charge tie-break: a reward per charged kWh that shrinks linearly
+# from EARLY_CHARGE_FRACTION·ε at the start of the horizon to zero at its
+# end. Its only job is to make "fill from otherwise-spilled solar at 10:00"
+# beat "the same fill at 12:00" — self-consumption would do the former
+# anyway, so a plan that defers a free fill for nothing lies about the
+# inverter and, actuated as no_charge, blocks a charge for no reason. It is
+# on CHARGE only, never on SoC or discharge, so it cannot move a sale or a
+# house-discharge (an SoC-weighted tail was tried and did exactly that on
+# ties), and it is capped below EPSILON_CHATTER so charging-to-discharge
+# can never pay for itself: ≤ 0.025c/kWh at the very start of the horizon,
+# whatever the horizon length.
+EARLY_CHARGE_FRACTION = 0.5
+# HiGHS stops at a 1e-4 relative gap by default; on a ~$20 objective that
+# is a $0.002 slack — larger than the tie-breaks above, so the solver could
+# legitimately stop before honouring them. Tightened; on realistic 36 h
+# horizons (a few seconds per solve) it made no measurable difference to
+# solve time.
 MIP_REL_GAP = 1e-6
 
 
@@ -371,14 +376,15 @@ def solve(
     # of it that falls inside the near window (fractional at the boundary).
     elapsed = np.concatenate([[0.0], np.cumsum(inputs.dt_hours[:-1])])
     hold_hours = np.clip(BIRD_IN_HAND_WINDOW_HOURS - elapsed, 0.0, inputs.dt_hours)
-    tail_hours = inputs.dt_hours - hold_hours  # the part of each step past the window
+    horizon_hours = float(np.sum(inputs.dt_hours))
+    early_charge = EARLY_CHARGE_FRACTION * EPSILON_CHATTER * (1.0 - elapsed / horizon_hours)
     cost = (
         cp.sum(cp.multiply(buy, cp.multiply(gi, dt)))
         - cp.sum(cp.multiply(sell, cp.multiply(ge, dt)))
         + battery.wear_cost_per_kwh * cp.sum(cp.multiply(pd, dt))
         + EPSILON_CHATTER * cp.sum(cp.multiply(pc + pd, dt))
         - BIRD_IN_HAND_PER_KWH_HOUR * cp.sum(cp.multiply(hold_hours, soc[1:]))
-        - BIRD_IN_HAND_TAIL_PER_KWH_HOUR * cp.sum(cp.multiply(tail_hours, soc[1:]))
+        - cp.sum(cp.multiply(early_charge, cp.multiply(pc, dt)))
         - config.terminal_value * soc[T]
     )
     if spread_active and pd_sell is not None:

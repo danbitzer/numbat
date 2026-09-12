@@ -219,15 +219,11 @@ async def test_gather_wires_the_spike_reserve_sales_floor():
         trimmed_peak = float(held.inputs.sell[1:].max())
         raw_peak = float(held.sell_raw[1:].max())
         assert trimmed_peak < raw_peak
-        mid = await make_planner(
-            client, spike_settings((trimmed_peak + raw_peak) / 2)
-        ).gather(NOW)
+        mid = await make_planner(client, spike_settings((trimmed_peak + raw_peak) / 2)).gather(NOW)
         assert np.all(mid.inputs.sell_floor_kwh == pytest.approx(0.5 * 12.8))
         # a threshold just under the trimmed peak: that forecast step (and any
         # like it) releases IN-PLAN; step 0 (low confirmed price) stays floored
-        antic = await make_planner(
-            client, spike_settings(trimmed_peak - 0.001)
-        ).gather(NOW)
+        antic = await make_planner(client, spike_settings(trimmed_peak - 0.001)).gather(NOW)
         floor = antic.inputs.sell_floor_kwh
         assert floor is not None
         assert floor[0] == pytest.approx(0.5 * 12.8)  # confirmed price low
@@ -431,8 +427,10 @@ def test_sell_floor_vector_release_semantics():
     assert floor[5] == 3.2 and floor[0] == 9.6
     assert np.all(np.delete(floor, 5) == 9.6)
     # inert unless the reserve sits above the export reserve
-    assert sell_floor_vector(sell, reserve_kwh=3.0, export_reserve_kwh=3.2,
-                             high_price_threshold=1.0) is None
+    assert (
+        sell_floor_vector(sell, reserve_kwh=3.0, export_reserve_kwh=3.2, high_price_threshold=1.0)
+        is None
+    )
 
 
 async def test_gather_haircuts_solve_prices_and_keeps_raw_for_display():
@@ -753,6 +751,37 @@ def test_no_charge_keeps_the_room_for_a_paid_grid_fill():
     assert any(iv.action == Action.CHARGE for iv in plan.intervals[6:])
 
 
+def test_leaving_no_charge_for_a_solar_fill_is_never_thresholded():
+    """no_charge is BINDING (it blocks the inverter's own charging), and the
+    hysteresis exit to idle swaps one limit register: with the default 2c
+    switch threshold, a pinned no_charge would otherwise hold its own label
+    for a ~0.1c/cycle gain and block a free solar fill for hours (review,
+    2026-09-13). Rolling cycles: the fill starts the moment the free solve
+    wants it."""
+    settings = make_settings()  # default threshold: hysteresis active
+    planner = offline_planner(settings)
+    planner.previous_plan = previous_plan_with(Action.NO_CHARGE)
+    data = synthetic_cycle_data(settings)
+    data.inputs.pv[:] = 5.0
+    data.inputs.sell[:] = -0.05
+    data.prices.current_sell = -0.05
+    plan = planner.optimize(data, NOW)
+    assert plan.intervals[0].action == Action.IDLE
+    assert plan.intervals[0].power_kw > 3.0
+    assert not plan.solver_status.endswith("(hysteresis)")
+    # and the reverse relabel (idle -> no_charge when a paid fill appears)
+    # is the accepted free envelope relabel: no threshold either way
+    planner.previous_plan = plan
+    paid = synthetic_cycle_data(settings)
+    paid.inputs.pv[:] = 4.0
+    paid.inputs.sell[:] = -0.05
+    paid.inputs.buy[:] = 0.09
+    paid.inputs.buy[6:] = -0.15
+    paid.prices.current_sell = -0.05
+    paid = replace(paid, inputs=replace(paid.inputs, soc0_kwh=9.6))
+    assert planner.optimize(paid, NOW).intervals[0].action == Action.NO_CHARGE
+
+
 def test_curtail_action_survives_where_grid_import_is_not_wanted():
     """PV spill at negative feed-in but POSITIVE buy: PV serves the house
     (importing would cost money), the rest is spilled, the full battery
@@ -798,7 +827,11 @@ def test_daily_soc_target_vector_windowed_across_days():
     boundaries = [now + timedelta(minutes=30 * i) for i in range(80)]
     grid = TimeGrid.build(now, boundaries, timedelta(hours=36))
     instant = daily_soc_target_vector(
-        grid, ADELAIDE, target_soc=1.0, target_time=dt_time(15, 0), hold_hours=0.0,
+        grid,
+        ADELAIDE,
+        target_soc=1.0,
+        target_time=dt_time(15, 0),
+        hold_hours=0.0,
         capacity_kwh=44.8,
     )
     assert instant is not None and len(instant) == len(grid)  # aligned with soc[1:]
@@ -807,7 +840,11 @@ def test_daily_soc_target_vector_windowed_across_days():
 
     # a 2-hour hold widens each day's floor to the step-ends in [15:00, 17:00]
     windowed = daily_soc_target_vector(
-        grid, ADELAIDE, target_soc=1.0, target_time=dt_time(15, 0), hold_hours=2.0,
+        grid,
+        ADELAIDE,
+        target_soc=1.0,
+        target_time=dt_time(15, 0),
+        hold_hours=2.0,
         capacity_kwh=44.8,
     )
     assert windowed is not None
@@ -815,8 +852,13 @@ def test_daily_soc_target_vector_windowed_across_days():
 
     # clamp to soc_max so an over-100% target can't bake in a phantom penalty
     clamped = daily_soc_target_vector(
-        grid, ADELAIDE, target_soc=1.0, target_time=dt_time(15, 0), hold_hours=0.0,
-        capacity_kwh=44.8, soc_max_kwh=40.0,
+        grid,
+        ADELAIDE,
+        target_soc=1.0,
+        target_time=dt_time(15, 0),
+        hold_hours=0.0,
+        capacity_kwh=44.8,
+        soc_max_kwh=40.0,
     )
     assert clamped is not None and clamped[10] == pytest.approx(40.0)
 
@@ -828,7 +870,11 @@ def test_daily_soc_target_vector_windowed_across_days():
     b2 = [later + timedelta(minutes=30 * i) for i in range(80)]
     g2 = TimeGrid.build(later, b2, timedelta(hours=36))
     elapsed = daily_soc_target_vector(
-        g2, ADELAIDE, target_soc=1.0, target_time=dt_time(15, 0), hold_hours=4.0,
+        g2,
+        ADELAIDE,
+        target_soc=1.0,
+        target_time=dt_time(15, 0),
+        hold_hours=4.0,
         capacity_kwh=44.8,
     )
     assert elapsed is not None
@@ -838,7 +884,11 @@ def test_daily_soc_target_vector_windowed_across_days():
     # disabled
     assert (
         daily_soc_target_vector(
-            grid, ADELAIDE, target_soc=0.0, target_time=dt_time(15, 0), hold_hours=4.0,
+            grid,
+            ADELAIDE,
+            target_soc=0.0,
+            target_time=dt_time(15, 0),
+            hold_hours=4.0,
             capacity_kwh=44.8,
         )
         is None
@@ -851,9 +901,7 @@ async def test_load_buffer_scales_the_forecast():
     fake = full_fake_ha()
     async with fake_ha_client(fake) as client:
         plain = await make_planner(client, make_settings()).gather(NOW)
-        buffered = await make_planner(
-            client, make_settings(load={"buffer": 0.25})
-        ).gather(NOW)
+        buffered = await make_planner(client, make_settings(load={"buffer": 0.25})).gather(NOW)
     assert np.allclose(buffered.inputs.load, plain.inputs.load * 1.25)
     assert buffered.load_forecast_info["buffer"] == 0.25
     assert "buffer" not in plain.load_forecast_info

@@ -307,19 +307,25 @@ A few quieter mechanisms keep the plan sensible:
   it bounds the term's total influence on any single decision to ~0.2c/kWh
   — a genuine tiebreak that no real price signal loses to — and stops the
   reward from growing toward the end of the plan, which would quietly
-  push *sales* later (the very deferral risk it exists to kill). Beyond
-  the 4 hours a far smaller tail of the same term (about 0.001c per kWh
-  per hour, ≤ ~0.04c/kWh over the whole horizon) runs to the end of the
-  plan as a pure tie-break: filling the battery from solar that would
-  otherwise be thrown away is worth the same at 10:00 as at 12:00, and
-  without the tail the solver picks either — showing a battery sitting
-  idle beside spilled solar that the inverter would in fact be storing.
-  With it, a free fill lands as early as it can, and the solver's
-  optimality gap is tightened so tie-breaks this small actually decide. One
-  side effect worth knowing: with the import-reluctance toll switched off,
-  the battery may briefly prefer holding charge on a dead-flat day while
-  the grid serves the house — the cost difference is a couple of tenths
-  of a cent per kWh; the default toll suppresses it entirely.
+  push *sales* later (the very deferral risk it exists to kill). A
+  second, smaller tie-break sits on *charging* only: a reward per charged
+  kWh shrinking from 0.025c at the start of the plan to zero at its end
+  (half the anti-chatter epsilon, so a charge can never pay for its own
+  later discharge). Filling the battery from solar that would otherwise
+  be thrown away is worth the same at 10:00 as at 12:00, and without it
+  the solver picks either — showing a battery sitting idle beside spilled
+  solar that the inverter would in fact be storing, and, now that
+  `no_charge` blocks charging for real, holding the inverter back for
+  nothing. Because it never touches state of charge or discharge, it
+  cannot move a sale; the solver's optimality gap is tightened so a
+  tie-break this small actually decides. One
+  side effect worth knowing: on a dead-flat forecast (every hour priced
+  the same — including the padded tail past the end of the real price
+  forecast) the plan may prefer holding charge while the grid serves the
+  house, because every discharge displaces the same-priced import and
+  holding earns the whisker. The cost difference is a couple of tenths of
+  a cent per kWh, real Amber days are never flat, and the import toll does
+  not change it (it prices imports, not the tie).
 - **Action switch threshold** (default $0.02): the current action only
   changes if the new plan beats sticking with the old action by more than
   this, across the whole horizon — this stops the battery flip-flopping
