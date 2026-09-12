@@ -40,7 +40,10 @@
 #
 # A failed call raises and the run errors (the trace shows the integration's
 # message, e.g. "forced_charge power of 16000 W is outside 0–15000 W"); the
-# next sweep tries again. Do not wrap the calls in continue_on_error.
+# next sweep tries again. Do not wrap the calls in continue_on_error. Note
+# the calls are sequential: a failing export or PV call ends the run before
+# the battery-mode call — an erroring trace on every sweep means the
+# inverter is not following the plan at all, not just missing one flag.
 #
 # Disabling this automation is the master off-switch: Numbat goes back to
 # being a pure recommendation engine.

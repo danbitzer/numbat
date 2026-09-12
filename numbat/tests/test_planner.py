@@ -594,25 +594,42 @@ def test_pv_off_rides_charge_for_true_grid_charging():
     assert plan.pv_off is True
 
 
+def _negative_buy_pv_day(settings, live_buy: float, estimate: bool = False):
+    # the horizon says negative buy (so the plan uses no PV) with a full
+    # battery; the LIVE price is whatever the test wants to probe
+    data = synthetic_cycle_data(settings)
+    data.inputs.pv[:] = 2.0
+    data.inputs.buy[:] = -0.02
+    data.inputs.sell[:] = -0.05
+    data.prices.current_buy = live_buy
+    data.prices.current_sell = -0.05
+    data.prices.current_estimate = estimate
+    return replace(data, inputs=replace(data.inputs, soc0_kwh=12.8))
+
+
 def test_pv_off_is_gated_on_the_live_buy_price():
     """pv_used = 0 alone is not enough: a solver tie around buy ≈ 0 must not
-    flip a 40 s-recovery actuator, so the flag needs a NEGATIVE live buy.
+    flip a 40 s-recovery actuator, so the flag needs a NEGATIVE live buy —
+    a cent below zero to switch on, anything below zero to stay on (each
+    clear costs ~45 s of PV; a 5-minute site's price can hover at zero).
     And nothing to withhold at night (no PV) means no flag either."""
     settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
     planner = offline_planner(settings)
-    # the horizon says negative buy (the plan uses no PV) but the live price
-    # sensor says positive, or exactly zero: no PV-off
-    for live_buy in (0.30, 0.0):
-        data = synthetic_cycle_data(settings)
-        data.inputs.pv[:] = 2.0
-        data.inputs.buy[:] = -0.02
-        data.inputs.sell[:] = -0.05
-        data.prices.current_buy = live_buy
-        data.prices.current_sell = -0.05
-        data = replace(data, inputs=replace(data.inputs, soc0_kwh=12.8))
-        plan = planner.optimize(data, NOW)
+    # positive, zero, and negative-but-shallow live prices: no entry
+    for live_buy in (0.30, 0.0, -0.005):
+        plan = planner.optimize(_negative_buy_pv_day(settings, live_buy), NOW)
         assert plan.intervals[0].pv_used_kw < 0.01
         assert plan.pv_off is False
+    # deep enough: on
+    on = planner.optimize(_negative_buy_pv_day(settings, -0.02), NOW)
+    assert on.pv_off is True
+    # once on (the cycle records the plan), a shallow negative keeps it on;
+    # zero switches it off
+    planner.previous_plan = on
+    still = planner.optimize(_negative_buy_pv_day(settings, -0.005), NOW)
+    assert still.pv_off is True
+    planner.previous_plan = still
+    assert planner.optimize(_negative_buy_pv_day(settings, 0.0), NOW).pv_off is False
     # negative buy but no PV to withhold (night)
     night = synthetic_cycle_data(settings)
     night.inputs.buy[:] = -0.02
@@ -624,17 +641,56 @@ def test_pv_off_is_gated_on_the_live_buy_price():
     assert planner.optimize(calm, NOW).pv_off is False
 
 
+def test_pv_off_holds_its_state_while_the_live_price_is_an_estimate():
+    """Amber's first seconds of an interval are an estimate that the confirmed
+    price can contradict; the confirmed re-solve follows within seconds, so
+    an estimate neither switches PV off nor back on."""
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    planner = offline_planner(settings)
+    # off, deep negative estimate: stays off until confirmed
+    est = _negative_buy_pv_day(settings, -0.13, estimate=True)
+    assert planner.optimize(est, NOW).pv_off is False
+    on = planner.optimize(_negative_buy_pv_day(settings, -0.13), NOW)
+    assert on.pv_off is True
+    # on, positive estimate: stays on until confirmed
+    planner.previous_plan = on
+    est = _negative_buy_pv_day(settings, 0.30, estimate=True)
+    held = planner.optimize(est, NOW)
+    assert held.pv_off is True
+    planner.previous_plan = held
+    assert planner.optimize(_negative_buy_pv_day(settings, 0.30), NOW).pv_off is False
+
+
+def test_pv_off_survives_a_hysteresis_pin():
+    """With hysteresis live, step 0 can be pinned to the previous action; the
+    pinned solve still plans no PV at a negative buy, so the flag rides the
+    (relabelled) action it produces."""
+    settings = make_settings()  # default switch threshold: hysteresis active
+    planner = offline_planner(settings)
+    planner.previous_plan = previous_plan_with(Action.IDLE)
+    plan = planner.optimize(_negative_buy_pv_day(settings, -0.02), NOW)
+    assert plan.intervals[0].action in (Action.HOLD, Action.IDLE)
+    assert plan.intervals[0].pv_used_kw < 0.01
+    assert plan.pv_off is True
+
+
 def test_fallback_carries_pv_off_only_while_the_step_plans_no_pv():
     # like curtail: the live price is unknowable in a fallback, so the
     # carried flag is kept only while the surviving step itself uses no PV
+    # AND its own forecast buy is still negative — a solver outage across
+    # the rollover to a paid interval must not keep PV off
     settings = make_settings()
     planner = offline_planner(settings)
     prev = previous_plan_with(Action.HOLD)
     prev.pv_off = True
     prev.intervals[0].pv_kw = 2.0
     prev.intervals[0].pv_used_kw = 0.0
+    prev.intervals[0].buy = -0.02
     planner.previous_plan = prev
     assert planner.fallback(NOW).pv_off is True
+    prev.intervals[0].buy = 0.30
+    assert planner.fallback(NOW).pv_off is False
+    prev.intervals[0].buy = -0.02
     prev.intervals[0].pv_used_kw = 0.5
     assert planner.fallback(NOW).pv_off is False
     prev.intervals[0].pv_used_kw = 0.0

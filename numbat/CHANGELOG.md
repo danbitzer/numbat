@@ -8,16 +8,20 @@
   that — serve the house, and any charge, from the grid, which pays — but
   no actuator could follow: every hybrid feeds the house from PV first, so
   `hold` ran "net of PV" and `charge` came from throttled PV. Sungrow SH-T
-  inverters expose a documented "PV power limitation" register (13018; live
+  inverters expose a documented "PV power limitation" register (13018, Modbus address 13017; live
   on an SH15T 2026-09-11: 3.5 kW → 3 W within a 10 s sample, the DC path to
   the battery included, ~40–50 s to recover). Numbat now publishes `pv_off`
   on `sensor.numbat_action`, atomic with the action and orthogonal to it
-  like `curtail`: true when the live buy price is negative and step 0 has
-  PV but uses none (gated on the live price so a solver tie around $0 can't
-  flip a slow actuator). It rides `hold` (paid to run the house) or `charge`
+  like `curtail`: true when step 0 has PV but the plan uses none of it and
+  the live buy price is negative — entering at −1c/kWh or below and staying
+  on while negative at all, so a price hovering around zero on a 5-minute
+  site can't toggle a 40 s-recovery actuator every interval (a solver tie
+  around $0 can't either), and held unchanged while the live price is still
+  an Amber estimate. It rides `hold` (paid to run the house) or `charge`
   (true grid charging); the fallback plan carries it while the surviving
-  step still plans no PV; the dashboard's "More info" shows "PV off" and
-  "export withheld" chips; plan intervals carry `pv_used_kw`.
+  step still plans no PV at a negative price; the dashboard's "More info"
+  shows "PV off" and "export withheld" chips; plan intervals carry
+  `pv_used_kw`.
   - New `blueprints/numbat_actuator_sungrow.yaml` for the
     [`sungrow` integration](https://github.com/danbitzer/hass-sungrow-modbus):
     a device and two numbers instead of action sequences — every run is

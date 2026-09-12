@@ -469,11 +469,14 @@ Import the raw GitHub URL, then create an automation from it):
   three guarded, ordered, read-back-verified calls —
   `sungrow.set_export_limit` → `sungrow.set_pv_limitation` →
   `sungrow.set_battery_mode`. Re-asserts write nothing when the registers
-  already match. This is the only path that actuates `pv_off` on Sungrow.
-  Point its grid sensor at the integration's `grid_connected` binary
-  sensor. Numbat's `entities` config is unchanged by the integration:
-  `sensor.battery_power` keeps mkaiser's sign (positive = discharging,
-  `battery.power_convention: charge_negative`).
+  already match, and `pv_off` is actuated with nothing to write. Point its
+  grid sensor at the integration's `grid_connected` binary sensor. Point
+  Numbat's `entities` at the integration's sensors (they are prefixed with
+  the device name, e.g. `sensor.sungrow_sh15t_load_power`,
+  `sensor.sungrow_sh15t_battery_level`, `sensor.sungrow_sh15t_battery_power`
+  and, for Test mode, `sensor.sungrow_sh15t_total_dc_power`) and check the
+  battery power sign against `battery.power_convention` — the integration
+  reports positive = discharging, the same as mkaiser (`charge_negative`).
 - **`numbat_actuator.yaml`** — generic, for any inverter. You supply three
   action sequences for your hardware — plus optional ones for no_charge,
   hold, curtailment and PV-off — and inside them the variables `power_kw`
