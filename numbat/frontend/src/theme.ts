@@ -1,23 +1,13 @@
 import { useSyncExternalStore } from "react";
-import type { Action } from "./api";
 import type { FlowFamily } from "./flowText";
+
+export { fmtDayTime, fmtTime } from "./format";
 
 // Design 1A ("HA Cards") palette. Actions: charge = HA-blue accent,
 // discharge = purple action accent, idle = neutral segment grey. no_charge
 // and curtail aren't in the handoff's four-way legend; green (the design's
 // export colour — no_charge usually means PV surplus exporting instead of
 // charging) and amber (export held back) extend it in the same family.
-// hold (battery fenced while the grid serves the house) gets teal — cool
-// and inert, distinct from both the green export family and charge blue.
-export const ACTION_COLORS: Record<Action, string> = {
-  charge: "#3f7fd0",
-  discharge: "#8a52c9",
-  idle: "var(--seg-idle)",
-  no_charge: "#2fae7a",
-  hold: "#2f9fae",
-  curtail: "#efa63c",
-};
-
 // The Planned-mode strip and the Action-now tile colour by flow FAMILY (see
 // flowText.ts): the self-consumption flows share the idle grey, the five
 // overrides keep the action colours they map onto.
@@ -132,14 +122,4 @@ export function idleSegmentColor(dark: boolean): string {
   return dark ? "#3a3a3a" : "#d6dbe1";
 }
 
-export function fmtDayTime(ms: number): string {
-  return new Date(ms).toLocaleString(undefined, {
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
-export function fmtTime(ms: number): string {
-  return new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-}

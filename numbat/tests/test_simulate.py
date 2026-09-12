@@ -28,6 +28,18 @@ def test_scenario_list_is_nonempty_and_well_formed():
     assert set(SCENARIOS) == {s["id"] for s in items}
 
 
+def test_simulated_plans_carry_the_flow_vocabulary():
+    # test mode renders exactly like live: every interval has a flow and the
+    # explanation carries the flow block
+    from numbat.flow import FLOWS
+
+    result = run_simulation(
+        make_settings(), scenario_id="typical", soc_frac=0.5, now=NOW, tz=ADELAIDE
+    )
+    assert all(iv["flow"] in FLOWS for iv in result["intervals"])
+    assert result["meta"]["explanation"]["flow"]["key"] == result["intervals"][0]["flow"]
+
+
 def test_run_simulation_returns_a_full_optimal_plan():
     settings = make_settings()
     result = run_simulation(

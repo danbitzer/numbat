@@ -122,7 +122,8 @@ def test_annotate_fills_modifiers_and_spill_per_interval():
         iv(Action.CURTAIL, 1, pv_kw=8.0, pv_used_kw=1.0, sell=-0.03),
         # S8: paid to import, PV off, everything spilled
         iv(Action.HOLD, 2, pv_kw=8.0, pv_used_kw=0.0, buy=-0.13, sell=-0.05, grid_import_kw=1.0),
-        # shallow negative buy: below the entry threshold, not PV-off
+        # shallow negative buy right after a deep one: the forward pass keeps
+        # PV off (the actuator would), as pv_off_wanted's asymmetry does live
         iv(Action.HOLD, 3, pv_kw=8.0, pv_used_kw=0.0, buy=-0.005, sell=-0.05, grid_import_kw=1.0),
         # night hold: no solar, nothing to cap or switch off
         iv(Action.HOLD, 4, buy=0.12, sell=0.05, grid_import_kw=1.0),
@@ -143,8 +144,30 @@ def test_annotate_fills_modifiers_and_spill_per_interval():
         True,
         8.0,
     )
-    assert shallow.pv_off is False
+    assert shallow.pv_off is True
     assert (night.export_capped, night.pv_off, night.pv_spill_kw) == (False, False, 0.0)
+
+
+def test_curtail_at_positive_feed_in_is_an_export_limit_cut():
+    # the export limit, not a negative price, spills the solar: the flow is
+    # still holding_back_solar but nothing is "capped" by price
+    p = plan(iv(Action.CURTAIL, 0, pv_kw=9.0, pv_used_kw=6.0, grid_export_kw=5.0, sell=0.08))
+    annotate(p)
+    s0 = p.intervals[0]
+    assert (s0.flow, s0.export_capped, s0.pv_spill_kw) == ("holding_back_solar", False, 3.0)
+
+
+def test_pv_off_per_interval_is_a_forward_pass_with_the_planners_asymmetry():
+    # −3c enters, −0.5c stays on (the actuator would hold), +1c leaves, and
+    # −0.5c alone does not re-enter
+    prices = [-0.03, -0.005, 0.01, -0.005, -0.03]
+    p = plan(
+        *[iv(Action.HOLD, i, pv_kw=6.0, pv_used_kw=0.0, buy=b, grid_import_kw=1.0)
+          for i, b in enumerate(prices)],
+        pv_off=True,
+    )
+    annotate(p)
+    assert [x.pv_off for x in p.intervals] == [True, True, False, False, True]
 
 
 def test_annotate_step0_mirrors_the_plans_live_gated_flags():
@@ -177,10 +200,24 @@ def test_details_quote_the_look_ahead_facts():
     d = details(p, capacity_kwh=44.8)
     assert d["key"] == "running_on_grid"
     assert d["next_use_time"] == p.intervals[2].start.isoformat()
+    assert d["next_use_kind"] == "house"
+    assert d["next_use_price"] == 0.38
     assert d["next_use_buy"] == 0.38
     assert d["next_fill_time"] == p.intervals[4].start.isoformat()
     assert d["next_fill_source"] == "solar"
-    assert d["soc_min_ahead_pct"] == round(100 * 28.0 / 44.8, 1)
+    # five half-hour steps don't cover 12 h: no floor claim
+    assert "soc_min_ahead_pct" not in d
+    long = plan(*[iv(Action.IDLE, i, power_kw=-1.0, soc_end=30.0 - i * 0.5) for i in range(26)])
+    annotate(long)
+    assert details(long, 44.8)["soc_min_ahead_pct"] == round(100 * (30.0 - 23 * 0.5) / 44.8, 1)
+    # a forced export ahead quotes the feed-in price it earns
+    sale = plan(
+        iv(Action.HOLD, 0, buy=0.12, grid_import_kw=1.0),
+        iv(Action.DISCHARGE, 1, buy=0.40, sell=0.60, power_kw=-8.0, grid_export_kw=7.0),
+    )
+    annotate(sale)
+    ds = details(sale, 44.8)
+    assert (ds["next_use_kind"], ds["next_use_price"]) == ("export", 0.60)
     # a grid fill is named as such; nothing ahead means no keys
     g = plan(
         iv(Action.IDLE, 0, grid_import_kw=1.0),

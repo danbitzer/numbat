@@ -67,25 +67,28 @@ def flow_for(iv: PlanInterval) -> str:
 
 
 def annotate(plan: Plan) -> Plan:
-    """Fill every interval's flow, modifiers and spill; step 0's modifiers
-    are the plan's live-price-gated flags, later steps use forecast prices
-    (the same thresholds the planner would apply when they become live)."""
-    for iv in plan.intervals:
+    """Fill every interval's flow, modifiers and spill. Step 0's modifiers
+    are the plan's live-price-gated flags (what was published); later steps
+    apply the planner's thresholds to the forecast prices — for PV-off as a
+    forward pass with the same asymmetry (a cent below zero to enter, any
+    negative price to stay), so the strip shows the runs the actuator would
+    hold, not a gap at every shallow dip. The estimate hold has no forecast
+    analogue."""
+    pv_off = plan.pv_off
+    for i, iv in enumerate(plan.intervals):
         spill = iv.pv_kw - iv.pv_used_kw
         iv.pv_spill_kw = round(spill, 2) if spill > CURTAIL_TOL_KW else 0.0
-        iv.export_capped = (
-            iv.sell < 0 and iv.grid_export_kw < CURTAIL_TOL_KW and iv.pv_kw > POWER_TOL_KW
-        )
-        iv.pv_off = (
-            iv.buy < PV_OFF_ENTRY_BUY
-            and iv.pv_kw > POWER_TOL_KW
-            and iv.pv_used_kw < POWER_TOL_KW
-        )
+        if i == 0:
+            iv.export_capped = plan.curtail_export
+            iv.pv_off = plan.pv_off
+        else:
+            iv.export_capped = (
+                iv.sell < 0 and iv.grid_export_kw < CURTAIL_TOL_KW and iv.pv_kw > POWER_TOL_KW
+            )
+            unused_pv = iv.pv_kw > POWER_TOL_KW and iv.pv_used_kw < POWER_TOL_KW
+            pv_off = unused_pv and iv.buy < (0.0 if pv_off else PV_OFF_ENTRY_BUY)
+            iv.pv_off = pv_off
         iv.flow = flow_for(iv)
-    if plan.intervals:
-        s0 = plan.intervals[0]
-        s0.export_capped = plan.curtail_export
-        s0.pv_off = plan.pv_off
     return plan
 
 
@@ -109,11 +112,20 @@ def details(plan: Plan, capacity_kwh: float | None) -> dict | None:
         out["next_fill_source"] = "grid" if fill.action == Action.CHARGE else "solar"
     use = next((iv for iv in later if iv.power_kw < -POWER_TOL_KW), None)
     if use is not None:
+        # what the stored energy is next spent on: the house (the buy price
+        # then is the saving) or a forced export (the feed-in price then is
+        # the earning) — the tile quotes whichever applies
+        export = use.action == Action.DISCHARGE
         out["next_use_time"] = use.start.isoformat()
-        out["next_use_buy"] = use.buy
+        out["next_use_kind"] = "export" if export else "house"
+        out["next_use_price"] = use.sell if export else use.buy
+        out["next_use_buy"] = use.buy  # kept for older frontends
     if capacity_kwh:
-        horizon = s0.start.timestamp() + 12 * 3600
-        ahead = [iv.soc_end for iv in plan.intervals if iv.start.timestamp() < horizon]
-        if ahead:
+        window_s = 12 * 3600
+        horizon = s0.start.timestamp() + window_s
+        # only claim "over the next 12 h" when the plan actually covers it
+        # (a fallback plan shrinks every cycle)
+        if plan.intervals[-1].end.timestamp() >= horizon:
+            ahead = [iv.soc_end for iv in plan.intervals if iv.start.timestamp() < horizon]
             out["soc_min_ahead_pct"] = round(100 * min(ahead) / capacity_kwh, 1)
     return out

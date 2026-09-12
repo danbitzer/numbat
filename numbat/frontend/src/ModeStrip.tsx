@@ -97,8 +97,12 @@ export function ModeStrip({ rows, domain }: { rows: Row[]; domain: [number, numb
         <div
           className="relative h-7"
           onMouseMove={(e) => locate(e.clientX, e.currentTarget)}
-          // touch screens can't hover: a tap shows the same tooltip
-          onClick={(e) => locate(e.clientX, e.currentTarget)}
+          // touch screens can't hover: a tap shows the same tooltip, which
+          // clears itself since no mouseleave will
+          onClick={(e) => {
+            locate(e.clientX, e.currentTarget);
+            window.setTimeout(() => setLocal(null), 4000);
+          }}
           onMouseLeave={() => setLocal(null)}
         >
           <div className="absolute inset-0 overflow-hidden rounded-[7px] border border-border">

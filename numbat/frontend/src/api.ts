@@ -123,6 +123,8 @@ export const ExplanationSchema = z.object({
       next_fill_time: z.string().optional(),
       next_fill_source: z.enum(["grid", "solar"]).optional(),
       next_use_time: z.string().optional(),
+      next_use_kind: z.enum(["house", "export"]).optional(),
+      next_use_price: z.number().optional(),
       next_use_buy: z.number().optional(),
       soc_min_ahead_pct: z.number().optional(),
     })

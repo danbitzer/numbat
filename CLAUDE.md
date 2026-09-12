@@ -22,8 +22,8 @@ then captures light + dark via headless Firefox into
 
 ## Checks
 Run `uv run ruff check .` and `uv run pytest -q` from `numbat/` before
-committing. For frontend changes also run `bun run typecheck` and
-`bun run build` from `numbat/frontend/`.
+committing. For frontend changes also run `bun run typecheck`, `bun test`
+and `bun run build` from `numbat/frontend/`.
 
 ## Frontend (numbat/frontend)
 React 19 (+ React Compiler) + TypeScript + Recharts + Tailwind v4, built by

@@ -28,8 +28,13 @@
   automations, template sensors and both blueprints are untouched. DOCS has
   the full flow → action + attributes reference and a template-sensor
   recipe for the friendly words in HA history.
-- Fix: a live-spike-suppressed grid charge left the interval's grid-import
-  and end-of-interval SoC numbers as if the charge still happened.
+- Fix: a live-spike-suppressed grid charge left the interval's numbers
+  (grid import, end-of-interval SoC, meter cost) as if the charge still
+  happened. Step 0 is now re-stated as what `idle` actuates during a
+  spike — self-consumption with the battery covering the house — so the
+  tile reads "Running on the battery", and `sensor.numbat_soc_target`
+  publishes that interval's true end-of-interval SoC instead of the
+  suppressed charge's.
 
 ## 0.20.0
 

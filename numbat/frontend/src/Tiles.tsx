@@ -115,6 +115,7 @@ export function Hero({
       ? flowWords({ ...explanation.flow, key: flow }, explanation.values, {
           liveSpike: !!explanation.levers?.live_spike,
           action: step0.action,
+          now: step0.t,
         })
       : { label: ACTION_FALLBACK[step0.action] ?? step0.action.replace("_", " "), sub: "" };
   const family = familyOf(flow);

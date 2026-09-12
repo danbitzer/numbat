@@ -615,11 +615,22 @@ class Planner:
         if step0.action == Action.CHARGE and step0.grid_import_kw > 0.01:
             log.warning("live spike active: suppressing planned grid charge")
             step0.action = Action.IDLE
-            # keep the interval's numbers consistent with the new action: the
-            # suppressed charge no longer comes in over the meter
-            step0.grid_import_kw = max(0.0, step0.grid_import_kw - step0.power_kw)
-            step0.power_kw = 0.0
-            step0.soc_end = step0.soc_start
+            # Re-state step 0's numbers as what `idle` actuates during a
+            # spike: self-consumption, the battery covering the house's
+            # shortfall. The rest of the plan still assumes the charge
+            # happened (it re-solves within minutes); only this interval —
+            # the one published and drawn as "now" — is made consistent.
+            bp = self._battery_params
+            dt = (step0.end - step0.start).total_seconds() / 3600
+            shortfall = max(0.0, step0.load_kw - step0.pv_used_kw)
+            spendable = max(0.0, step0.soc_start - bp.soc_min_kwh) * bp.efficiency_discharge / dt
+            discharge = min(shortfall, bp.max_discharge_kw, spendable)
+            step0.power_kw = -discharge
+            step0.grid_import_kw = max(0.0, shortfall - discharge)
+            step0.soc_end = step0.soc_start - discharge * dt / bp.efficiency_discharge
+            step0.interval_cost = (
+                step0.buy * step0.grid_import_kw - step0.sell * step0.grid_export_kw
+            ) * dt
         return plan
 
     async def run_cycle(self, now: datetime | None = None) -> Plan:
@@ -679,6 +690,13 @@ class Planner:
                 "stale": True,
             },
         )
+        # the flags as published (carried above), so the dashboard's
+        # reconciliation line stays truthful on a stale plan
+        plan.explanation["levers"] = {
+            "live_spike": plan.live_spike,
+            "curtail": plan.curtail_export,
+            "pv_off": plan.pv_off,
+        }
         annotate_flows(plan)
         plan.explanation["flow"] = flow_details(plan, self._battery_params.capacity_kwh)
         return plan

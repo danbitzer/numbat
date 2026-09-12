@@ -5,7 +5,7 @@
 // here. Tested against a non-technical persona: lead with the payoff
 // ("Getting paid to…"), quote the price, never "idle", "forced", "PV".
 import type { Explanation } from "./api";
-import { fmtTime } from "./theme";
+import { fmtDayTime, fmtTime } from "./format";
 
 export type FlowFamily =
   | "self"
@@ -71,14 +71,21 @@ export function flowOf(flow: string | undefined, action: string): string {
 
 export const familyOf = (flow: string): FlowFamily => FLOW_FAMILY[flow] ?? "self";
 
-// Prices in cents below a dollar ("8c", "−3c"), dollars above ("$1.50").
+// Prices in whole cents below a dollar ("8c", "−3c"; a rounded zero has no
+// sign), dollars from a dollar up ("$1.50").
 export function cents(x: number): string {
-  const sign = x < 0 ? "−" : "";
-  const a = Math.abs(x);
-  return a >= 1 ? `${sign}$${a.toFixed(2)}` : `${sign}${Math.round(a * 100)}c`;
+  const c = Math.round(x * 100);
+  if (c === 0) return "0c";
+  const sign = c < 0 ? "−" : "";
+  const a = Math.abs(c);
+  return a >= 100 ? `${sign}$${(a / 100).toFixed(2)}` : `${sign}${a}c`;
 }
 const kw = (x: number) => `${x.toFixed(1)} kW`;
-const at = (iso: string) => fmtTime(Date.parse(iso));
+// a time more than 12 h away needs its day ("Tue 10:00 am"), else just the time
+const at = (iso: string, from?: number) => {
+  const ms = Date.parse(iso);
+  return from != null && Math.abs(ms - from) > 12 * 3_600_000 ? fmtDayTime(ms) : fmtTime(ms);
+};
 
 export interface FlowWords {
   label: string;
@@ -92,17 +99,33 @@ type FlowInfo = NonNullable<Explanation["flow"]>;
 export function flowWords(
   f: FlowInfo,
   v: Explanation["values"],
-  opts: { liveSpike?: boolean; action?: string } = {},
+  opts: { liveSpike?: boolean; action?: string; now?: number } = {},
 ): FlowWords {
   const capped = !!f.export_capped;
   const pvOff = !!f.pv_off;
   const soc = v.soc_start_pct != null ? `${Math.round(v.soc_start_pct)}%` : null;
   const socEnd = v.soc_end_pct != null ? `${Math.round(v.soc_end_pct)}%` : null;
-  const full = v.soc_start_pct != null && v.soc_start_pct >= 98;
-  const later =
-    f.next_use_time && f.next_use_buy != null
-      ? `${cents(v.buy)} now, ${cents(f.next_use_buy)} at ${at(f.next_use_time)}`
-      : `${cents(v.buy)} now`;
+  // "full" is about whether the battery is taking charge, not a SoC number
+  // (soc_max is configurable): a battery that isn't charging while solar is
+  // being held back is full for all practical purposes
+  const charging = v.battery_kw > 0.05;
+  const when = (iso: string) => at(iso, opts.now);
+  // the stored energy's next use, when the plan knows it: the house at a
+  // dearer buy price ("12c now, 38c at 6 am") or a forced export at a
+  // feed-in price ("to sell at 60c at 5 pm"); a use that isn't dearer than
+  // now doesn't explain a hold (a daily target or a spike reserve does) and
+  // is left unsaid
+  const usePrice = f.next_use_price ?? f.next_use_buy;
+  const useKind = f.next_use_kind ?? "house";
+  const useSays =
+    f.next_use_time && usePrice != null
+      ? useKind === "export"
+        ? `to sell at ${cents(usePrice)} at ${when(f.next_use_time)}`
+        : usePrice > v.buy
+          ? `${cents(v.buy)} now, ${cents(usePrice)} at ${when(f.next_use_time)}`
+          : null
+      : null;
+  const later = useSays ?? `${cents(v.buy)} now`;
   const paused = pvOff ? "; panels paused" : "";
   let words: FlowWords;
   switch (f.key) {
@@ -133,33 +156,40 @@ export function flowWords(
               label: "Selling solar now, filling later",
               sub: `selling at ${cents(v.sell)} now; the battery fills from ${
                 f.next_fill_source === "grid" ? "the grid" : "solar"
-              } at ${at(f.next_fill_time)}`,
+              } at ${when(f.next_fill_time)}`,
             }
           : {
               label: "Selling solar",
-              sub: `${full ? "battery full; " : ""}exporting the surplus at ${cents(v.sell)}`,
+              sub: `${charging ? "" : "battery full; "}exporting the surplus at ${cents(v.sell)}`,
             };
       break;
-    case "holding_back_solar":
+    case "holding_back_solar": {
+      const spill = f.pv_spill_kw != null && f.pv_spill_kw > 0 ? `${kw(f.pv_spill_kw)} of solar` : "solar";
       words = {
-        label: full ? "Battery full, holding back solar" : "Holding back solar",
-        sub: `selling price is ${cents(v.sell)} — exporting would cost you${
-          full ? "" : "; the battery is charging at its maximum"
-        }`,
+        label: charging ? "Holding back solar" : "Battery full, holding back solar",
+        sub:
+          v.sell < 0
+            ? `selling price is ${cents(v.sell)} — exporting would cost you${
+                charging ? "; the battery is charging at its maximum" : ""
+              }`
+            : `export limit reached — ${spill} has nowhere to go${
+                charging ? "; the battery is charging at its maximum" : ""
+              }`,
       };
       break;
+    }
     case "charging_from_grid": {
+      // grid_import_kw is the meter (house + charge); the charge itself is
+      // battery_kw, of which any part the import doesn't cover came from solar
       const solarIn = Math.max(0, v.battery_kw - v.grid_import_kw);
+      const charge = `charging at ${kw(v.battery_kw)}${solarIn > 0.05 ? ` (${kw(solarIn)} of it solar)` : ""}`;
       words =
         v.buy < 0
           ? {
               label: "Getting paid to fill the battery",
-              sub: `they're paying you ${cents(-v.buy)} to take power — charging at ${kw(v.grid_import_kw)}${paused}`,
+              sub: `they're paying you ${cents(-v.buy)} to take power — ${charge}${paused}`,
             }
-          : {
-              label: "Charging from the grid",
-              sub: `${kw(v.grid_import_kw)} from the grid${solarIn > 0.05 ? ` + ${kw(solarIn)} solar` : ""} · ${later}`,
-            };
+          : { label: "Charging from the grid", sub: `${charge} · ${later}` };
       break;
     }
     case "selling_stored_energy":
@@ -178,7 +208,7 @@ export function flowWords(
               sub: `they're paying you ${cents(-v.buy)} — house on the grid, battery held${paused}`,
             }
           : {
-              label: f.next_use_time ? `Saving the battery for ${at(f.next_use_time)}` : "Saving the battery",
+              label: f.next_use_time && useSays ? `Saving the battery for ${when(f.next_use_time)}` : "Saving the battery",
               sub: `${later} — house on the grid${soc ? ` (${soc})` : ""}`,
             };
       break;
@@ -188,7 +218,7 @@ export function flowWords(
             label: f.next_fill_source === "grid" ? "Waiting for a cheap price" : "Waiting for sun",
             sub: `battery at ${soc ?? "its floor"} — fills from ${
               f.next_fill_source === "grid" ? "the grid" : "solar"
-            } at ${at(f.next_fill_time)}`,
+            } at ${when(f.next_fill_time)}`,
           }
         : { label: "Waiting", sub: `battery at ${soc ?? "its floor"}; waiting for sun or a cheap price` };
       break;

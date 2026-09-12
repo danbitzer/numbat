@@ -400,10 +400,13 @@ def test_live_spike_guard_suppresses_grid_charge():
     assert step0.action != Action.CHARGE
     # the suppressed charge no longer comes in over the meter: the numbers
     # (and the flow the dashboard derives from them) match the new action
-    assert step0.power_kw == 0.0
-    assert step0.grid_import_kw < 1.0  # the house load only, not load + charge
-    assert step0.soc_end == step0.soc_start
-    assert step0.flow != "charging_from_grid"
+    # re-stated as what idle actuates during a spike: self-consumption, the
+    # battery covering the house (load 0.5 kW, no solar at night)
+    assert step0.power_kw == pytest.approx(-0.5)
+    assert step0.grid_import_kw == 0.0
+    assert step0.soc_end < step0.soc_start
+    assert step0.interval_cost == 0.0
+    assert step0.flow == "running_on_battery"
 
 
 def test_sell_floor_vector_release_semantics():
@@ -679,6 +682,23 @@ def test_pv_off_survives_a_hysteresis_pin():
     assert plan.intervals[0].action in (Action.HOLD, Action.IDLE)
     assert plan.intervals[0].pv_used_kw < 0.01
     assert plan.pv_off is True
+
+
+def test_fallback_is_annotated_and_its_explanation_reconciles():
+    # the stale plan carries flows per interval, the published flags in its
+    # levers (the dashboard's reconciliation line reads them) and the flow
+    # block — the same shape as a fresh plan
+    settings = make_settings()
+    planner = offline_planner(settings)
+    prev = previous_plan_with(Action.HOLD)
+    prev.curtail_export = True
+    prev.intervals[0].grid_import_kw = 1.0
+    planner.previous_plan = prev
+    fb = planner.fallback(NOW)
+    assert fb.intervals[0].flow == "running_on_grid"
+    assert fb.explanation["levers"] == {"live_spike": False, "curtail": True, "pv_off": False}
+    assert fb.explanation["flow"]["key"] == "running_on_grid"
+    assert fb.explanation["stale"] is True
 
 
 def test_fallback_carries_pv_off_only_while_the_step_plans_no_pv():

@@ -9,6 +9,7 @@ the numbers; OPTIMIZER.md explains the economics.
 from datetime import UTC, datetime, timedelta
 
 from numbat.explain import build_explanation
+from numbat.flow import annotate
 from numbat.models import Action, Plan, PlanInterval
 
 START = datetime(2026, 7, 15, 6, 0, tzinfo=UTC)  # 3:30pm Adelaide
@@ -84,15 +85,13 @@ def test_levers_reflect_what_armed_the_solve():
     # the shape api.ts requires: {soc, threshold, released}
     reserve = {"soc": 0.3, "threshold": 1.0, "released": False}
     exp = _build(
-        _plan([_iv(0, Action.IDLE, buy=0.30, sell=0.25)]),
+        annotate(_plan([_iv(0, Action.IDLE, buy=0.30, sell=0.25)])),
         spike_reserve=reserve,
         daily_target_active=True,
         live_spike=True,
         prices_estimated=True,
     )
-    assert exp["flow"]["key"] == "" or exp["flow"]["key"] in (
-        "waiting", "battery_empty", "running_on_battery", "storing_solar"
-    )
+    assert exp["flow"]["key"] == "waiting"  # an un-annotated idle interval
     assert exp["levers"] == {
         "spike_reserve": reserve,
         "daily_target": True,
