@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.20.0
 
 - **PV off: a `pv_off` flag on the action sensor, and a blueprint for the
   `sungrow` integration.** The optimizer has always been free to use none of
