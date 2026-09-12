@@ -17,6 +17,7 @@ import numpy as np
 
 from numbat.config import Settings
 from numbat.explain import build_explanation
+from numbat.flow import annotate as annotate_flows
 from numbat.optimizer.model import (
     GridParams,
     OptimizerConfig,
@@ -24,7 +25,7 @@ from numbat.optimizer.model import (
     auto_terminal_value,
     solve,
 )
-from numbat.optimizer.result import hold_floor_kwh, solution_to_plan
+from numbat.optimizer.result import charge_ceiling_kwh, hold_floor_kwh, solution_to_plan
 from numbat.planner import (
     battery_params,
     daily_soc_target_vector,
@@ -314,12 +315,14 @@ def simulate_solve(
         replace(inputs, sell=sell),
         computed_at=now,
         hold_floor_kwh=hold_floor_kwh(bp.soc_min_kwh, bp.capacity_kwh),
+        charge_ceiling_kwh=charge_ceiling_kwh(bp.soc_max_kwh, bp.capacity_kwh),
     )
     # The orthogonal flags, same gates as live (step 0's scenario price IS
     # the sim's live price), so test mode shows them the way the live
     # dashboard would.
     plan.curtail_export = float(sell[0]) < 0 and plan.intervals[0].grid_export_kw < 0.05
     plan.pv_off = pv_off_wanted(float(buy[0]), plan.intervals[0], previously=False)
+    annotate_flows(plan)
     plan.explanation = build_explanation(
         plan,
         hold_value=terminal,
@@ -338,6 +341,7 @@ def simulate_solve(
         capacity_kwh=bp.capacity_kwh,
         curtail=plan.curtail_export,
         pv_off=plan.pv_off,
+        soc_max_kwh=bp.soc_max_kwh,
     )
 
     return {
@@ -368,6 +372,11 @@ def simulate_solve(
                 "grid_import_kw": iv.grid_import_kw,
                 "grid_export_kw": iv.grid_export_kw,
                 "interval_cost": iv.interval_cost,
+                "pv_used_kw": iv.pv_used_kw,
+                "flow": iv.flow,
+                "export_capped": iv.export_capped,
+                "pv_off": iv.pv_off,
+                "pv_spill_kw": iv.pv_spill_kw,
             }
             for iv in plan.intervals
         ],

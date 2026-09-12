@@ -39,6 +39,9 @@ export interface Row {
   gridImport: number;
   gridExport: number; // plotted negative (power leaving the house)
   soc: number; // kWh at interval end
+  flow: string; // the flow vocabulary key (numbat/flow.py)
+  exportCapped: boolean;
+  pvOff: boolean;
 }
 
 /** Hourly-aligned ticks every `stepHours`, matching the plan's local timezone. */

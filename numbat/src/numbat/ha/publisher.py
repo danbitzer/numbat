@@ -99,6 +99,13 @@ class Publisher:
                 # actuators that can stop PV key off this, atomic with the
                 # action it rides (hold or charge)
                 "pv_off": plan.pv_off,
+                # the flow vocabulary (numbat.flow): what the energy is doing
+                # this interval in household words, derived action-first from
+                # the plan, and the solar it throws away — additive, for
+                # dashboards/template sensors; automations keep keying on the
+                # state and the two flags above
+                "flow": step0.flow,
+                "pv_spill_kw": step0.pv_spill_kw,
                 # power duplicated here so action + magnitude change in ONE
                 # atomic POST — actuator automations read these, never pairing
                 # a fresh action with the previous cycle's setpoint

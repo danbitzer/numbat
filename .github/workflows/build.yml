@@ -46,6 +46,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Test
+        run: bun test
+
       # Builds into numbat/src/numbat/web/dist, where the add-on serves it from.
       # Built once here (amd64) — it's arch-independent — so the per-arch
       # image builds under QEMU never run Node.

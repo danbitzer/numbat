@@ -1,5 +1,67 @@
 # Changelog
 
+## Unreleased
+
+- **The dashboard now speaks the flow vocabulary.** The action sensor's
+  words are a contract for automations (`charge` = forced charge from the
+  grid, `idle` = self-consumption, …) and they stay exactly as they are —
+  but `idle` is the busiest, most valuable mode (solar filling the
+  battery, the battery running the house) and read as "the add-on has
+  stopped", `no_charge` read as a fault, and a negative-price day showed
+  `idle` with a curtail island once the battery filled. The Action-now tile
+  and the Planned-mode strip now show what the energy is *doing*, derived
+  action-first from the plan (so the tile can never disagree with the
+  published instruction): *Storing solar · Solar running the house · Running
+  on the battery · Selling solar (now, filling later) · Holding back solar ·
+  Charging from the grid / Getting paid to fill the battery · Selling stored
+  energy · Saving the battery for 6 am / Getting paid to use the grid ·
+  Waiting for sun / a cheap price*, each with the price or time that is the
+  "why" on the second line. The strip colours by family (one grey for the
+  four solar-&-battery flows, the battery chart underneath shows which),
+  patterns the modifiers — diagonal stripes where export is capped, dots
+  where PV is off — and its tooltip (tap on touch screens) names the flow. "More info" gains a raw
+  reconciliation line — the exact state and attributes published, the
+  solver status and validity — for trace hunting. Additive attributes on
+  `sensor.numbat_action`: `flow` (the vocabulary key) and `pv_spill_kw` (solar
+  the plan throws away); every `/api/plan` interval carries `flow`,
+  `export_capped`, `pv_off`, `pv_spill_kw`. Nothing existing is renamed —
+  automations, template sensors and both blueprints are untouched. DOCS has
+  the full flow → action + attributes reference and a template-sensor
+  recipe for the friendly words in HA history.
+- **`no_charge` now covers every "keep the room" case, not only exported
+  surplus.** The classifier used to publish `curtail` whenever solar was
+  spilled, even when the battery had room and the plan was deliberately
+  not filling it (2026-09-10 replay, 10:00: draining into the house and
+  spilling 8.9 kW at −8c feed-in to be *paid* 15c/kWh to refill from the
+  grid at 12:30). `curtail` actuates as plain self-consumption + export
+  cap, so the real inverter filled the battery from solar and defeated
+  the plan. Now: battery not charging + solar surplus + room ⇒
+  `no_charge` (with the `curtail` attribute when feed-in is negative);
+  `curtail` is reserved for solar with nowhere to go (battery full or
+  charging at its maximum). Both blueprints already actuate `no_charge`
+  (generic: your `no_charge_actions`; sungrow: the `no_charge` mode) —
+  **if your generic automation has no `no_charge_actions`, add them** or
+  these intervals behave as idle exactly as before.
+- **Free solar fills land as early as possible.** Within a window where
+  spilled solar is worthless either way, the solver used to be
+  indifferent to *when* the battery filled from it and could show it
+  sitting idle beside spilled solar for hours (the inverter would have
+  been storing it) — and with `no_charge` now binding, that indifference
+  would have blocked a charge for nothing. A charge-side tie-break (a
+  reward per charged kWh shrinking from 0.025c at the start of the
+  horizon to zero at its end — half the anti-chatter epsilon, so it can
+  never pay for a cycle, and on charging only, so it can't move a sale)
+  settles it, and the solver's MIP gap is tightened from 1e-4 to 1e-6 so
+  a tie-break that small decides. Leaving `no_charge` for a solar fill is
+  never held back by the action-switch hysteresis.
+- Fix: a live-spike-suppressed grid charge left the interval's numbers
+  (grid import, end-of-interval SoC, meter cost) as if the charge still
+  happened. Step 0 is now re-stated as what `idle` actuates during a
+  spike — self-consumption with the battery covering the house — so the
+  tile reads "Running on the battery", and `sensor.numbat_soc_target`
+  publishes that interval's true end-of-interval SoC instead of the
+  suppressed charge's.
+
 ## 0.20.0
 
 - **PV off: a `pv_off` flag on the action sensor, and a blueprint for the

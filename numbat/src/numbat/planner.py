@@ -29,6 +29,9 @@ from numbat.adapters.sungrow import SungrowAdapter
 from numbat.adapters.weather import WeatherAdapter
 from numbat.config import Settings
 from numbat.explain import build_explanation
+from numbat.flow import PV_OFF_ENTRY_BUY
+from numbat.flow import annotate as annotate_flows
+from numbat.flow import details as flow_details
 from numbat.forecast.load import LoadForecaster
 from numbat.models import Action, BatteryState, Plan, PlanInterval, PriceForecast, Series
 from numbat.optimizer.model import (
@@ -42,6 +45,7 @@ from numbat.optimizer.model import (
 )
 from numbat.optimizer.result import (
     POWER_TOL_KW,
+    charge_ceiling_kwh,
     classify_action,
     hold_floor_kwh,
     solution_to_plan,
@@ -211,13 +215,12 @@ class CycleData:
     vacation: dict | None = None
 
 
-# Enter PV-off only once the live buy price is at least this negative. Each
-# clear costs ~40–50 s of generation (the MPPT restart), so a price hovering
-# around zero on a 5-minute site must not toggle the actuator every
-# interval; a cent below zero is roughly where an hour of paid import for a
-# 1 kW house covers one restart. Once on, it stays on while the buy price is
-# negative at all (asymmetric, like a thermostat).
-PV_OFF_ENTRY_BUY = -0.01  # $/kWh
+# PV_OFF_ENTRY_BUY (numbat.flow): enter PV-off only once the live buy price
+# is at least a cent negative. Each clear costs ~40–50 s of generation (the
+# MPPT restart), so a price hovering around zero on a 5-minute site must not
+# toggle the actuator every interval; a cent below zero is roughly where an
+# hour of paid import for a 1 kW house covers one restart. Once on, it stays
+# on while the buy price is negative at all (asymmetric, like a thermostat).
 
 
 def pv_off_wanted(
@@ -226,8 +229,9 @@ def pv_off_wanted(
     """PV generation should be stopped this interval: the plan uses none of
     the PV the step has (at a negative buy the optimizer serves the house —
     and any charge — from the grid, which pays; the flag then rides hold or
-    charge, or idle/curtail in the edge cases of a battery at its floor or a
-    dawn trickle — all safe with PV off, since the plan uses none), and the
+    charge, or no_charge/curtail/idle in the edge cases of a battery at its
+    floor or a dawn trickle — all safe with PV off, since the plan uses
+    none and a charge block is a no-op with nothing to charge from), and the
     live buy price is negative: below PV_OFF_ENTRY_BUY to switch on, below
     zero to stay on. While the live price is still an Amber estimate the
     previous state is kept — the confirmed price re-solves within seconds,
@@ -473,6 +477,9 @@ class Planner:
             hold_floor_kwh=hold_floor_kwh(
                 self._battery_params.soc_min_kwh, self._battery_params.capacity_kwh
             ),
+            charge_ceiling_kwh=charge_ceiling_kwh(
+                self._battery_params.soc_max_kwh, self._battery_params.capacity_kwh
+            ),
         )
         if solution.status.endswith("(hysteresis)"):
             plan.solver_status = solution.status
@@ -503,6 +510,7 @@ class Planner:
             previously=self.previous_plan.pv_off if self.previous_plan else False,
             estimate=data.prices.current_estimate,
         )
+        annotate_flows(plan)
         plan.explanation = build_explanation(
             plan,
             hold_value=terminal,
@@ -516,6 +524,7 @@ class Planner:
             capacity_kwh=self._battery_params.capacity_kwh,
             curtail=plan.curtail_export,
             pv_off=plan.pv_off,
+            soc_max_kwh=self._battery_params.soc_max_kwh,
         )
         return plan
 
@@ -568,7 +577,15 @@ class Planner:
         those transitions swap only battery-limit registers (cheap, guarded),
         the exits that matter (anything -> charge/discharge) are always
         thresholded, and the reverse relabels can't oscillate because the
-        tighter pin does hold its own label."""
+        tighter pin does hold its own label.
+
+        The reverse direction is made free on purpose: leaving no_charge for
+        idle/curtail/hold also swaps only a limit register, and no_charge is
+        BINDING (it blocks the inverter's own charging) — thresholded, a
+        pinned no_charge would hold its own label for a gain of a tenth of
+        a cent per cycle and block a free solar fill for hours (found in
+        review, 2026-09-13). So when the free solve wants to charge from
+        solar after a no_charge, it charges."""
         threshold = self._settings.optimizer.action_switch_threshold_dollars
         prev = self.previous_plan
         if prev is None or not prev.intervals or threshold <= 0:
@@ -584,9 +601,19 @@ class Planner:
             > hold_floor_kwh(
                 self._battery_params.soc_min_kwh, self._battery_params.capacity_kwh
             ),
+            chargeable=float(free.soc_kwh[0])
+            < charge_ceiling_kwh(
+                self._battery_params.soc_max_kwh, self._battery_params.capacity_kwh
+            ),
         )
         if free_action == prev_action:
             return free
+        if prev_action == Action.NO_CHARGE and free_action in (
+            Action.IDLE,
+            Action.CURTAIL,
+            Action.HOLD,
+        ):
+            return free  # a limit-register restore, never worth holding out for
         try:
             pinned = solve(
                 data.inputs,
@@ -612,7 +639,22 @@ class Planner:
         if step0.action == Action.CHARGE and step0.grid_import_kw > 0.01:
             log.warning("live spike active: suppressing planned grid charge")
             step0.action = Action.IDLE
-            step0.power_kw = 0.0
+            # Re-state step 0's numbers as what `idle` actuates during a
+            # spike: self-consumption, the battery covering the house's
+            # shortfall. The rest of the plan still assumes the charge
+            # happened (it re-solves within minutes); only this interval —
+            # the one published and drawn as "now" — is made consistent.
+            bp = self._battery_params
+            dt = (step0.end - step0.start).total_seconds() / 3600
+            shortfall = max(0.0, step0.load_kw - step0.pv_used_kw)
+            spendable = max(0.0, step0.soc_start - bp.soc_min_kwh) * bp.efficiency_discharge / dt
+            discharge = min(shortfall, bp.max_discharge_kw, spendable)
+            step0.power_kw = -discharge
+            step0.grid_import_kw = max(0.0, shortfall - discharge)
+            step0.soc_end = step0.soc_start - discharge * dt / bp.efficiency_discharge
+            step0.interval_cost = (
+                step0.buy * step0.grid_import_kw - step0.sell * step0.grid_export_kw
+            ) * dt
         return plan
 
     async def run_cycle(self, now: datetime | None = None) -> Plan:
@@ -635,7 +677,7 @@ class Planner:
         if not remaining:
             raise SolverError("solver failed and previous plan is fully elapsed")
         s0 = remaining[0]
-        return Plan(
+        plan = Plan(
             intervals=remaining,
             objective_cost=prev.objective_cost,
             solver_status="stale (reusing previous plan)",
@@ -672,6 +714,16 @@ class Planner:
                 "stale": True,
             },
         )
+        # the flags as published (carried above), so the dashboard's
+        # reconciliation line stays truthful on a stale plan
+        plan.explanation["levers"] = {
+            "live_spike": plan.live_spike,
+            "curtail": plan.curtail_export,
+            "pv_off": plan.pv_off,
+        }
+        annotate_flows(plan)
+        plan.explanation["flow"] = flow_details(plan, self._battery_params.capacity_kwh)
+        return plan
 
 
 def battery_params(settings: Settings) -> BatteryParams:

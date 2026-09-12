@@ -4,7 +4,8 @@ import type { Explanation, PlanResponse } from "./api";
 import type { Row } from "./charts";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./components/ui/tooltip";
-import { ACTION_COLORS, fmtTime, SERIES } from "./theme";
+import { familyOf, flowOf, flowWords } from "./flowText";
+import { FLOW_COLORS, fmtTime, SERIES } from "./theme";
 
 // Hover tooltips never open on touch screens — swap in a tap-to-open
 // popover (styled like the tooltip) when the device can't hover.
@@ -42,22 +43,15 @@ const HOLD_VALUE_HELP =
   "and it's the break-even the current feed-in price is weighed against " +
   "before selling: sell above it, hold below it.";
 
-const ACTION_LABEL: Record<string, string> = {
-  charge: "charging",
-  discharge: "discharging",
-  no_charge: "no charge",
-  hold: "holding",
-  idle: "idle",
-  curtail: "curtailing",
-};
-
-const ACTION_SUB: Record<string, string> = {
-  charge: "charging from the grid",
-  discharge: "exporting stored energy",
-  no_charge: "self-consumption, charging blocked",
-  hold: "battery held — the grid serves the house",
-  idle: "self-consumption",
-  curtail: "export capped — negative feed-in",
+// Fallback tile words when the plan carries no explanation (the flow words
+// need its step-0 numbers): the contract strings, lightly humanised.
+const ACTION_FALLBACK: Record<string, string> = {
+  charge: "Charging from the grid",
+  discharge: "Selling stored energy",
+  no_charge: "Selling solar",
+  hold: "Running on the grid",
+  idle: "Solar & battery",
+  curtail: "Holding back solar",
 };
 
 function HelpBadge({ label, help }: { label: string; help: string }) {
@@ -112,6 +106,19 @@ export function Hero({
   const setpoint = forced
     ? `${step0.battery > 0 ? "+" : "−"}${Math.abs(step0.battery).toFixed(1)} kW`
     : "—";
+  // What the energy is doing, in household words (flowText.ts), from the
+  // backend's action-first flow key + the step-0 numbers; the contract
+  // string itself stays in the More-info reconciliation line.
+  const flow = flowOf(explanation?.flow?.key ?? step0.flow, step0.action);
+  const words =
+    explanation?.flow && explanation.values
+      ? flowWords({ ...explanation.flow, key: flow }, explanation.values, {
+          liveSpike: !!explanation.levers?.live_spike,
+          action: step0.action,
+          now: step0.t,
+        })
+      : { label: ACTION_FALLBACK[step0.action] ?? step0.action.replace("_", " "), sub: "" };
+  const family = familyOf(flow);
   return (
     <div className="shadow-card flex flex-col rounded-lg border border-border bg-card px-[22px] py-[18px]">
       <div className="flex items-center justify-between gap-5">
@@ -120,13 +127,14 @@ export function Hero({
             Action now
           </div>
           <div
-            className="mt-1.5 font-mono text-[32px] leading-tight font-semibold capitalize"
-            style={{ color: ACTION_COLORS[step0.action] ?? "var(--action)" }}
+            className="mt-1.5 font-mono text-[26px] leading-tight font-semibold sm:text-[30px]"
+            style={{ color: family === "self" ? "var(--foreground)" : FLOW_COLORS[family] }}
           >
-            {ACTION_LABEL[step0.action] ?? step0.action.replace("_", " ")}
+            {words.label}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
-            {fmtTime(step0.t)} – {fmtTime(step0.end)} · {ACTION_SUB[step0.action] ?? ""}
+            {fmtTime(step0.t)} – {fmtTime(step0.end)}
+            {words.sub ? ` · ${words.sub}` : ""}
           </div>
         </div>
         <div className="shrink-0 text-right">
@@ -138,7 +146,7 @@ export function Hero({
           </div>
         </div>
       </div>
-      {explanation && <MoreInfo explanation={explanation} plan={plan} />}
+      {explanation && <MoreInfo explanation={explanation} plan={plan} step0={step0} />}
     </div>
   );
 }
@@ -199,9 +207,25 @@ function Chip({ children }: { children: ReactNode }) {
   );
 }
 
-function MoreInfo({ explanation, plan }: { explanation: Explanation; plan?: PlanResponse }) {
+function MoreInfo({
+  explanation,
+  plan,
+  step0,
+}: {
+  explanation: Explanation;
+  plan?: PlanResponse;
+  step0: Row;
+}) {
   const [open, setOpen] = useState(false);
   const { values: v, context: c, levers: l, stale } = explanation;
+  // The contract, verbatim: what sensor.numbat_action published this
+  // interval, so a trace hunt can reconcile tile ↔ state ↔ automation.
+  const signed = `${v.battery_kw >= 0 ? "+" : "−"}${Math.abs(v.battery_kw).toFixed(2)}`;
+  const contract =
+    `action: ${step0.action} · power_kw: ${signed} · curtail: ${String(!!l?.curtail)} · ` +
+    `pv_off: ${String(!!l?.pv_off)} · live_spike: ${String(!!l?.live_spike)}` +
+    (plan ? ` · solver: ${plan.solver_status}` : "") +
+    ` · valid until ${fmtTime(step0.end)}`;
   const bat = batteryText(v.battery_kw);
   const grid = gridMetric(v);
   const meter = meterText(v.interval_cost);
@@ -237,6 +261,13 @@ function MoreInfo({ explanation, plan }: { explanation: Explanation; plan?: Plan
       </button>
       {open && (
         <div className="mt-3 space-y-3">
+          <div className="font-mono text-[11px] leading-relaxed text-muted-foreground">
+            <div className="break-words">{contract}</div>
+            <div className="mt-0.5 text-[10px]">
+              published to sensor.numbat_action — the label above is derived from the
+              planned flows; this is the instruction your automation acts on
+            </div>
+          </div>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3">
             <Metric label="Buy" value={money(v.buy)} sub="/kWh" />
             <Metric label="Feed-in" value={money(v.sell)} sub="/kWh" />
