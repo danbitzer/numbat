@@ -306,6 +306,20 @@ export const SECTIONS: SectionSpec[] = [
           "under Optimizer still applies dynamically).",
         { unit: "$/kWh", step: 0.01 },
       ),
+      {
+        path: "grid.pv_off_enabled",
+        label: "Allow switching solar off",
+        kind: "boolean",
+        default: false,
+        help:
+          "Publish the pv_off flag: while the buy price is negative, stop ALL solar " +
+          "generation so the house (and any charge) runs on paid grid power. Only for " +
+          "inverters that can switch PV off and an actuator wired to it (Sungrow SH-T " +
+          "via the sungrow blueprint). A PV cut is heavy-handed — on the SH15T, " +
+          "restoring PV under a full battery with the export cap on can stall " +
+          "generation until the cap is lifted. Off: negative-price intervals still " +
+          "hold or grid-charge; solar just keeps serving the house first.",
+      },
     ],
   },
   {

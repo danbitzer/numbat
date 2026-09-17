@@ -69,14 +69,15 @@ def flow_for(iv: PlanInterval) -> str:
     return "waiting"
 
 
-def annotate(plan: Plan) -> Plan:
+def annotate(plan: Plan, *, pv_off_enabled: bool = True) -> Plan:
     """Fill every interval's flow, modifiers and spill. Step 0's modifiers
     are the plan's live-price-gated flags (what was published); later steps
     apply the planner's thresholds to the forecast prices — for PV-off as a
     forward pass with the same asymmetry (a cent below zero to enter, any
     negative price to stay), so the strip shows the runs the actuator would
     hold, not a gap at every shallow dip. The estimate hold has no forecast
-    analogue."""
+    analogue. With `pv_off_enabled` false (grid.pv_off_enabled) no interval
+    is marked PV-off."""
     pv_off = plan.pv_off
     for i, iv in enumerate(plan.intervals):
         spill = iv.pv_kw - iv.pv_used_kw
@@ -89,7 +90,11 @@ def annotate(plan: Plan) -> Plan:
                 iv.sell < 0 and iv.grid_export_kw < CURTAIL_TOL_KW and iv.pv_kw > POWER_TOL_KW
             )
             unused_pv = iv.pv_kw > POWER_TOL_KW and iv.pv_used_kw < POWER_TOL_KW
-            pv_off = unused_pv and iv.buy < (0.0 if pv_off else PV_OFF_ENTRY_BUY)
+            pv_off = (
+                pv_off_enabled
+                and unused_pv
+                and iv.buy < (0.0 if pv_off else PV_OFF_ENTRY_BUY)
+            )
             iv.pv_off = pv_off
         iv.flow = flow_for(iv)
     return plan

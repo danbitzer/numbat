@@ -186,6 +186,18 @@ Limits of your **grid connection**, distinct from the battery's power limits:
   relative to the plan's own valuation; this is the fixed-dollar manual
   override.
 
+- `pv_off_enabled` (default **off**) — publish the `pv_off` flag on
+  `sensor.numbat_action`: while the buy price is negative (entering at −1c or
+  below), stop **all** solar generation so the house — and any charge — runs
+  on paid grid power. Only useful with an inverter that can switch PV off
+  and an actuator wired to it (Sungrow SH-T through the `sungrow` blueprint,
+  or your own `pv_off_actions`). It is a heavy-handed move: PV takes
+  ~40–50 s to come back, and on the SH15T a restore under a full battery
+  with the export cap on can stall generation until the cap is lifted. With
+  it off, negative-buy intervals still plan and publish `hold`/`charge`; the
+  inverter simply keeps serving the house from solar first, as every hybrid
+  does.
+
 `battery.max_charge_kw` / `max_discharge_kw` limit the *battery* (cell wear,
 inverter DC side); the grid limits cap the *net AC flow at the meter*. The
 optimizer respects both simultaneously.
