@@ -568,7 +568,9 @@ def test_pv_off_rides_hold_at_negative_buy():
     house from the grid (paid to) and uses none of its PV — that intent
     used to be unactuatable (PV serves the house first on every hybrid);
     with a PV-off actuator it is published as `pv_off`, riding HOLD."""
-    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    settings = make_settings(
+        optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID
+    )
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
     data.inputs.pv[:] = 2.0
@@ -588,7 +590,9 @@ def test_pv_off_rides_charge_for_true_grid_charging():
     """Room in the battery at negative buy: the plan grid-charges with PV
     off — CHARGE + pv_off is the combination that finally draws the charge
     from the grid instead of throttled PV."""
-    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    settings = make_settings(
+        optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID
+    )
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
     data.inputs.pv[:] = 2.0
@@ -600,6 +604,10 @@ def test_pv_off_rides_charge_for_true_grid_charging():
     assert plan.intervals[0].action == Action.CHARGE
     assert plan.intervals[0].pv_used_kw < 0.01
     assert plan.pv_off is True
+
+
+# grid.pv_off_enabled is opt-in (default off): these tests exercise the flag
+PV_OFF_GRID = {"import_limit_kw": 15.0, "export_limit_kw": 5.0, "pv_off_enabled": True}
 
 
 def _negative_buy_pv_day(settings, live_buy: float, estimate: bool = False):
@@ -621,7 +629,9 @@ def test_pv_off_is_gated_on_the_live_buy_price():
     a cent below zero to switch on, anything below zero to stay on (each
     clear costs ~45 s of PV; a 5-minute site's price can hover at zero).
     And nothing to withhold at night (no PV) means no flag either."""
-    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    settings = make_settings(
+        optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID
+    )
     planner = offline_planner(settings)
     # positive, zero, and negative-but-shallow live prices: no entry
     for live_buy in (0.30, 0.0, -0.005):
@@ -653,7 +663,9 @@ def test_pv_off_holds_its_state_while_the_live_price_is_an_estimate():
     """Amber's first seconds of an interval are an estimate that the confirmed
     price can contradict; the confirmed re-solve follows within seconds, so
     an estimate neither switches PV off nor back on."""
-    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    settings = make_settings(
+        optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID
+    )
     planner = offline_planner(settings)
     # off, deep negative estimate: stays off until confirmed
     est = _negative_buy_pv_day(settings, -0.13, estimate=True)
@@ -673,7 +685,7 @@ def test_pv_off_survives_a_hysteresis_pin():
     """With hysteresis live, step 0 can be pinned to the previous action; the
     pinned solve still plans no PV at a negative buy, so the flag rides the
     (relabelled) action it produces."""
-    settings = make_settings()  # default switch threshold: hysteresis active
+    settings = make_settings(grid=PV_OFF_GRID)  # default switch threshold: hysteresis active
     planner = offline_planner(settings)
     planner.previous_plan = previous_plan_with(Action.IDLE)
     plan = planner.optimize(_negative_buy_pv_day(settings, -0.02), NOW)
@@ -704,7 +716,7 @@ def test_fallback_carries_pv_off_only_while_the_step_plans_no_pv():
     # carried flag is kept only while the surviving step itself uses no PV
     # AND its own forecast buy is still negative — a solver outage across
     # the rollover to a paid interval must not keep PV off
-    settings = make_settings()
+    settings = make_settings(grid=PV_OFF_GRID)
     planner = offline_planner(settings)
     prev = previous_plan_with(Action.HOLD)
     prev.pv_off = True
@@ -780,6 +792,20 @@ def test_leaving_no_charge_for_a_solar_fill_is_never_thresholded():
     paid.prices.current_sell = -0.05
     paid = replace(paid, inputs=replace(paid.inputs, soc0_kwh=9.6))
     assert planner.optimize(paid, NOW).intervals[0].action == Action.NO_CHARGE
+
+
+def test_pv_off_is_opt_in():
+    """grid.pv_off_enabled defaults off: the same negative-buy hold publishes
+    no PV-off flag and marks no interval, while the plan is unchanged."""
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    assert settings.grid.pv_off_enabled is False
+    planner = offline_planner(settings)
+    plan = planner.optimize(_negative_buy_pv_day(settings, -0.13), NOW)
+    assert plan.intervals[0].action == Action.HOLD
+    assert plan.intervals[0].pv_used_kw < 0.01
+    assert plan.pv_off is False
+    assert not any(iv.pv_off for iv in plan.intervals)
+    assert plan.explanation["flow"]["pv_off"] is False
 
 
 def test_curtail_action_survives_where_grid_import_is_not_wanted():

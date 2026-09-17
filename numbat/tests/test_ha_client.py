@@ -84,7 +84,10 @@ async def test_publish_plan_action_carries_pv_off_flag():
 
     from test_planner import make_settings, offline_planner, synthetic_cycle_data
 
-    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    settings = make_settings(
+        optimizer={"action_switch_threshold_dollars": 0.0},
+        grid={"import_limit_kw": 15.0, "export_limit_kw": 5.0, "pv_off_enabled": True},
+    )
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
     data.inputs.pv[:] = 2.0

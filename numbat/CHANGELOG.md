@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **New setting: `grid.pv_off_enabled` ("Allow switching solar off"),
+  default off.** The `pv_off` flag (0.20) is now opt-in: only a few
+  inverters can switch PV off, and on the Sungrow SH15T a PV restore under
+  a full battery with the export cap on can stall generation until the cap
+  is lifted (found live 2026-09-17). With the setting off the flag is
+  never published and the dashboard never marks an interval "solar off";
+  negative-buy intervals still plan and publish `hold`/`charge`. **If you
+  use `pv_off`, turn the setting on after updating.**
+
 ## 0.21.0
 
 - **The dashboard now speaks the flow vocabulary.** The action sensor's

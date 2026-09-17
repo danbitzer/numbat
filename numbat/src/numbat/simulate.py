@@ -321,8 +321,11 @@ def simulate_solve(
     # the sim's live price), so test mode shows them the way the live
     # dashboard would.
     plan.curtail_export = float(sell[0]) < 0 and plan.intervals[0].grid_export_kw < 0.05
-    plan.pv_off = pv_off_wanted(float(buy[0]), plan.intervals[0], previously=False)
-    annotate_flows(plan)
+    pv_off_enabled = settings.grid.pv_off_enabled
+    plan.pv_off = pv_off_enabled and pv_off_wanted(
+        float(buy[0]), plan.intervals[0], previously=False
+    )
+    annotate_flows(plan, pv_off_enabled=pv_off_enabled)
     plan.explanation = build_explanation(
         plan,
         hold_value=terminal,

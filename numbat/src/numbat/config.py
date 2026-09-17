@@ -169,6 +169,15 @@ class Grid(BaseModel):
     # PV surplus can still export. None (blank) = no manual floor (the
     # optimizer.min_battery_export_spread margin still applies dynamically).
     min_battery_export_price: float | None = Field(default=None)
+    # Publish the `pv_off` flag (stop ALL solar generation while the buy price
+    # is negative, so the house — and any charge — imports paid power). Off
+    # by default: only a few inverters can switch PV off (Sungrow SH-T), an
+    # actuator has to be wired to it, and a PV cut is a heavy-handed move —
+    # on the SH15T a restore under a full battery with the export cap on can
+    # stall generation until the cap is lifted (found live 2026-09-17). With
+    # it off, negative-buy intervals still plan and publish hold/charge; the
+    # inverter just keeps serving the house from solar first.
+    pv_off_enabled: bool = False
 
 
 class Vacation(BaseModel):

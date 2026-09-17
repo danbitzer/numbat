@@ -504,13 +504,14 @@ class Planner:
         # through estimates — see pv_off_wanted. Not while the plan still
         # uses some PV (e.g. an import limit the house alone would exceed).
         # After the spike guard, so the flag describes the action it rides.
-        plan.pv_off = pv_off_wanted(
+        pv_off_enabled = self._settings.grid.pv_off_enabled
+        plan.pv_off = pv_off_enabled and pv_off_wanted(
             data.prices.current_buy,
             plan.intervals[0],
             previously=self.previous_plan.pv_off if self.previous_plan else False,
             estimate=data.prices.current_estimate,
         )
-        annotate_flows(plan)
+        annotate_flows(plan, pv_off_enabled=pv_off_enabled)
         plan.explanation = build_explanation(
             plan,
             hold_value=terminal,
@@ -695,7 +696,9 @@ class Planner:
             # buy: a carried PV-off is kept only while that step planned to
             # use no PV AND its price is still negative — a solver outage
             # across the rollover to a paid interval must not keep PV off
-            pv_off=prev.pv_off and pv_off_wanted(s0.buy, s0, previously=True),
+            pv_off=self._settings.grid.pv_off_enabled
+            and prev.pv_off
+            and pv_off_wanted(s0.buy, s0, previously=True),
             # The full context is gone with the failed solve; give the panel the
             # step-0 values — the "reusing previous plan" chip (stale) says why.
             explanation={
@@ -721,7 +724,7 @@ class Planner:
             "curtail": plan.curtail_export,
             "pv_off": plan.pv_off,
         }
-        annotate_flows(plan)
+        annotate_flows(plan, pv_off_enabled=self._settings.grid.pv_off_enabled)
         plan.explanation["flow"] = flow_details(plan, self._battery_params.capacity_kwh)
         return plan
 
