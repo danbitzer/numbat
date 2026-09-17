@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.22.0
 
 - **New setting: `grid.pv_off_enabled` ("Allow switching solar off"),
   default off.** The `pv_off` flag (0.20) is now opt-in: only a few
