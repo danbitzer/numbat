@@ -51,6 +51,39 @@ async def test_publish_status_posts_state():
     assert "heartbeat" in body["attributes"]
 
 
+async def test_power_rides_the_action_sensor_only():
+    """The battery power is published in the action sensor's own state post
+    (power_kw / power_w) and nowhere else: the separate setpoint sensor was a
+    second source of truth that actuators could read a cycle behind (live
+    2026-10-09, a spike's 13 kW ran at the previous 10 kW)."""
+    from datetime import UTC, datetime
+
+    from test_planner import make_settings, offline_planner, synthetic_cycle_data
+
+    settings = make_settings()
+    plan = offline_planner(settings).optimize(
+        synthetic_cycle_data(settings), datetime(2026, 7, 15, 11, 36, 30, tzinfo=UTC)
+    )
+    fake = FakeHa()
+    async with fake_ha_client(fake) as client:
+        await Publisher(client).publish_plan(plan, capacity_kwh=12.8)
+    entities = [e for e, _ in fake.posted]
+    assert "sensor.numbat_power_setpoint" not in entities
+    action = next(b for e, b in fake.posted if e == "sensor.numbat_action")
+    assert {"power_kw", "power_w"} <= action["attributes"].keys()
+
+
+async def test_retire_legacy_sensors_removes_the_setpoint_entity():
+    fake = FakeHa()
+    fake.states["sensor.numbat_power_setpoint"] = {"state": "-3.0"}
+    async with fake_ha_client(fake) as client:
+        await Publisher(client).retire_legacy_sensors()
+        # idempotent: a second start finds nothing and does not raise
+        await Publisher(client).retire_legacy_sensors()
+    assert fake.deleted == ["sensor.numbat_power_setpoint"] * 2
+    assert "sensor.numbat_power_setpoint" not in fake.states
+
+
 async def test_publish_plan_action_carries_curtail_flag():
     """The actuator caps export on the `curtail` attribute (atomic with the
     action) — it must ride the action sensor, not a separate publish."""

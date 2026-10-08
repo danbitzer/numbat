@@ -103,8 +103,8 @@ its pitfalls — and is the doc to read when a plan surprises you.
 
 Published every cycle (REST sensors): `sensor.numbat_action`
 (charge/discharge/idle/no_charge/hold/curtail, with `power_w`, `curtail`,
-`pv_off` and — in household words — `flow` attributes),
-`sensor.numbat_power_setpoint` (signed kW), `sensor.numbat_soc_target`,
+`pv_off`, the battery power as `power_kw`/`power_w`, and — in household
+words — `flow` attributes), `sensor.numbat_soc_target`,
 `sensor.numbat_horizon_cost`, and `sensor.numbat_status` (heartbeat).
 An ingress dashboard charts the plan: prices, PV/load forecasts, planned
 battery power, and the SoC trajectory.

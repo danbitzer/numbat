@@ -87,8 +87,8 @@
 blueprint:
   name: Numbat actuator — follow Numbat's battery plan
   description: >-
-    Applies sensor.numbat_action / sensor.numbat_power_setpoint to your inverter
-    via action sequences you define, with a built-in heartbeat failsafe that
+    Applies sensor.numbat_action (with its power_w, curtail and pv_off
+    attributes) to your inverter via action sequences you define, with a built-in heartbeat failsafe that
     reverts to idle when Numbat is stale, errored, or gone, and a self-healing
     sweep that re-asserts the current action for 15 minutes after each change
     so a lost inverter write can't stick. Optional curtail sequences cap
@@ -105,12 +105,6 @@ blueprint:
         entity:
           domain: sensor
       default: sensor.numbat_action
-    setpoint_sensor:
-      name: Numbat power setpoint sensor
-      selector:
-        entity:
-          domain: sensor
-      default: sensor.numbat_power_setpoint
     status_sensor:
       name: Numbat status sensor
       selector:
@@ -260,9 +254,6 @@ triggers:
   - trigger: state
     entity_id: !input action_sensor
     attribute: power_w
-  - trigger: state
-    entity_id: !input setpoint_sensor
-    to: null
   # grid drops (or returns): react immediately, not at the next plan change
   # (the default binary_sensor.none doesn't exist, so this never fires)
   - trigger: state
@@ -275,7 +266,6 @@ triggers:
 
 variables:
   action_sensor: !input action_sensor
-  setpoint_sensor: !input setpoint_sensor
   status_sensor: !input status_sensor
   max_heartbeat_age_minutes: !input max_heartbeat_age_minutes
   grid_sensor: !input grid_sensor
@@ -289,23 +279,18 @@ variables:
   grid_connected: "{{ states(grid_sensor) != 'off' }}"
   # The templates below are anchored and rendered AGAIN after the settle
   # delay (see actions): Home Assistant renders this block at trigger time,
-  # and Numbat publishes the setpoint sensor ~50 ms BEFORE the action sensor
-  # — a run triggered by the setpoint read the action sensor's previous
-  # power here (live 2026-10-09: a spike's 13 kW setpoint actuated as the
-  # old 10 kW, and the drop back never actuated). These trigger-time values
-  # serve the conditions only.
+  # and a run must act on what the sensors say once they have settled (the
+  # 2026-10-09 race: a separate setpoint sensor, since removed, triggered a
+  # run that read the action sensor's previous power here). These
+  # trigger-time values serve the conditions only.
   action: &action_tpl >-
     {{ states(action_sensor) if numbat_alive and grid_connected else 'idle' }}
-  # power is read from the ACTION sensor's attributes (published atomically
-  # with the action, so they can never disagree); the setpoint sensor is the
-  # fallback for older Numbat versions
+  # power is read from the ACTION sensor's attributes, published in the same
+  # state post as the action, so the two can never disagree (Numbat >= 0.18)
   power_kw: &power_kw_tpl >-
-    {% set p = state_attr(action_sensor, 'power_kw') %}
-    {{ (p if p is not none else states(setpoint_sensor)) | float(0) if numbat_alive else 0 }}
+    {{ state_attr(action_sensor, 'power_kw') | float(0) if numbat_alive else 0 }}
   power_w: &power_w_tpl >-
-    {% set p = state_attr(action_sensor, 'power_w') %}
-    {{ (p if p is not none else state_attr(setpoint_sensor, 'power_w')) | int(0)
-       if numbat_alive else 0 }}
+    {{ state_attr(action_sensor, 'power_w') | int(0) if numbat_alive else 0 }}
   # Export withholding is ORTHOGONAL to the action: the plan can want zero
   # export while CHARGING (negative buy AND feed-in — seen live 2026-09-10:
   # the charge branch used to lift the cap first, so forced charge fed from
@@ -347,15 +332,12 @@ conditions:
              and now() - states[action_sensor].last_changed < timedelta(minutes=15)) }}
 
 actions:
-  # Settle delay: Numbat publishes the setpoint and action sensors as two
-  # separate updates ~50 ms apart, so every plan change fires this automation
-  # twice — and with mode: restart, the second trigger used to cancel the
-  # first run MID-INVERTER-WRITE while it was still acting on the not-yet-
-  # updated action sensor (seen live 2026-07-29: the cancelled write burst
+  # Settle delay with mode: restart: a burst of triggers (an action change
+  # and a flag flip in the same publish) coalesces into one run that reads
+  # settled sensors and writes once. History: a re-trigger used to cancel
+  # the first run MID-INVERTER-WRITE (2026-07-29: the cancelled write burst
   # disturbed Modbus, the replacement run's revert died, and the inverter
-  # stayed in forced discharge for 35 minutes). The restart lands here in the
-  # delay instead: the double-fire coalesces into one run that reads settled
-  # sensors and writes once.
+  # stayed in forced discharge for 35 minutes); the restart lands here.
   - delay:
       milliseconds: 1000
   # Re-render what the sequences below act on, now that both sensors have

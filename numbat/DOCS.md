@@ -419,7 +419,6 @@ is lost.
 > There is deliberately no discharge-blocking mirror: every reserve in Numbat
 > (SoC min aside) floors *sales* only, and the battery always remains free to
 > serve the house.
-| `sensor.numbat_power_setpoint` | recommended battery power, kW (+charge / −discharge) |
 | `sensor.numbat_soc_target` | planned SoC at end of the current interval |
 | `sensor.numbat_horizon_cost` | expected net meter cash flow ($) over the horizon: imports at forecast buy prices − exports at forecast sell prices; negative = earning. Excludes wear cost and the value of energy still stored at the horizon end |
 

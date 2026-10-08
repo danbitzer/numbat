@@ -100,12 +100,6 @@ blueprint:
         entity:
           domain: sensor
       default: sensor.numbat_action
-    setpoint_sensor:
-      name: Numbat power setpoint sensor
-      selector:
-        entity:
-          domain: sensor
-      default: sensor.numbat_power_setpoint
     status_sensor:
       name: Numbat status sensor
       selector:
@@ -157,9 +151,6 @@ triggers:
   - trigger: state
     entity_id: !input action_sensor
     attribute: power_w
-  - trigger: state
-    entity_id: !input setpoint_sensor
-    to: null
   # grid drops (or returns): react immediately, not at the next plan change
   # (the default binary_sensor.none doesn't exist, so this never fires)
   - trigger: state
@@ -172,7 +163,6 @@ triggers:
 
 variables:
   action_sensor: !input action_sensor
-  setpoint_sensor: !input setpoint_sensor
   status_sensor: !input status_sensor
   max_heartbeat_age_minutes: !input max_heartbeat_age_minutes
   grid_sensor: !input grid_sensor
@@ -188,22 +178,18 @@ variables:
   grid_connected: "{{ states(grid_sensor) != 'off' }}"
   # The templates below are anchored and rendered AGAIN after the settle
   # delay (see actions): Home Assistant renders this block at trigger time,
-  # and Numbat publishes the setpoint sensor ~50 ms BEFORE the action sensor
-  # — a run triggered by the setpoint read the action sensor's previous
-  # power_w here (live 2026-10-09: a spike's 13 kW setpoint actuated as the
-  # old 10 kW, and the drop back to 10 kW never actuated at all). These
+  # and a run must act on what the sensors say once they have settled (the
+  # 2026-10-09 race: a separate setpoint sensor, since removed, triggered a
+  # run that read the action sensor's previous power_w here). These
   # trigger-time values serve the conditions only.
   # the failsafe is simply action == 'idle' with both flags false: the same
   # three calls below then restore self-consumption, the export limit and PV
   action: &action_tpl >-
     {{ states(action_sensor) if numbat_alive and grid_connected else 'idle' }}
-  # power is read from the ACTION sensor's attributes (published atomically
-  # with the action, so they can never disagree); the setpoint sensor is the
-  # fallback for older Numbat versions
+  # power is read from the ACTION sensor's attributes, published in the same
+  # state post as the action, so the two can never disagree
   power_w: &power_w_tpl >-
-    {% set p = state_attr(action_sensor, 'power_w') %}
-    {{ (p if p is not none else state_attr(setpoint_sensor, 'power_w')) | int(0)
-       if numbat_alive else 0 }}
+    {{ state_attr(action_sensor, 'power_w') | int(0) if numbat_alive else 0 }}
   curtail_wanted: &curtail_tpl >-
     {% set c = state_attr(action_sensor, 'curtail') %}
     {{ ((c if c is not none else states(action_sensor) == 'curtail')
@@ -235,9 +221,8 @@ conditions:
              and now() - states[action_sensor].last_changed < timedelta(minutes=15)) }}
 
 actions:
-  # Settle delay: Numbat publishes the setpoint and action sensors as two
-  # updates ~50 ms apart, so every plan change fires this automation twice;
-  # with mode: restart the second trigger lands here and the double-fire
+  # Settle delay with mode: restart: a burst of triggers (an action change
+  # and a flag flip in the same publish, the status sensor following it)
   # coalesces into one run that reads settled sensors. (The integration
   # finishes a call the automation cancelled, so a restart mid-call cannot
   # leave the inverter between two states.)

@@ -12,10 +12,16 @@
   the forced discharge at the old 10 kW, and the drop back to 10 kW when
   the spike ended never actuated (the action string hadn't changed, so
   nothing re-triggered, and the 15-minute re-assert window had closed).
-  Both blueprints now trigger on the action sensor's `power_w` attribute
-  as well and re-render the action/power/flag variables after the settle
-  delay. **Re-download the blueprint** (Settings → Automations →
-  Blueprints → ⋮ → Re-download).
+  **`sensor.numbat_power_setpoint` is removed**: the action sensor has
+  carried the battery power atomically (`power_kw`, `power_w`) since 0.18,
+  so the setpoint sensor was a second source of truth with a built-in
+  race. Numbat deletes the stale entity on startup. Both blueprints read
+  power from the action sensor only (the `setpoint_sensor` input is gone;
+  Numbat ≥ 0.18 required), trigger on its `power_w` attribute, and
+  re-render the action/power/flag variables after the settle delay.
+  **Re-download the blueprint** (Settings → Automations → Blueprints → ⋮
+  → Re-download); anything of yours that read `sensor.numbat_power_setpoint`
+  should read `state_attr('sensor.numbat_action', 'power_kw')` instead.
 
 ## 0.22.0
 

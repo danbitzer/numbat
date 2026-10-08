@@ -126,6 +126,14 @@ class HaClient:
         async with self.session.post(self._url(f"/states/{entity_id}"), json=payload) as resp:
             resp.raise_for_status()
 
+    async def delete_state(self, entity_id: str) -> bool:
+        """Remove a REST-created entity; False when it did not exist."""
+        async with self.session.delete(self._url(f"/states/{entity_id}")) as resp:
+            if resp.status == 404:
+                return False
+            resp.raise_for_status()
+            return True
+
     async def get_history(
         self, entity_id: str, start: datetime, end: datetime
     ) -> list[tuple[datetime, str]]:

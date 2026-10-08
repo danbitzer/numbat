@@ -310,6 +310,7 @@ async def run() -> None:
                 if not await client.api_ok():
                     log.warning("Home Assistant API not reachable yet; will retry each cycle")
                 publisher = Publisher(client)
+                await publisher.retire_legacy_sensors()
                 tz = default_timezone(env.tz)
                 # Anchors every local-time feature (load buckets, daily SoC
                 # target, vacation end times) — worth one loud line.
