@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **Blueprints: a changed setpoint under the same action now actuates
+  (fixes a spike's raised discharge cap not applying, and not reverting).**
+  Numbat publishes the setpoint sensor ~50 ms before the action sensor,
+  and both blueprints read `power_w` from the action sensor in their
+  top-level `variables:` block, which Home Assistant renders at trigger
+  time — so a run triggered by the setpoint change actuated the action
+  sensor's *previous* power. Live 2026-10-09: a spike's 13 kW setpoint ran
+  the forced discharge at the old 10 kW, and the drop back to 10 kW when
+  the spike ended never actuated (the action string hadn't changed, so
+  nothing re-triggered, and the 15-minute re-assert window had closed).
+  Both blueprints now trigger on the action sensor's `power_w` attribute
+  as well and re-render the action/power/flag variables after the settle
+  delay. **Re-download the blueprint** (Settings → Automations →
+  Blueprints → ⋮ → Re-download).
+
 ## 0.22.0
 
 - **New setting: `grid.pv_off_enabled` ("Allow switching solar off"),

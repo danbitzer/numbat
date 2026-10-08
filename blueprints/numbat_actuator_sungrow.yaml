@@ -152,6 +152,11 @@ triggers:
   - trigger: state
     entity_id: !input action_sensor
     attribute: pv_off
+  # a new setpoint under the same action (a spike raising the discharge cap,
+  # or ending) changes only this attribute
+  - trigger: state
+    entity_id: !input action_sensor
+    attribute: power_w
   - trigger: state
     entity_id: !input setpoint_sensor
     to: null
@@ -181,28 +186,35 @@ variables:
   # connected unless the sensor explicitly says OFF (unavailable/unknown/
   # nonexistent != outage)
   grid_connected: "{{ states(grid_sensor) != 'off' }}"
+  # The templates below are anchored and rendered AGAIN after the settle
+  # delay (see actions): Home Assistant renders this block at trigger time,
+  # and Numbat publishes the setpoint sensor ~50 ms BEFORE the action sensor
+  # — a run triggered by the setpoint read the action sensor's previous
+  # power_w here (live 2026-10-09: a spike's 13 kW setpoint actuated as the
+  # old 10 kW, and the drop back to 10 kW never actuated at all). These
+  # trigger-time values serve the conditions only.
   # the failsafe is simply action == 'idle' with both flags false: the same
   # three calls below then restore self-consumption, the export limit and PV
-  action: >-
+  action: &action_tpl >-
     {{ states(action_sensor) if numbat_alive and grid_connected else 'idle' }}
   # power is read from the ACTION sensor's attributes (published atomically
   # with the action, so they can never disagree); the setpoint sensor is the
   # fallback for older Numbat versions
-  power_w: >-
+  power_w: &power_w_tpl >-
     {% set p = state_attr(action_sensor, 'power_w') %}
     {{ (p if p is not none else state_attr(setpoint_sensor, 'power_w')) | int(0)
        if numbat_alive else 0 }}
-  curtail_wanted: >-
+  curtail_wanted: &curtail_tpl >-
     {% set c = state_attr(action_sensor, 'curtail') %}
     {{ ((c if c is not none else states(action_sensor) == 'curtail')
         if numbat_alive and grid_connected else false) }}
-  pv_off_wanted: >-
+  pv_off_wanted: &pv_off_tpl >-
     {% set p = state_attr(action_sensor, 'pv_off') %}
     {{ (p | bool(false)) if numbat_alive and grid_connected else false }}
   # forced modes need a setpoint; a forced action arriving without one
   # (attribute missing) falls back to self-consumption rather than an
   # inert forced mode at 0 W
-  battery_mode: >-
+  battery_mode: &battery_mode_tpl >-
     {%- set forced = {'charge': 'forced_charge', 'discharge': 'forced_discharge'} -%}
     {%- if action in forced and power_w > 0 -%} {{ forced[action] }}
     {%- else -%} {{ {'no_charge': 'no_charge', 'hold': 'hold'}.get(action, 'self_consumption') }}
@@ -231,6 +243,14 @@ actions:
   # leave the inverter between two states.)
   - delay:
       milliseconds: 1000
+  # Re-render what the calls below act on, now that both sensors have
+  # settled (same templates as above, via YAML anchors).
+  - variables:
+      action: *action_tpl
+      power_w: *power_w_tpl
+      curtail_wanted: *curtail_tpl
+      pv_off_wanted: *pv_off_tpl
+      battery_mode: *battery_mode_tpl
   # Export cap first, orthogonal to the battery mode: cap BEFORE a forced
   # mode could push surplus out, lift it before anything that may export.
   - action: sungrow.set_export_limit
