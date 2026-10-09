@@ -156,6 +156,12 @@ triggers:
   - trigger: state
     entity_id: !input grid_sensor
     to: null
+  # Numbat's health: ok -> error/disabled and back. Numbat publishes the
+  # plan BEFORE its status, so a recovery whose action string is unchanged
+  # would otherwise never actuate (the sweep stands down outside its window)
+  - trigger: state
+    entity_id: !input status_sensor
+    to: null
   # failsafe sweep: catches a dead/stale Numbat even when no sensor ever
   # changes again (including the sensors disappearing after an HA restart)
   - trigger: time_pattern
@@ -168,14 +174,14 @@ variables:
   grid_sensor: !input grid_sensor
   export_limit_w: !input export_limit_w
   curtail_limit_w: !input curtail_limit_w
-  numbat_alive: >-
+  numbat_alive: &alive_tpl >-
     {% set s = states(status_sensor) %}
     {% set hb = state_attr(status_sensor, 'heartbeat') %}
     {{ s == 'ok' and hb is not none
        and (now() - (hb | as_datetime)) < timedelta(minutes=max_heartbeat_age_minutes | int) }}
   # connected unless the sensor explicitly says OFF (unavailable/unknown/
   # nonexistent != outage)
-  grid_connected: "{{ states(grid_sensor) != 'off' }}"
+  grid_connected: &grid_tpl "{{ states(grid_sensor) != 'off' }}"
   # The templates below are anchored and rendered AGAIN after the settle
   # delay (see actions): Home Assistant renders this block at trigger time,
   # and a run must act on what the sensors say once they have settled (the
@@ -222,15 +228,18 @@ conditions:
 
 actions:
   # Settle delay with mode: restart: a burst of triggers (an action change
-  # and a flag flip in the same publish, the status sensor following it)
-  # coalesces into one run that reads settled sensors. (The integration
+  # and a flag flip in the same publish, the status sensor posted just
+  # after it) coalesces into one run that reads settled sensors. (The integration
   # finishes a call the automation cancelled, so a restart mid-call cannot
   # leave the inverter between two states.)
   - delay:
       milliseconds: 1000
-  # Re-render what the calls below act on, now that both sensors have
-  # settled (same templates as above, via YAML anchors).
+  # Re-render what the calls below act on, now that Numbat's sensors have
+  # settled — health first, the rest reads it (same templates as above, via
+  # YAML anchors; this step renders in order).
   - variables:
+      numbat_alive: *alive_tpl
+      grid_connected: *grid_tpl
       action: *action_tpl
       power_w: *power_w_tpl
       curtail_wanted: *curtail_tpl

@@ -73,6 +73,17 @@ async def test_power_rides_the_action_sensor_only():
     assert {"power_kw", "power_w"} <= action["attributes"].keys()
 
 
+async def test_retire_legacy_sensors_never_blocks_startup():
+    # HA answering 500 (or not at all) is logged, not raised
+    fake = FakeHa()
+    fake.states["sensor.numbat_power_setpoint"] = {"state": "-3.0"}
+    fake.delete_status = 500
+    async with fake_ha_client(fake) as client:
+        await Publisher(client).retire_legacy_sensors()
+    assert fake.deleted == ["sensor.numbat_power_setpoint"]
+    assert "sensor.numbat_power_setpoint" in fake.states
+
+
 async def test_retire_legacy_sensors_removes_the_setpoint_entity():
     fake = FakeHa()
     fake.states["sensor.numbat_power_setpoint"] = {"state": "-3.0"}

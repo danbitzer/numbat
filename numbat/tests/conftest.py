@@ -62,6 +62,7 @@ class FakeHa:
         self.app.router.add_post("/api/states/{entity_id}", self._post_state)
         self.app.router.add_delete("/api/states/{entity_id}", self._delete_state)
         self.deleted: list[str] = []
+        self.delete_status: int | None = None  # fault injection for DELETE
         self.app.router.add_post("/api/services/{domain}/{service}", self._call_service)
         self.app.router.add_get("/api/history/period/{start}", self._get_history)
         self.app.router.add_get("/api/websocket", self._websocket)
@@ -90,6 +91,8 @@ class FakeHa:
     async def _delete_state(self, request: web.Request) -> web.Response:
         entity_id = request.match_info["entity_id"]
         self.deleted.append(entity_id)
+        if self.delete_status is not None:
+            return web.json_response({"message": "boom"}, status=self.delete_status)
         if entity_id in self.states:
             del self.states[entity_id]
             return web.json_response({}, status=200)

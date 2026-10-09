@@ -3,7 +3,8 @@
 ## Unreleased
 
 - **Blueprints: a changed setpoint under the same action now actuates
-  (fixes a spike's raised discharge cap not applying, and not reverting).**
+  (fixes a spike's raised discharge cap not applying, and not reverting)
+  (#58).**
   Numbat publishes the setpoint sensor ~50 ms before the action sensor,
   and both blueprints read `power_w` from the action sensor in their
   top-level `variables:` block, which Home Assistant renders at trigger
@@ -19,9 +20,14 @@
   power from the action sensor only (the `setpoint_sensor` input is gone;
   Numbat ≥ 0.18 required), trigger on its `power_w` attribute, and
   re-render the action/power/flag variables after the settle delay.
-  **Re-download the blueprint** (Settings → Automations → Blueprints → ⋮
-  → Re-download); anything of yours that read `sensor.numbat_power_setpoint`
-  should read `state_attr('sensor.numbat_action', 'power_kw')` instead.
+  The blueprints also trigger on `sensor.numbat_status` and re-check
+  Numbat's health after the settle delay, so a recovery from `error`
+  whose action string is unchanged actuates instead of staying in the
+  failsafe. **Re-download the blueprint** (Settings → Automations →
+  Blueprints → ⋮ → Re-download) — existing automations keep working, the
+  stale `setpoint_sensor` input is ignored; anything of yours that read
+  `sensor.numbat_power_setpoint` should read
+  `state_attr('sensor.numbat_action', 'power_kw')` instead.
 
 ## 0.22.0
 

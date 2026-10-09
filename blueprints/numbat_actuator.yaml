@@ -88,13 +88,13 @@ blueprint:
   name: Numbat actuator — follow Numbat's battery plan
   description: >-
     Applies sensor.numbat_action (with its power_w, curtail and pv_off
-    attributes) to your inverter via action sequences you define, with a built-in heartbeat failsafe that
-    reverts to idle when Numbat is stale, errored, or gone, and a self-healing
-    sweep that re-asserts the current action for 15 minutes after each change
-    so a lost inverter write can't stick. Optional curtail sequences cap
-    export during negative feed-in, optional PV-off sequences stop PV during
-    negative buy prices; optional grid-connection sensors revert to idle
-    during a grid outage.
+    attributes) to your inverter via action sequences you define, with a
+    built-in heartbeat failsafe that reverts to idle when Numbat is stale,
+    errored, or gone, and a self-healing sweep that re-asserts the current
+    action for 15 minutes after each change so a lost inverter write can't
+    stick. Optional curtail sequences cap export during negative feed-in,
+    optional PV-off sequences stop PV during negative buy prices; optional
+    grid-connection sensors revert to idle during a grid outage.
   homeassistant:
     min_version: 2024.10.0  # the `sequence:` grouping action
   domain: automation
@@ -259,6 +259,12 @@ triggers:
   - trigger: state
     entity_id: !input grid_sensor
     to: null
+  # Numbat's health: ok -> error/disabled and back. Numbat publishes the
+  # plan BEFORE its status, so a recovery whose action string is unchanged
+  # would otherwise never actuate (the sweep stands down outside its window)
+  - trigger: state
+    entity_id: !input status_sensor
+    to: null
   # failsafe sweep: catches a dead/stale Numbat even when no sensor ever changes
   # again (including the sensors disappearing after an HA restart)
   - trigger: time_pattern
@@ -269,14 +275,14 @@ variables:
   status_sensor: !input status_sensor
   max_heartbeat_age_minutes: !input max_heartbeat_age_minutes
   grid_sensor: !input grid_sensor
-  numbat_alive: >-
+  numbat_alive: &alive_tpl >-
     {% set s = states(status_sensor) %}
     {% set hb = state_attr(status_sensor, 'heartbeat') %}
     {{ s == 'ok' and hb is not none
        and (now() - (hb | as_datetime)) < timedelta(minutes=max_heartbeat_age_minutes | int) }}
   # connected unless the sensor explicitly says OFF (unavailable/unknown/
   # nonexistent != outage)
-  grid_connected: "{{ states(grid_sensor) != 'off' }}"
+  grid_connected: &grid_tpl "{{ states(grid_sensor) != 'off' }}"
   # The templates below are anchored and rendered AGAIN after the settle
   # delay (see actions): Home Assistant renders this block at trigger time,
   # and a run must act on what the sensors say once they have settled (the
@@ -340,9 +346,12 @@ actions:
   # stayed in forced discharge for 35 minutes); the restart lands here.
   - delay:
       milliseconds: 1000
-  # Re-render what the sequences below act on, now that both sensors have
-  # settled (same templates as above, via YAML anchors).
+  # Re-render what the sequences below act on, now that Numbat's sensors
+  # have settled — health first, the rest reads it (same templates as above,
+  # via YAML anchors; this step renders in order).
   - variables:
+      numbat_alive: *alive_tpl
+      grid_connected: *grid_tpl
       action: *action_tpl
       power_kw: *power_kw_tpl
       power_w: *power_w_tpl
@@ -367,10 +376,13 @@ actions:
     then: !input pv_off_actions
     else: !input pv_restore_actions
   - choose:
-      - conditions: "{{ action == 'charge' }}"
+      # a forced action needs a setpoint: without one (Numbat < 0.18, which
+      # published the power on a separate sensor) run idle rather than a
+      # forced mode at 0 W
+      - conditions: "{{ action == 'charge' and power_w > 0 }}"
         sequence:
           - sequence: !input charge_actions
-      - conditions: "{{ action == 'discharge' }}"
+      - conditions: "{{ action == 'discharge' and power_w > 0 }}"
         sequence:
           - sequence: !input discharge_actions
       - conditions: "{{ action == 'no_charge' }}"

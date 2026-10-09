@@ -397,6 +397,8 @@ grid if `grid.export_limit_kw` allows it.
 |---|---|
 | `sensor.numbat_status` | `ok` / `error` / `disabled` / `unconfigured`; heartbeat with solve stats and `load_forecast`. Anything other than `ok` makes the actuator blueprint fail safe to self-consumption |
 | `sensor.numbat_action` | recommended action now: charge / discharge / idle / no_charge / hold / curtail (carries `power_kw`/`power_w`/`curtail` attributes, atomic with the action — `curtail` means export is withheld this interval, possibly *during* a charge; `hold` means the battery is fenced in both directions while the grid — net of any PV, which most inverters route to the house first — serves the load; `pv_off` means the plan wants PV generation STOPPED this interval — the buy price is negative, so the house and any charge should draw from the grid, which pays — for inverters that can switch PV off; with it, `hold` really is "the grid serves the house" and `charge` really is grid charging; `flow` is the same interval in household words — see the flow vocabulary below — and `pv_spill_kw` the solar the plan throws away) |
+| `sensor.numbat_soc_target` | planned SoC at end of the current interval |
+| `sensor.numbat_horizon_cost` | expected net meter cash flow ($) over the horizon: imports at forecast buy prices − exports at forecast sell prices; negative = earning. Excludes wear cost and the value of energy still stored at the horizon end |
 
 Actions are **grid-coupled**: `charge` means charging *from the grid*, and
 `discharge` means exporting stored energy *to the grid* — the moves your
@@ -419,8 +421,6 @@ is lost.
 > There is deliberately no discharge-blocking mirror: every reserve in Numbat
 > (SoC min aside) floors *sales* only, and the battery always remains free to
 > serve the house.
-| `sensor.numbat_soc_target` | planned SoC at end of the current interval |
-| `sensor.numbat_horizon_cost` | expected net meter cash flow ($) over the horizon: imports at forecast buy prices − exports at forecast sell prices; negative = earning. Excludes wear cost and the value of energy still stored at the horizon end |
 
 These sensors are republished every cycle and disappear on HA restart until the next
 cycle (~5 min). The full interval-by-interval plan is not published as a sensor —
