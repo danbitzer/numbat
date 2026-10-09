@@ -130,8 +130,8 @@ Two things to check:
 3. Flip **Numbat enabled** on, save, and watch the add-on log: you should see
    `cycle ok: action=...` within a minute. The Dashboard view shows the plan
    — prices, PV/load forecast, SoC trajectory.
-4. Check Developer tools → States for `sensor.numbat_action`,
-   `sensor.numbat_power_setpoint`, `sensor.numbat_soc_target`,
+4. Check Developer tools → States for `sensor.numbat_action` (its
+   attributes carry the battery power), `sensor.numbat_soc_target`,
    `sensor.numbat_horizon_cost`, `sensor.numbat_status`.
 
 At this point Numbat is a pure **recommendation engine** — it writes nothing to

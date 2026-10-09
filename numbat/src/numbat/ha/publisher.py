@@ -6,12 +6,15 @@ sensor is republished unconditionally each cycle.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
 from numbat import __version__
 from numbat.ha.client import HaClient
 from numbat.models import Plan
+
+log = logging.getLogger(__name__)
 
 
 class Publisher:
@@ -58,29 +61,31 @@ class Publisher:
             "binary_sensor.numbat_vacation_mode", "on" if vacation else "off", attrs
         )
 
+    # Published until 0.22: the battery power as its own sensor, ~50 ms before
+    # the action sensor. Actuators triggering on it read the action sensor's
+    # PREVIOUS power (live 2026-10-09) — the action sensor has carried
+    # power_kw/power_w atomically since 0.18, so the setpoint sensor was a
+    # second source of truth with a built-in race. Removed on startup so a
+    # stale copy can't linger until the next HA restart.
+    LEGACY_SENSORS = ("sensor.numbat_power_setpoint",)
+
+    async def retire_legacy_sensors(self) -> None:
+        for entity_id in self.LEGACY_SENSORS:
+            try:
+                if await self._client.delete_state(entity_id):
+                    log.info("removed legacy entity %s", entity_id)
+            except Exception as e:  # noqa: BLE001 - best effort, never blocks startup
+                log.warning("could not remove legacy entity %s: %s", entity_id, e)
+
     async def publish_plan(self, plan: Plan, capacity_kwh: float) -> None:
         """Publish the full dry-run sensor set (republished every cycle).
 
-        Setpoint goes out BEFORE action: actuator automations trigger on the
-        action change and read the setpoint, so this order means a failure
-        between the two leaves the old action with a new setpoint (harmless —
-        no trigger fired) rather than a new action driving the previous
-        cycle's power.
+        The action sensor is the single source of truth for actuators: the
+        action and its power (power_kw / power_w) go out in ONE state post,
+        so an automation can never pair a fresh action with a stale power or
+        vice versa.
         """
         step0 = plan.intervals[0]
-        await self._client.set_state(
-            "sensor.numbat_power_setpoint",
-            round(step0.power_kw, 3),
-            {
-                "friendly_name": "Numbat battery power setpoint",
-                "unit_of_measurement": "kW",
-                "device_class": "power",
-                "icon": "mdi:battery-arrow-up-down",
-                "convention": "positive = charging",
-                # magnitude in W, for inverter number entities
-                "power_w": round(abs(step0.power_kw) * 1000),
-            },
-        )
         await self._client.set_state(
             "sensor.numbat_action",
             step0.action.value,
@@ -106,9 +111,9 @@ class Publisher:
                 # state and the two flags above
                 "flow": step0.flow,
                 "pv_spill_kw": step0.pv_spill_kw,
-                # power duplicated here so action + magnitude change in ONE
-                # atomic POST — actuator automations read these, never pairing
-                # a fresh action with the previous cycle's setpoint
+                # the battery power rides the action in ONE atomic POST — the
+                # only place actuators read it, so action and magnitude can
+                # never disagree
                 "power_kw": round(step0.power_kw, 3),
                 "power_w": round(abs(step0.power_kw) * 1000),
             },

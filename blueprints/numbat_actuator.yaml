@@ -87,14 +87,14 @@
 blueprint:
   name: Numbat actuator — follow Numbat's battery plan
   description: >-
-    Applies sensor.numbat_action / sensor.numbat_power_setpoint to your inverter
-    via action sequences you define, with a built-in heartbeat failsafe that
-    reverts to idle when Numbat is stale, errored, or gone, and a self-healing
-    sweep that re-asserts the current action for 15 minutes after each change
-    so a lost inverter write can't stick. Optional curtail sequences cap
-    export during negative feed-in, optional PV-off sequences stop PV during
-    negative buy prices; optional grid-connection sensors revert to idle
-    during a grid outage.
+    Applies sensor.numbat_action (with its power_w, curtail and pv_off
+    attributes) to your inverter via action sequences you define, with a
+    built-in heartbeat failsafe that reverts to idle when Numbat is stale,
+    errored, or gone, and a self-healing sweep that re-asserts the current
+    action for 15 minutes after each change so a lost inverter write can't
+    stick. Optional curtail sequences cap export during negative feed-in,
+    optional PV-off sequences stop PV during negative buy prices; optional
+    grid-connection sensors revert to idle during a grid outage.
   homeassistant:
     min_version: 2024.10.0  # the `sequence:` grouping action
   domain: automation
@@ -105,12 +105,6 @@ blueprint:
         entity:
           domain: sensor
       default: sensor.numbat_action
-    setpoint_sensor:
-      name: Numbat power setpoint sensor
-      selector:
-        entity:
-          domain: sensor
-      default: sensor.numbat_power_setpoint
     status_sensor:
       name: Numbat status sensor
       selector:
@@ -255,13 +249,21 @@ triggers:
   - trigger: state
     entity_id: !input action_sensor
     attribute: pv_off
+  # a new setpoint under the same action (a spike raising the discharge cap,
+  # or ending) changes only this attribute
   - trigger: state
-    entity_id: !input setpoint_sensor
-    to: null
+    entity_id: !input action_sensor
+    attribute: power_w
   # grid drops (or returns): react immediately, not at the next plan change
   # (the default binary_sensor.none doesn't exist, so this never fires)
   - trigger: state
     entity_id: !input grid_sensor
+    to: null
+  # Numbat's health: ok -> error/disabled and back. Numbat publishes the
+  # plan BEFORE its status, so a recovery whose action string is unchanged
+  # would otherwise never actuate (the sweep stands down outside its window)
+  - trigger: state
+    entity_id: !input status_sensor
     to: null
   # failsafe sweep: catches a dead/stale Numbat even when no sensor ever changes
   # again (including the sensors disappearing after an HA restart)
@@ -270,30 +272,31 @@ triggers:
 
 variables:
   action_sensor: !input action_sensor
-  setpoint_sensor: !input setpoint_sensor
   status_sensor: !input status_sensor
   max_heartbeat_age_minutes: !input max_heartbeat_age_minutes
   grid_sensor: !input grid_sensor
-  numbat_alive: >-
+  numbat_alive: &alive_tpl >-
     {% set s = states(status_sensor) %}
     {% set hb = state_attr(status_sensor, 'heartbeat') %}
     {{ s == 'ok' and hb is not none
        and (now() - (hb | as_datetime)) < timedelta(minutes=max_heartbeat_age_minutes | int) }}
   # connected unless the sensor explicitly says OFF (unavailable/unknown/
   # nonexistent != outage)
-  grid_connected: "{{ states(grid_sensor) != 'off' }}"
-  action: >-
+  grid_connected: &grid_tpl "{{ states(grid_sensor) != 'off' }}"
+  # The templates below are anchored and rendered AGAIN after the settle
+  # delay (see actions): Home Assistant renders this block at trigger time,
+  # and a run must act on what the sensors say once they have settled (the
+  # 2026-10-09 race: a separate setpoint sensor, since removed, triggered a
+  # run that read the action sensor's previous power here). These
+  # trigger-time values serve the conditions only.
+  action: &action_tpl >-
     {{ states(action_sensor) if numbat_alive and grid_connected else 'idle' }}
-  # power is read from the ACTION sensor's attributes (published atomically
-  # with the action, so they can never disagree); the setpoint sensor is the
-  # fallback for older Numbat versions
-  power_kw: >-
-    {% set p = state_attr(action_sensor, 'power_kw') %}
-    {{ (p if p is not none else states(setpoint_sensor)) | float(0) if numbat_alive else 0 }}
-  power_w: >-
-    {% set p = state_attr(action_sensor, 'power_w') %}
-    {{ (p if p is not none else state_attr(setpoint_sensor, 'power_w')) | int(0)
-       if numbat_alive else 0 }}
+  # power is read from the ACTION sensor's attributes, published in the same
+  # state post as the action, so the two can never disagree (Numbat >= 0.18)
+  power_kw: &power_kw_tpl >-
+    {{ state_attr(action_sensor, 'power_kw') | float(0) if numbat_alive else 0 }}
+  power_w: &power_w_tpl >-
+    {{ state_attr(action_sensor, 'power_w') | int(0) if numbat_alive else 0 }}
   # Export withholding is ORTHOGONAL to the action: the plan can want zero
   # export while CHARGING (negative buy AND feed-in — seen live 2026-09-10:
   # the charge branch used to lift the cap first, so forced charge fed from
@@ -301,14 +304,14 @@ variables:
   # `curtail` attribute atomically with the action; older versions fall back
   # to the standalone curtail action. A dead Numbat or a grid outage always
   # uncurtails (fail-safe).
-  curtail_wanted: >-
+  curtail_wanted: &curtail_tpl >-
     {% set c = state_attr(action_sensor, 'curtail') %}
     {{ ((c if c is not none else states(action_sensor) == 'curtail')
         if numbat_alive and grid_connected else false) }}
   # PV withholding likewise rides the action (the `pv_off` attribute, since
   # 0.20; older Numbat never publishes it, so this stays false). A dead
   # Numbat or a grid outage always restores PV (fail-safe).
-  pv_off_wanted: >-
+  pv_off_wanted: &pv_off_tpl >-
     {% set p = state_attr(action_sensor, 'pv_off') %}
     {{ (p | bool(false)) if numbat_alive and grid_connected else false }}
 
@@ -335,17 +338,25 @@ conditions:
              and now() - states[action_sensor].last_changed < timedelta(minutes=15)) }}
 
 actions:
-  # Settle delay: Numbat publishes the setpoint and action sensors as two
-  # separate updates ~50 ms apart, so every plan change fires this automation
-  # twice — and with mode: restart, the second trigger used to cancel the
-  # first run MID-INVERTER-WRITE while it was still acting on the not-yet-
-  # updated action sensor (seen live 2026-07-29: the cancelled write burst
+  # Settle delay with mode: restart: a burst of triggers (an action change
+  # and a flag flip in the same publish) coalesces into one run that reads
+  # settled sensors and writes once. History: a re-trigger used to cancel
+  # the first run MID-INVERTER-WRITE (2026-07-29: the cancelled write burst
   # disturbed Modbus, the replacement run's revert died, and the inverter
-  # stayed in forced discharge for 35 minutes). The restart lands here in the
-  # delay instead: the double-fire coalesces into one run that reads settled
-  # sensors and writes once.
+  # stayed in forced discharge for 35 minutes); the restart lands here.
   - delay:
       milliseconds: 1000
+  # Re-render what the sequences below act on, now that Numbat's sensors
+  # have settled — health first, the rest reads it (same templates as above,
+  # via YAML anchors; this step renders in order).
+  - variables:
+      numbat_alive: *alive_tpl
+      grid_connected: *grid_tpl
+      action: *action_tpl
+      power_kw: *power_kw_tpl
+      power_w: *power_w_tpl
+      curtail_wanted: *curtail_tpl
+      pv_off_wanted: *pv_off_tpl
   # Always undo the sticky battery-limit override first: no_charge sets max
   # charge power to 0, which would otherwise cap a later charge or idle. A
   # guarded restore is a no-op when limits are already full.
@@ -365,10 +376,13 @@ actions:
     then: !input pv_off_actions
     else: !input pv_restore_actions
   - choose:
-      - conditions: "{{ action == 'charge' }}"
+      # a forced action needs a setpoint: without one (Numbat < 0.18, which
+      # published the power on a separate sensor) run idle rather than a
+      # forced mode at 0 W
+      - conditions: "{{ action == 'charge' and power_w > 0 }}"
         sequence:
           - sequence: !input charge_actions
-      - conditions: "{{ action == 'discharge' }}"
+      - conditions: "{{ action == 'discharge' and power_w > 0 }}"
         sequence:
           - sequence: !input discharge_actions
       - conditions: "{{ action == 'no_charge' }}"
