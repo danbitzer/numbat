@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.23.0
 
 - **Blueprints: a changed setpoint under the same action now actuates
   (fixes a spike's raised discharge cap not applying, and not reverting)
