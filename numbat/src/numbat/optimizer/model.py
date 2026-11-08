@@ -234,6 +234,7 @@ def solve(
     grid: GridParams,
     config: OptimizerConfig,
     pin_step0: str | None = None,
+    pin_power_kw: float | None = None,
 ) -> Solution:
     """pin_step0 constrains the first step's battery mode ('charge' /
     'discharge' / 'idle') — used by the planner's hysteresis to price the
@@ -361,10 +362,26 @@ def solve(
     # The self-consumption envelope: charge from PV only, export only PV
     # leftovers (no battery export); serving load from the battery is free.
     self_consumption = [pc[0] <= pv_u[0], ge[0] <= pv_u[0] - pc[0]]
+    # A forced-mode pin holds the PREVIOUS POWER, not a token 10 W: "keep
+    # doing what we were doing" is what hysteresis must price. Pinned at the
+    # minimum, a 10 kW charge whose price blip had passed cost a whisker to
+    # "keep" (10 W of import), so the switch never cleared the threshold —
+    # and the token charge then classified as hold (2026-11-09: two hours
+    # of the house on 50c grid power with a 34 % battery). Clamped to the
+    # step's cap; infeasible (battery full/empty) raises -> the caller
+    # switches.
     if pin_step0 == "charge":
-        constraints += [pd[0] == 0, pc[0] >= 0.01]
+        cap0 = battery.max_charge_kw
+        floor = 0.01 if pin_power_kw is None else max(0.01, min(pin_power_kw, cap0))
+        constraints += [pd[0] == 0, pc[0] >= floor]
     elif pin_step0 == "discharge":
-        constraints += [pc[0] == 0, pd[0] >= 0.01]
+        cap0 = float(
+            inputs.max_discharge_kw_step[0]
+            if inputs.max_discharge_kw_step is not None
+            else battery.max_discharge_kw
+        )
+        floor = 0.01 if pin_power_kw is None else max(0.01, min(pin_power_kw, cap0))
+        constraints += [pc[0] == 0, pd[0] >= floor]
     elif pin_step0 == "no_charge":
         constraints += [*self_consumption, pc[0] == 0]  # block charging
     elif pin_step0 == "hold":
@@ -409,9 +426,7 @@ def solve(
         # evening costs more than a momentary dip. Aligned with soc[1:].
         target_slack = cp.Variable(T, nonneg=True)
         constraints.append(soc[1:] >= inputs.soc_target_kwh - target_slack)
-        cost = cost + config.soc_target_penalty_per_kwh * cp.sum(
-            cp.multiply(target_slack, dt)
-        )
+        cost = cost + config.soc_target_penalty_per_kwh * cp.sum(cp.multiply(target_slack, dt))
     problem = cp.Problem(cp.Minimize(cost), constraints)
     start = time.perf_counter()
     try:

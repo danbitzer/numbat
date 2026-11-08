@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Fix: a `hold` could stick through a dear morning, keeping the battery
+  out of the house.** 2026-11-09, 04:00: a one-interval −2.5c buy blip
+  triggered a 10 kW grid charge; at +19c the next cycle, the action-switch
+  hysteresis priced "keep charging" with a token 10 W pin (nearly free, so
+  under the $0.02 threshold), which then classified as `hold` — and a
+  pinned `hold` held its own label through two hours of 44–54c prices
+  because the house drew only ~150 W and one interval of that never
+  cleared the threshold either. Two changes: forced-mode pins now hold
+  the *previous power* (clamped to the cap), so hysteresis compares like
+  with like; and leaving `hold` for any self-consumption shape is free,
+  like leaving `no_charge` — both are binding fences whose exit is a
+  limit-register restore.
+
 ## 0.23.0
 
 - **Blueprints: a changed setpoint under the same action now actuates

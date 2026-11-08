@@ -580,13 +580,19 @@ class Planner:
         thresholded, and the reverse relabels can't oscillate because the
         tighter pin does hold its own label.
 
-        The reverse direction is made free on purpose: leaving no_charge for
-        idle/curtail/hold also swaps only a limit register, and no_charge is
-        BINDING (it blocks the inverter's own charging) — thresholded, a
-        pinned no_charge would hold its own label for a gain of a tenth of
-        a cent per cycle and block a free solar fill for hours (found in
-        review, 2026-09-13). So when the free solve wants to charge from
-        solar after a no_charge, it charges."""
+        The reverse direction is made free on purpose: leaving no_charge or
+        hold for another self-consumption shape swaps only limit registers,
+        and both are BINDING (no_charge blocks the inverter's own charging,
+        hold blocks it serving the house) — thresholded, a pinned fence
+        holds its own label for a gain of a cent or two per cycle: a pinned
+        no_charge blocked a free solar fill for hours (review, 2026-09-13),
+        and a pinned hold kept a 34 % battery out of a 50c morning for two
+        hours because the house drew only 150 W (live, 2026-11-09). So when
+        the free solve wants self-consumption after a fence, it gets it.
+
+        Forced-mode pins hold the PREVIOUS POWER (see solve): a token-power
+        pin made "keep charging" nearly free to price, so a 10 kW charge
+        survived its price blip as a 10 W charge that classified as hold."""
         threshold = self._settings.optimizer.action_switch_threshold_dollars
         prev = self.previous_plan
         if prev is None or not prev.intervals or threshold <= 0:
@@ -609,10 +615,10 @@ class Planner:
         )
         if free_action == prev_action:
             return free
-        if prev_action == Action.NO_CHARGE and free_action in (
-            Action.IDLE,
-            Action.CURTAIL,
-            Action.HOLD,
+        self_consumption_family = (Action.IDLE, Action.CURTAIL, Action.HOLD, Action.NO_CHARGE)
+        if (
+            prev_action in (Action.NO_CHARGE, Action.HOLD)
+            and free_action in self_consumption_family
         ):
             return free  # a limit-register restore, never worth holding out for
         try:
@@ -622,6 +628,7 @@ class Planner:
                 self._grid_params,
                 opt_config,
                 pin_step0=prev_action.value,
+                pin_power_kw=abs(float(prev.intervals[0].power_kw)),
             )
         except SolverError:
             return free  # previous action no longer feasible; switch

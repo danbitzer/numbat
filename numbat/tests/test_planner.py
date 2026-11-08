@@ -285,12 +285,12 @@ def synthetic_cycle_data(settings: Settings, live_spike: bool = False) -> CycleD
     return CycleData(grid=grid, inputs=inputs, prices=prices, battery=battery, temps=None)
 
 
-def previous_plan_with(action: Action) -> Plan:
+def previous_plan_with(action: Action, power_kw: float = 0.0) -> Plan:
     iv = PlanInterval(
         start=NOW - timedelta(minutes=5),
         end=NOW + timedelta(minutes=25),
         action=action,
-        power_kw=0.0,
+        power_kw=power_kw,
         soc_start=6.4,
         soc_end=6.4,
         buy=0.30,
@@ -367,6 +367,43 @@ def test_hysteresis_keeps_near_degenerate_previous_action():
     # flows, not the label (documented in _apply_hysteresis).
     assert plan.intervals[0].action == Action.HOLD
     assert "hysteresis" in plan.solver_status
+
+
+def test_leaving_hold_for_the_house_is_never_thresholded():
+    """2026-11-09, 04:05-06:00: a hold left over from a 5-minute price blip
+    stuck through a 44-54c morning with a 34 % battery, because the house
+    drew only ~150 W and one step of that never cleared the $0.02 switch
+    threshold. Hold is binding (the battery can't serve the house) and the
+    exit is a limit-register restore: it is free, like no_charge's."""
+    settings = make_settings()  # default threshold: hysteresis active
+    planner = offline_planner(settings)
+    planner.previous_plan = previous_plan_with(Action.HOLD)
+    data = synthetic_cycle_data(settings)
+    data.inputs.buy[:] = 0.48
+    data.inputs.load[:] = 0.15
+    data.prices.current_buy = 0.48
+    plan = planner.optimize(data, NOW)
+    assert plan.intervals[0].action == Action.IDLE
+    assert plan.intervals[0].power_kw < -0.1  # the battery serves the house
+    assert "hysteresis" not in plan.solver_status
+
+
+def test_hysteresis_pins_a_forced_mode_at_its_previous_power():
+    """The same morning's first domino: a 10 kW grid charge during a one-
+    interval -2.5c blip. At +19c the next cycle the pinned "charge" was a
+    token 10 W (nearly free to keep, under the threshold) and classified as
+    hold. Pinned at the previous 10 kW, keeping the charge costs real money
+    and the plan switches to serving the house."""
+    settings = make_settings()
+    planner = offline_planner(settings)
+    planner.previous_plan = previous_plan_with(Action.CHARGE, power_kw=5.0)
+    data = synthetic_cycle_data(settings)
+    data.inputs.buy[:] = 0.19
+    data.prices.current_buy = 0.19
+    plan = planner.optimize(data, NOW)
+    assert plan.intervals[0].action == Action.IDLE
+    assert plan.intervals[0].power_kw <= 0.0
+    assert "hysteresis" not in plan.solver_status
 
 
 def test_hysteresis_disabled_switches_freely():
@@ -568,9 +605,7 @@ def test_pv_off_rides_hold_at_negative_buy():
     house from the grid (paid to) and uses none of its PV — that intent
     used to be unactuatable (PV serves the house first on every hybrid);
     with a PV-off actuator it is published as `pv_off`, riding HOLD."""
-    settings = make_settings(
-        optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID
-    )
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID)
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
     data.inputs.pv[:] = 2.0
@@ -590,9 +625,7 @@ def test_pv_off_rides_charge_for_true_grid_charging():
     """Room in the battery at negative buy: the plan grid-charges with PV
     off — CHARGE + pv_off is the combination that finally draws the charge
     from the grid instead of throttled PV."""
-    settings = make_settings(
-        optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID
-    )
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID)
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
     data.inputs.pv[:] = 2.0
@@ -629,9 +662,7 @@ def test_pv_off_is_gated_on_the_live_buy_price():
     a cent below zero to switch on, anything below zero to stay on (each
     clear costs ~45 s of PV; a 5-minute site's price can hover at zero).
     And nothing to withhold at night (no PV) means no flag either."""
-    settings = make_settings(
-        optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID
-    )
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID)
     planner = offline_planner(settings)
     # positive, zero, and negative-but-shallow live prices: no entry
     for live_buy in (0.30, 0.0, -0.005):
@@ -663,9 +694,7 @@ def test_pv_off_holds_its_state_while_the_live_price_is_an_estimate():
     """Amber's first seconds of an interval are an estimate that the confirmed
     price can contradict; the confirmed re-solve follows within seconds, so
     an estimate neither switches PV off nor back on."""
-    settings = make_settings(
-        optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID
-    )
+    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID)
     planner = offline_planner(settings)
     # off, deep negative estimate: stays off until confirmed
     est = _negative_buy_pv_day(settings, -0.13, estimate=True)

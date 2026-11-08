@@ -740,9 +740,7 @@ def test_early_fill_survives_a_large_objective():
     pv = np.concatenate([np.zeros(12), np.full(12, 11.0)])
     soc0 = 0.75 * BATTERY.capacity_kwh
     inputs = make_inputs(T=T, sell=sell, buy=0.30, pv=pv, load=6.0, soc0=soc0)
-    inputs = replace(
-        inputs, max_discharge_kw_step=np.concatenate([np.zeros(12), np.full(12, 5.0)])
-    )
+    inputs = replace(inputs, max_discharge_kw_step=np.concatenate([np.zeros(12), np.full(12, 5.0)]))
     sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.10))
     assert sol.objective > 9  # the point of the test: ~$9.50 of import bill
     # the 5 kW surplus goes in from the first step and the 3.2 kWh of room
@@ -765,6 +763,22 @@ def test_bird_in_hand_accrual_is_window_capped():
     inputs = make_inputs(T=T, sell=sell, load=0.0, soc0=10.0)
     sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.10))
     assert sol.discharge_kw[1] > 4.0  # taken at hour ~0.5, not deferred
+
+
+def test_pin_charge_holds_the_previous_power():
+    """A forced-mode pin prices "keep doing what we were doing": the charge
+    is held at the previous power (clamped to the cap), not a token 10 W."""
+    inputs = make_inputs(T=6, buy=0.30, sell=0.10, pv=0.0, load=0.5, soc0=4.0)
+    sol = solve(
+        inputs, BATTERY, GRID, config(terminal_value=0.05), pin_step0="charge", pin_power_kw=3.0
+    )
+    assert sol.charge_kw[0] >= 3.0 - 1e-6
+    capped = solve(
+        inputs, BATTERY, GRID, config(terminal_value=0.05), pin_step0="charge", pin_power_kw=99.0
+    )
+    assert capped.charge_kw[0] == pytest.approx(BATTERY.max_charge_kw, abs=1e-6)
+    token = solve(inputs, BATTERY, GRID, config(terminal_value=0.05), pin_step0="charge")
+    assert token.charge_kw[0] == pytest.approx(0.01, abs=1e-6)
 
 
 def test_pin_hold_keeps_battery_inert_grid_serves_load():
