@@ -60,7 +60,9 @@ def seconds_to_next_boundary(now_epoch: float, period: int = CYCLE_SECONDS) -> f
 class PriceWatcher:
     """Triggers an asyncio.Event on ANY change of a watched price sensor —
     value or estimate flag. Every solve should reflect the live price (a
-    solve is ~50 ms; hysteresis stops action flapping), and an
+    solve is ~50 ms; an estimate->confirmed re-solve can change the action
+    within seconds, which the actuator blueprint's settle delay absorbs),
+    and an
     estimate->confirmed flip at the SAME value must still re-solve so the
     dashboard's "unconfirmed price" marker clears. Spike detection is
     price-based (sell above spike.high_price_threshold), so watching the

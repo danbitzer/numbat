@@ -100,9 +100,7 @@ class FakeHa:
 
     async def _get_history(self, request: web.Request) -> web.Response:
         entity_id = request.query.get("filter_entity_id", "")
-        self.history_requests.append(
-            {"start": request.match_info["start"], **dict(request.query)}
-        )
+        self.history_requests.append({"start": request.match_info["start"], **dict(request.query)})
         if entity_id not in self.history:
             return web.json_response([])
         return web.json_response([self.history[entity_id]])

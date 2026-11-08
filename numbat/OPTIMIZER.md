@@ -326,10 +326,26 @@ A few quieter mechanisms keep the plan sensible:
   holding earns the whisker. The cost difference is a couple of tenths of
   a cent per kWh, real Amber days are never flat, and the import toll does
   not change it (it prices imports, not the tie).
-- **Action switch threshold** (default $0.02): the current action only
-  changes if the new plan beats sticking with the old action by more than
-  this, across the whole horizon — this stops the battery flip-flopping
-  between near-identical plans every 5 minutes.
+- **No action hysteresis.** Numbat used to keep the previous action unless
+  switching beat it by a fixed dollar amount ($0.02), priced over step 0
+  only — about five minutes. That made it a deadband that scaled with
+  power: ~2.7c/kWh for a 10 kW move, but dollars per kWh for a house
+  drawing a few hundred watts, which is how a `hold` fenced a 34 %
+  battery out of a 50c morning for two hours (2026-11-09). It did
+  suppress flips, but by holding the wrong action. Now each cycle
+  publishes what the plan wants: genuine *ties* (when to take an
+  identical price, which identical window to charge in) are settled
+  inside the objective by the cycling epsilon, bird-in-hand and the
+  early-charge tie-break, and don't flap. A price *break-even* is not a
+  tie, so near one the action follows the live 5-minute price — an
+  idle↔hold flip while the buy price sits within a cent of the battery's
+  break-even, costing two guarded limit-register writes and nothing in
+  money (the economics are a wash by definition); and on a negative
+  midday whose buy price wobbles either side of zero, charge/hold follow
+  it interval by interval. If that register traffic ever matters, the
+  fix is a move-suppression term in the objective (a cents-per-kWh cost
+  on changing the battery's measured power), not a return to label
+  comparison.
 - **Honest state of charge:** if the battery reports below SoC min
   (e.g. after a sensor recalibration), the plan starts from the real
   number rather than pretending the reserve energy exists.

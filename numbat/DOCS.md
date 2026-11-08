@@ -320,8 +320,6 @@ buffer until learning is active. The goal state is always a learned forecast.
   this is a never-fires safety valve — and if it ever does fire, the planner
   falls back to shifting the previous plan forward (`solver_status: stale`)
   rather than doing anything abrupt.
-- `action_switch_threshold_dollars` (0.02) — hysteresis: the current action
-  only changes if switching improves the horizon objective by more than this.
 - `forecast_haircut` (0 = off; "Sell price forecast haircut" in the UI) — the
   share of the above-median excess shaved off every *forecast* sell price.
   The live confirmed price is never cut, so the plan is biased toward

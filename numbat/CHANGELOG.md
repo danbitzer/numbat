@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- **Removed: action-switch hysteresis (`optimizer.action_switch_threshold_dollars`)
+  (#60).** Each cycle now publishes what the plan wants now. The
+  pin-and-compare step priced "keep the previous action" over step 0 only
+  — about five minutes — so its $0.02 threshold was a deadband that
+  scaled with power: ~2.7c/kWh for a 10 kW move, dollars per kWh for a
+  house drawing a few hundred watts. On 2026-11-09 a one-interval −2.5c
+  blip's 10 kW charge survived at +19c as a token 10 W pin mislabelled
+  `hold`, which then fenced a 34 % battery out of a 50c morning for two
+  hours because the house drew only 150 W (and in review, 2026-09-13, a
+  pinned `no_charge` blocked a free solar fill the same way). The trade:
+  near a price break-even the action now follows the live 5-minute price
+  (an idle↔hold flip costs two guarded limit-register writes and no
+  money), and on a negative midday that wobbles either side of zero,
+  charge/hold follow it interval by interval; genuine ties are settled
+  inside the objective (cycling epsilon, bird-in-hand, early-charge
+  tie-break) and don't flap. The setting is ignored in saved configs; the
+  "More info" panel no longer has a hysteresis flag.
+
 ## 0.23.0
 
 - **Blueprints: a changed setpoint under the same action now actuates

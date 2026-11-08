@@ -71,8 +71,11 @@ def test_redesign_defaults_and_overrides():
         optimizer={"hold_value_scaling": 1.2, "min_battery_export_spread": 0.02},
         grid={"import_limit_kw": 15.0, "export_limit_kw": 5.0, "min_battery_export_price": 0.11},
         battery={
-            "capacity_kwh": 44.8, "max_charge_kw": 12.0, "max_discharge_kw": 12.0,
-            "daily_target_hold_hours": 6.0, "daily_target_penalty_price_multiple": 3.0,
+            "capacity_kwh": 44.8,
+            "max_charge_kw": 12.0,
+            "max_discharge_kw": 12.0,
+            "daily_target_hold_hours": 6.0,
+            "daily_target_penalty_price_multiple": 3.0,
         },
     )
     assert s.optimizer.min_battery_export_spread == 0.02
@@ -110,8 +113,12 @@ def test_spike_reserve_defaults_and_bounds():
     assert s.spike.high_price_threshold == 1.0
     # dropped pre-0.15 spike keys are ignored, not fatal
     config = json.loads(json.dumps(MINIMAL_CONFIG))
-    config["spike"] = {"reserve_soc": 0.3, "lookahead_hours": 4, "reserve_kwh": 6.0,
-                      "reserve_penalty_per_kwh": 0.5}
+    config["spike"] = {
+        "reserve_soc": 0.3,
+        "lookahead_hours": 4,
+        "reserve_kwh": 6.0,
+        "reserve_penalty_per_kwh": 0.5,
+    }
     # ...as is the dropped price-spike entity (spike detection is price-based)
     config["entities"]["price_spike"] = "binary_sensor.amber_express_price_spike"
     assert Settings.model_validate(config).spike.reserve_soc == 0.3
@@ -179,6 +186,10 @@ def test_unknown_keys_ignored():
     config = json.loads(json.dumps(MINIMAL_CONFIG))
     config["entities"]["buy_forecast"] = "sensor.amber_general_forecast"
     Settings.model_validate(config)
+    # the removed hysteresis knob (<= 0.23) is dropped, not rejected
+    config["optimizer"] = {"action_switch_threshold_dollars": 0.02}
+    settings = Settings.model_validate(config)
+    assert "action_switch_threshold_dollars" not in settings.model_dump()["optimizer"]
 
 
 def env_settings(**kwargs) -> EnvSettings:

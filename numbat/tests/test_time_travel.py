@@ -38,9 +38,7 @@ class FakeHistoryClient:
         self.states: dict[str, State] = {}
 
     async def get_history(self, entity_id, start, end):
-        return [
-            (ts, v) for ts, v in self.history.get(entity_id, []) if start <= ts <= end
-        ]
+        return [(ts, v) for ts, v in self.history.get(entity_id, []) if start <= ts <= end]
 
     async def get_state(self, entity_id):
         if entity_id not in self.states:
@@ -86,7 +84,10 @@ async def test_replay_builds_inputs_from_history_and_solves():
     assert meta["at"] == AT.isoformat()
     assert meta["soc_frac"] == pytest.approx(0.8)  # recorded 80%
     assert meta["sources"] == {
-        "prices": "recorded", "load": "recorded", "pv": "recorded", "soc": "recorded",
+        "prices": "recorded",
+        "load": "recorded",
+        "pv": "recorded",
+        "soc": "recorded",
     }
     # horizon clamped from 36h to the 6h of data that exists, and says so
     assert any("clamped" in n for n in meta["notes"])
@@ -123,8 +124,7 @@ def test_normalize_pv_units_scales_down_watt_magnitudes():
     # a kW-labelled sensor shipping watt values: the peak gives it away
     day = datetime(2026, 7, 31, 0, 30, tzinfo=UTC)
     rows = [
-        (day + timedelta(minutes=30 * i), v)
-        for i, v in enumerate([0.0, 3940.0, 9114.0, 1084.0])
+        (day + timedelta(minutes=30 * i), v) for i, v in enumerate([0.0, 3940.0, 9114.0, 1084.0])
     ]
     fixed = [v for _, v in normalize_pv_units(rows, "sensor.pv_actual")]
     assert fixed == pytest.approx([0.0, 3.94, 9.114, 1.084])
@@ -225,9 +225,7 @@ def freshly_stocked_client() -> FakeHistoryClient:
 
 def test_endpoint_happy_path(tmp_path: Path):
     settings = make_settings(entities=ENTITIES, enabled=True)
-    app = create_app(
-        AppState(), _controller(tmp_path, settings), client=freshly_stocked_client()
-    )
+    app = create_app(AppState(), _controller(tmp_path, settings), client=freshly_stocked_client())
     at = (datetime.now(UTC) - timedelta(hours=6)).isoformat()
     resp = TestClient(app).post("/api/simulate/history", json={"at": at})
     assert resp.status_code == 200, resp.json()
@@ -239,25 +237,19 @@ def test_endpoint_happy_path(tmp_path: Path):
 def test_endpoint_requires_ha_client(tmp_path: Path):
     settings = make_settings(entities=ENTITIES, enabled=True)
     app = create_app(AppState(), _controller(tmp_path, settings), client=None)
-    resp = TestClient(app).post(
-        "/api/simulate/history", json={"at": "2026-07-20T12:00:00+00:00"}
-    )
+    resp = TestClient(app).post("/api/simulate/history", json={"at": "2026-07-20T12:00:00+00:00"})
     assert resp.status_code == 503
 
 
 def test_endpoint_requires_config(tmp_path: Path):
     app = create_app(AppState(), _controller(tmp_path), client=FakeHistoryClient())
-    resp = TestClient(app).post(
-        "/api/simulate/history", json={"at": "2026-07-20T12:00:00+00:00"}
-    )
+    resp = TestClient(app).post("/api/simulate/history", json={"at": "2026-07-20T12:00:00+00:00"})
     assert resp.status_code == 409
 
 
 def test_endpoint_rejects_bad_datetime(tmp_path: Path):
     settings = make_settings(entities=ENTITIES, enabled=True)
-    app = create_app(
-        AppState(), _controller(tmp_path, settings), client=FakeHistoryClient()
-    )
+    app = create_app(AppState(), _controller(tmp_path, settings), client=FakeHistoryClient())
     resp = TestClient(app).post("/api/simulate/history", json={"at": "not-a-time"})
     assert resp.status_code == 400
     assert "ISO datetime" in resp.json()["error"]

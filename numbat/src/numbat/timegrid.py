@@ -79,9 +79,7 @@ class TimeGrid:
             last += pad_step
             cuts.append(last)
         edges = [now, *cuts, end]
-        return cls(
-            tuple(GridStep(a, b) for a, b in zip(edges, edges[1:], strict=False))
-        )
+        return cls(tuple(GridStep(a, b) for a, b in zip(edges, edges[1:], strict=False)))
 
 
 def resample_previous(series: Series, grid: TimeGrid) -> np.ndarray:

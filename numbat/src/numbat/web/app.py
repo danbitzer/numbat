@@ -73,6 +73,7 @@ def _opt_float(v: Any) -> float | None:
     except (TypeError, ValueError):
         return None
 
+
 HEALTHY_WINDOW = timedelta(minutes=15)
 # Vite build output (numbat/frontend -> `bun run build`); gitignored, built by CI
 # before the image build and shipped inside the package.
@@ -124,8 +125,7 @@ class AppState:
 def _validation_errors(e: ValidationError) -> list[dict[str, str]]:
     """Pydantic errors as per-field entries the form can attach to inputs."""
     return [
-        {"loc": ".".join(str(part) for part in err["loc"]), "msg": err["msg"]}
-        for err in e.errors()
+        {"loc": ".".join(str(part) for part in err["loc"]), "msg": err["msg"]} for err in e.errors()
     ]
 
 
@@ -273,9 +273,7 @@ def create_app(
             """Time travel: replay the optimizer over recorded HA history from
             a chosen past instant. Read-only, like the synthetic scenarios."""
             if client is None:
-                return JSONResponse(
-                    {"error": "time travel needs a Home Assistant connection"}, 503
-                )
+                return JSONResponse({"error": "time travel needs a Home Assistant connection"}, 503)
             current = controller.current
             if current is None:
                 return JSONResponse({"error": "configure Numbat first"}, status_code=409)

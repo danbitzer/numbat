@@ -31,8 +31,7 @@ def parse_watts_attribute(state: State) -> dict[datetime, float]:
         )
     try:
         return {
-            datetime.fromisoformat(ts).astimezone(UTC): float(w) / 1000.0
-            for ts, w in raw.items()
+            datetime.fromisoformat(ts).astimezone(UTC): float(w) / 1000.0 for ts, w in raw.items()
         }
     except (TypeError, ValueError) as e:
         raise SolarParseError(f"{state.entity_id}: bad watts entry") from e

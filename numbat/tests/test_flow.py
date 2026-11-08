@@ -169,8 +169,10 @@ def test_pv_off_per_interval_is_a_forward_pass_with_the_planners_asymmetry():
     # −0.5c alone does not re-enter
     prices = [-0.03, -0.005, 0.01, -0.005, -0.03]
     p = plan(
-        *[iv(Action.HOLD, i, pv_kw=6.0, pv_used_kw=0.0, buy=b, grid_import_kw=1.0)
-          for i, b in enumerate(prices)],
+        *[
+            iv(Action.HOLD, i, pv_kw=6.0, pv_used_kw=0.0, buy=b, grid_import_kw=1.0)
+            for i, b in enumerate(prices)
+        ],
         pv_off=True,
     )
     annotate(p)

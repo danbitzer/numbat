@@ -60,8 +60,17 @@ def _build(plan, **overrides):
 
 def test_carries_the_step0_numbers_and_no_prose():
     intervals = [
-        _iv(0, Action.DISCHARGE, buy=0.90, sell=0.85, power_kw=-8.0, grid_export_kw=8.0,
-            interval_cost=-0.34, soc_start=38.0, soc_end=34.0),
+        _iv(
+            0,
+            Action.DISCHARGE,
+            buy=0.90,
+            sell=0.85,
+            power_kw=-8.0,
+            grid_export_kw=8.0,
+            interval_cost=-0.34,
+            soc_start=38.0,
+            soc_end=34.0,
+        ),
         _iv(1, Action.IDLE, buy=0.30, sell=0.25),
     ]
     exp = _build(_plan(intervals))
@@ -101,15 +110,6 @@ def test_levers_reflect_what_armed_the_solve():
         "curtail": False,
         "pv_off": False,
     }
-
-
-def test_hysteresis_flag_surfaced():
-    intervals = [
-        _iv(0, Action.IDLE, buy=0.30, sell=0.25),
-        _iv(1, Action.IDLE, buy=0.30, sell=0.25),
-    ]
-    exp = _build(_plan(intervals, status="optimal (hysteresis)"))
-    assert exp["context"]["hysteresis"] is True
 
 
 def test_empty_plan_returns_none():

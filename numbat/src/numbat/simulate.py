@@ -62,21 +62,22 @@ def _bell(hours: np.ndarray, peak: float, start: float = 8.0, end: float = 16.0)
 def _house_load(hours: np.ndarray) -> np.ndarray:
     """A gentle household load: ~0.4 kW base with morning and evening bumps."""
     load = np.full_like(hours, 0.4)
-    load += np.where((hours >= 6) & (hours < 9), 0.6, 0.0)     # morning
-    load += np.where((hours >= 17) & (hours < 22), 0.9, 0.0)   # evening
+    load += np.where((hours >= 6) & (hours < 9), 0.6, 0.0)  # morning
+    load += np.where((hours >= 17) & (hours < 22), 0.9, 0.0)  # evening
     return load
 
 
 def _evening_peak_buy(hours: np.ndarray) -> np.ndarray:
     """A typical import curve: cheap overnight, mild midday, evening peak."""
     buy = np.full_like(hours, 0.15)
-    buy = np.where((hours >= 0) & (hours < 6), 0.10, buy)      # overnight
-    buy = np.where((hours >= 10) & (hours < 15), 0.12, buy)    # solar-soft midday
-    buy = np.where((hours >= 17) & (hours < 20), 0.40, buy)    # evening peak
+    buy = np.where((hours >= 0) & (hours < 6), 0.10, buy)  # overnight
+    buy = np.where((hours >= 10) & (hours < 15), 0.12, buy)  # solar-soft midday
+    buy = np.where((hours >= 17) & (hours < 20), 0.40, buy)  # evening peak
     return buy
 
 
 # --- scenario generators -------------------------------------------------
+
 
 def _typical(hours, days):
     buy = _evening_peak_buy(hours)
@@ -120,7 +121,7 @@ def _negative_feedin_tomorrow(hours, days):
 
 def _low_morning_rising_afternoon(hours, days):
     # Prices low in the morning, climbing into the afternoon/evening.
-    buy = 0.08 + 0.02 * np.clip(hours - 6, 0, 12)   # ramps from 8c at 6am
+    buy = 0.08 + 0.02 * np.clip(hours - 6, 0, 12)  # ramps from 8c at 6am
     buy = np.where(hours < 6, 0.10, buy)
     sell = np.clip(buy - 0.08, -0.02, None)
     return buy, sell, _bell(hours, 6.0), _house_load(hours)
@@ -144,35 +145,55 @@ def _cheap_overnight_charge(hours, days):
 SCENARIOS: dict[str, Scenario] = {
     s.id: s
     for s in [
-        Scenario("typical", "Typical day",
-                 "Cheap overnight, mild midday, an evening import peak, modest feed-in.",
-                 _typical),
-        Scenario("evening_spike", "Price spike tonight",
-                 "A sharp wholesale spike this evening (6-8pm) — buy and feed-in both jump.",
-                 _evening_spike),
-        Scenario("export_spike_tonight", "Feed-in spike tonight",
-                 "Feed-in spikes tonight while import stays moderate — worth pre-charging to sell.",
-                 _export_spike_tonight),
-        Scenario("negative_feedin_tomorrow", "Negative feed-in tomorrow",
-                 "Normal tonight, then a solar glut tomorrow turns midday feed-in negative.",
-                 _negative_feedin_tomorrow),
-        Scenario("low_morning_rising", "Low morning, rising afternoon",
-                 "Prices start low in the morning and climb into the afternoon and evening.",
-                 _low_morning_rising_afternoon),
-        Scenario("cheap_overnight", "Cheap (negative) overnight",
-                 "Very cheap — even negative — overnight, a pricey evening, and a dull solar day.",
-                 _cheap_overnight_charge),
-        Scenario("flat", "Flat prices",
-                 "Import and feed-in flat all horizon — no arbitrage to chase.",
-                 _flat),
+        Scenario(
+            "typical",
+            "Typical day",
+            "Cheap overnight, mild midday, an evening import peak, modest feed-in.",
+            _typical,
+        ),
+        Scenario(
+            "evening_spike",
+            "Price spike tonight",
+            "A sharp wholesale spike this evening (6-8pm) — buy and feed-in both jump.",
+            _evening_spike,
+        ),
+        Scenario(
+            "export_spike_tonight",
+            "Feed-in spike tonight",
+            "Feed-in spikes tonight while import stays moderate — worth pre-charging to sell.",
+            _export_spike_tonight,
+        ),
+        Scenario(
+            "negative_feedin_tomorrow",
+            "Negative feed-in tomorrow",
+            "Normal tonight, then a solar glut tomorrow turns midday feed-in negative.",
+            _negative_feedin_tomorrow,
+        ),
+        Scenario(
+            "low_morning_rising",
+            "Low morning, rising afternoon",
+            "Prices start low in the morning and climb into the afternoon and evening.",
+            _low_morning_rising_afternoon,
+        ),
+        Scenario(
+            "cheap_overnight",
+            "Cheap (negative) overnight",
+            "Very cheap — even negative — overnight, a pricey evening, and a dull solar day.",
+            _cheap_overnight_charge,
+        ),
+        Scenario(
+            "flat",
+            "Flat prices",
+            "Import and feed-in flat all horizon — no arbitrage to chase.",
+            _flat,
+        ),
     ]
 }
 
 
 def scenario_list() -> list[dict]:
     return [
-        {"id": s.id, "label": s.label, "description": s.description}
-        for s in SCENARIOS.values()
+        {"id": s.id, "label": s.label, "description": s.description} for s in SCENARIOS.values()
     ]
 
 
@@ -241,7 +262,8 @@ def simulate_solve(
     )
 
     target = daily_soc_target_vector(
-        grid, tz,
+        grid,
+        tz,
         target_soc=settings.battery.daily_target_soc,
         target_time=settings.battery.daily_target_time,
         hold_hours=settings.battery.daily_target_hold_hours,
@@ -278,7 +300,10 @@ def simulate_solve(
 
     inputs = OptimizerInputs(
         dt_hours=grid.dt_hours,
-        buy=buy, sell=sell_solve, pv=pv, load=load,
+        buy=buy,
+        sell=sell_solve,
+        pv=pv,
+        load=load,
         soc0_kwh=float(np.clip(soc_frac, 0.0, 1.0)) * bp.capacity_kwh,
         sell_floor_kwh=sell_floor,
         max_discharge_kw_step=caps,

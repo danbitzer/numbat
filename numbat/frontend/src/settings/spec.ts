@@ -405,13 +405,6 @@ export const SECTIONS: SectionSpec[] = [
         { unit: "$/kWh", min: 0, max: 10, step: 0.01, default: "0.05" },
       ),
       number(
-        "optimizer.action_switch_threshold_dollars",
-        "Action switch threshold",
-        "Hysteresis: the current action only changes if switching improves the horizon " +
-          "objective by more than this.",
-        { unit: "$", min: 0, max: 10, step: 0.01, default: "0.02" },
-      ),
-      number(
         "optimizer.forecast_haircut",
         "Sell price forecast haircut",
         "Shaves this share of the above-median excess off every FORECAST sell price — " +

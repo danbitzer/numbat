@@ -233,16 +233,7 @@ def solve(
     battery: BatteryParams,
     grid: GridParams,
     config: OptimizerConfig,
-    pin_step0: str | None = None,
 ) -> Solution:
-    """pin_step0 constrains the first step's battery mode ('charge' /
-    'discharge' / 'idle') — used by the planner's hysteresis to price the
-    previous action before allowing a switch.
-
-    Actions are grid-coupled (see classify_action): 'idle' pins step 0 to the
-    self-consumption envelope (charge from PV only, no battery export), NOT a
-    frozen battery — the inverter's idle mode still serves load and soaks up
-    PV surplus."""
     T = len(inputs.dt_hours)
     if not (len(inputs.buy) == len(inputs.sell) == len(inputs.pv) == len(inputs.load) == T):
         raise ValueError("all input arrays must have the same length")
@@ -358,20 +349,6 @@ def solve(
             pd_sell <= cp.multiply(pd_cap, sell_ok),
             soc[1:] >= floor_vec - cp.multiply(floor_vec - soc_floor, 1 - sell_ok),
         ]
-    # The self-consumption envelope: charge from PV only, export only PV
-    # leftovers (no battery export); serving load from the battery is free.
-    self_consumption = [pc[0] <= pv_u[0], ge[0] <= pv_u[0] - pc[0]]
-    if pin_step0 == "charge":
-        constraints += [pd[0] == 0, pc[0] >= 0.01]
-    elif pin_step0 == "discharge":
-        constraints += [pc[0] == 0, pd[0] >= 0.01]
-    elif pin_step0 == "no_charge":
-        constraints += [*self_consumption, pc[0] == 0]  # block charging
-    elif pin_step0 == "hold":
-        constraints += [pc[0] == 0, pd[0] == 0]  # battery fully inert
-    elif pin_step0 in ("idle", "curtail"):
-        constraints += self_consumption
-
     # Bird-in-hand accrual: each step earns the hold bonus only for the part
     # of it that falls inside the near window (fractional at the boundary).
     elapsed = np.concatenate([[0.0], np.cumsum(inputs.dt_hours[:-1])])
@@ -409,9 +386,7 @@ def solve(
         # evening costs more than a momentary dip. Aligned with soc[1:].
         target_slack = cp.Variable(T, nonneg=True)
         constraints.append(soc[1:] >= inputs.soc_target_kwh - target_slack)
-        cost = cost + config.soc_target_penalty_per_kwh * cp.sum(
-            cp.multiply(target_slack, dt)
-        )
+        cost = cost + config.soc_target_penalty_per_kwh * cp.sum(cp.multiply(target_slack, dt))
     problem = cp.Problem(cp.Minimize(cost), constraints)
     start = time.perf_counter()
     try:

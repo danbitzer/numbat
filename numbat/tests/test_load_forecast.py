@@ -279,9 +279,7 @@ def test_temp_hours_counts_records_not_split_pieces():
     for day in range(6, 18):  # Mon 6 Jul .. Fri 17 Jul: a full weekend inside,
         t = synth_day_temp(day)  # so every (daytype, hour) bucket passes the gate
         kw = BASE_KW + COOL_SLOPE * max(t - 22.0, 0.0)
-        records.extend(
-            (datetime(2026, 7, day, h, 0, tzinfo=UTC), kw, t) for h in range(24)
-        )
+        records.extend((datetime(2026, 7, day, h, 0, tzinfo=UTC), kw, t) for h in range(24))
     model = fit_load_model(records, ADELAIDE)
     assert model.has_temp_response
     assert model.temp_hours == len(records)

@@ -244,7 +244,6 @@ class Optimizer(BaseModel):
     # never-fires safety valve — solves take tens of ms — and on timeout the
     # planner falls back to the previous plan anyway.
     solver_timeout_s: int = Field(default=30, ge=1, le=60)
-    action_switch_threshold_dollars: float = Field(default=0.02, ge=0)
     # Sell-price forecast haircut: the share shaved off every FORECAST
     # interval's excess above the median (the live step-0 price is exempt —
     # confirmed beats forecast). Flat across the horizon by design. Field

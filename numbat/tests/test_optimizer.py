@@ -347,19 +347,6 @@ def test_scenario_defer_charge_to_cheaper_window():
     assert float(np.max(sol.charge_kw[:6])) < 0.05
 
 
-def test_pin_no_charge_blocks_charging_allows_discharge():
-    # expensive import NOW (cheaper later) + cheap stored energy: serving load
-    # from the battery at step 0 is strictly optimal — flat prices would leave
-    # discharge timing a tie, which bird-in-hand breaks toward holding.
-    # Pinning no_charge must forbid charging yet still permit that discharge
-    # (unlike a battery-frozen pin).
-    buy = np.concatenate([[0.60], np.full(5, 0.30)])
-    inputs = make_inputs(T=6, buy=buy, sell=0.05, pv=0.0, load=2.0, soc0=6.4)
-    sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.05), pin_step0="no_charge")
-    assert float(sol.charge_kw[0]) == pytest.approx(0.0, abs=1e-6)  # no charging
-    assert float(sol.discharge_kw[0]) > 0.0  # serving load is still allowed
-
-
 def test_soc_below_floor_starts_honest_and_recovers():
     """A real SoC below soc_min (BMS recalibration, overnight self-consumption
     drain) must not be clamped up to the floor: that invents phantom energy the
@@ -740,9 +727,7 @@ def test_early_fill_survives_a_large_objective():
     pv = np.concatenate([np.zeros(12), np.full(12, 11.0)])
     soc0 = 0.75 * BATTERY.capacity_kwh
     inputs = make_inputs(T=T, sell=sell, buy=0.30, pv=pv, load=6.0, soc0=soc0)
-    inputs = replace(
-        inputs, max_discharge_kw_step=np.concatenate([np.zeros(12), np.full(12, 5.0)])
-    )
+    inputs = replace(inputs, max_discharge_kw_step=np.concatenate([np.zeros(12), np.full(12, 5.0)]))
     sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.10))
     assert sol.objective > 9  # the point of the test: ~$9.50 of import bill
     # the 5 kW surplus goes in from the first step and the 3.2 kWh of room
@@ -765,25 +750,3 @@ def test_bird_in_hand_accrual_is_window_capped():
     inputs = make_inputs(T=T, sell=sell, load=0.0, soc0=10.0)
     sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.10))
     assert sol.discharge_kw[1] > 4.0  # taken at hour ~0.5, not deferred
-
-
-def test_pin_hold_keeps_battery_inert_grid_serves_load():
-    """Hysteresis pinning for the new action: pc[0] == pd[0] == 0, so the
-    load must come off the grid even where free-solving would discharge."""
-    from numbat.models import Action
-    from numbat.optimizer.result import classify_action
-
-    buy = np.concatenate([[0.60], np.full(5, 0.30)])
-    inputs = make_inputs(T=6, buy=buy, sell=0.05, pv=0.0, load=2.0, soc0=6.4)
-    sol = solve(inputs, BATTERY, GRID, config(terminal_value=0.05), pin_step0="hold")
-    assert float(sol.charge_kw[0]) == pytest.approx(0.0, abs=1e-6)
-    assert float(sol.discharge_kw[0]) == pytest.approx(0.0, abs=1e-6)
-    assert float(sol.grid_import_kw[0]) >= 2.0 - 1e-6
-    step0 = classify_action(
-        float(sol.charge_kw[0]),
-        float(sol.discharge_kw[0]),
-        float(inputs.pv[0]),
-        float(sol.pv_used_kw[0]),
-        float(inputs.load[0]),
-    )
-    assert step0 == Action.HOLD
