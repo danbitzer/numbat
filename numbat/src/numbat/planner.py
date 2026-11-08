@@ -7,7 +7,6 @@ Also owns the judgment calls around the raw MILP:
   the live, confirmed price is trusted in full)
 - spike reserve (a sales floor released by spike-level prices; execution is
   gated on the live confirmed price — only step 0 ever acts)
-- hysteresis (pin-and-compare before switching the current action)
 - live-spike guard (never grid-charge during a confirmed spike)
 - fallback (reuse the previous plan when the solver fails)
 """
@@ -46,7 +45,6 @@ from numbat.optimizer.model import (
 from numbat.optimizer.result import (
     POWER_TOL_KW,
     charge_ceiling_kwh,
-    classify_action,
     hold_floor_kwh,
     solution_to_plan,
 )
@@ -327,9 +325,7 @@ class Planner:
         vacation_info: dict | None = None
         if vacation.active(now, self._tz):
             until_utc = vacation.until_utc(self._tz)
-            away = np.array(
-                [until_utc is None or s.start < until_utc for s in grid.steps]
-            )
+            away = np.array([until_utc is None or s.start < until_utc for s in grid.steps])
             load_kw = np.where(away, vacation.baseline_kw, load_kw)
             vacation_info = {
                 "baseline_kw": vacation.baseline_kw,
@@ -461,7 +457,6 @@ class Planner:
             import_penalty_per_kwh=cfg.import_penalty_per_kwh,
         )
         solution = solve(data.inputs, self._battery_params, self._grid_params, opt_config)
-        solution = self._apply_hysteresis(solution, data, opt_config)
         # Report raw prices: the haircut shapes the solve, but displayed
         # prices/revenue must match the real forecast (same philosophy as the
         # import-reluctance toll — planning maths only).
@@ -481,8 +476,6 @@ class Planner:
                 self._battery_params.soc_max_kwh, self._battery_params.capacity_kwh
             ),
         )
-        if solution.status.endswith("(hysteresis)"):
-            plan.solver_status = solution.status
         plan.live_spike = self._live_spike(data.prices)
         # Withhold export while feed-in is negative and the plan exports
         # nothing: the actuator caps the export limit even mid-charge (the
@@ -563,74 +556,6 @@ class Planner:
             "threshold": cfg.high_price_threshold,
             "released": data.prices.current_sell > cfg.high_price_threshold,
         }
-
-    def _apply_hysteresis(self, free, data: CycleData, opt_config: OptimizerConfig):
-        """Only switch away from the previous action if the free solution beats
-        the action-pinned solution by more than the configured threshold —
-        compared on the FULL solver objective (energy + wear + terminal value),
-        not just the energy bill.
-
-        Known one-way seam: some pins define an ENVELOPE that contains other
-        actions' flows — pin "idle" (self-consumption) admits the hold shape
-        (pc=pd=0, grid serves load), and pin "hold" admits no_charge's at a
-        PV ramp — so a kept pinned solution can still RELABEL (idle->hold,
-        hold->no_charge) without paying the threshold. That is accepted:
-        those transitions swap only battery-limit registers (cheap, guarded),
-        the exits that matter (anything -> charge/discharge) are always
-        thresholded, and the reverse relabels can't oscillate because the
-        tighter pin does hold its own label.
-
-        The reverse direction is made free on purpose: leaving no_charge for
-        idle/curtail/hold also swaps only a limit register, and no_charge is
-        BINDING (it blocks the inverter's own charging) — thresholded, a
-        pinned no_charge would hold its own label for a gain of a tenth of
-        a cent per cycle and block a free solar fill for hours (found in
-        review, 2026-09-13). So when the free solve wants to charge from
-        solar after a no_charge, it charges."""
-        threshold = self._settings.optimizer.action_switch_threshold_dollars
-        prev = self.previous_plan
-        if prev is None or not prev.intervals or threshold <= 0:
-            return free
-        prev_action = prev.intervals[0].action
-        free_action = classify_action(
-            float(free.charge_kw[0]),
-            float(free.discharge_kw[0]),
-            float(data.inputs.pv[0]),
-            float(free.pv_used_kw[0]),
-            float(data.inputs.load[0]),
-            holdable=float(free.soc_kwh[0])
-            > hold_floor_kwh(
-                self._battery_params.soc_min_kwh, self._battery_params.capacity_kwh
-            ),
-            chargeable=float(free.soc_kwh[0])
-            < charge_ceiling_kwh(
-                self._battery_params.soc_max_kwh, self._battery_params.capacity_kwh
-            ),
-        )
-        if free_action == prev_action:
-            return free
-        if prev_action == Action.NO_CHARGE and free_action in (
-            Action.IDLE,
-            Action.CURTAIL,
-            Action.HOLD,
-        ):
-            return free  # a limit-register restore, never worth holding out for
-        try:
-            pinned = solve(
-                data.inputs,
-                self._battery_params,
-                self._grid_params,
-                opt_config,
-                pin_step0=prev_action.value,
-            )
-        except SolverError:
-            return free  # previous action no longer feasible; switch
-        gain = pinned.objective - free.objective
-        if gain < threshold:
-            log.debug("hysteresis: keeping %s (switch would gain only $%.4f)", prev_action, gain)
-            pinned.status = f"{pinned.status} (hysteresis)"
-            return pinned
-        return free
 
     def _live_spike_guard(self, plan: Plan, data: CycleData) -> Plan:
         """Belt-and-braces: never grid-charge during a confirmed price spike."""

@@ -311,7 +311,7 @@ def previous_plan_with(action: Action) -> Plan:
 
 
 def offline_planner(settings: Settings) -> Planner:
-    # optimize()/hysteresis don't touch the adapters, so dummies are fine here
+    # optimize() doesn't touch the adapters, so dummies are fine here
     return Planner(
         settings,
         prices=cast(AmberExpressAdapter, None),
@@ -327,9 +327,7 @@ def test_load_serving_discharge_classifies_as_idle():
     """Flat prices, no PV: the battery runs the house, nothing touches the
     grid — that's self-consumption, so the published action is IDLE (the
     inverter's native mode does this load-followingly), not DISCHARGE."""
-    settings = make_settings(
-        optimizer={"action_switch_threshold_dollars": 0.0, "forecast_haircut": 0.0}
-    )
+    settings = make_settings(optimizer={"forecast_haircut": 0.0})
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
     plan = planner.optimize(data, NOW)
@@ -339,55 +337,8 @@ def test_load_serving_discharge_classifies_as_idle():
     assert step0.grid_export_kw == pytest.approx(0.0, abs=0.01)
 
 
-def test_hysteresis_keeps_near_degenerate_previous_action():
-    """Step-0 buy price marginally below the terminal value makes a grid
-    charge worth well under the threshold, so the previous action (idle:
-    cheap import serves the load, battery waits) is kept."""
-    # pin the hold value so this isolates the hysteresis mechanism from the
-    # rebuy anchor (which would otherwise track buy[0] down and make the charge
-    # a wash — a separate behavior, covered in test_optimizer).
-    settings = make_settings(
-        optimizer={
-            "action_switch_threshold_dollars": 0.05,
-            "forecast_haircut": 0.0,
-            "terminal_soc_value": 0.245,
-            # the default import toll would kill this deliberately thin
-            # charge margin — this test is about hysteresis, not reluctance
-            "import_penalty_per_kwh": 0.0,
-        }
-    )
-    planner = offline_planner(settings)
-    data = synthetic_cycle_data(settings)
-    data.inputs.buy[0] = 0.23  # just below the 0.245 hold value: charging gains cents
-    planner.previous_plan = previous_plan_with(Action.IDLE)
-    plan = planner.optimize(data, NOW)
-    # the marginal grid charge is refused. The kept flows (grid serves the
-    # load, battery waits) now legitimately RELABEL idle -> HOLD: the idle
-    # pin's envelope contains the hold shape, so hysteresis thresholds the
-    # flows, not the label (documented in _apply_hysteresis).
-    assert plan.intervals[0].action == Action.HOLD
-    assert "hysteresis" in plan.solver_status
-
-
-def test_hysteresis_disabled_switches_freely():
-    settings = make_settings(
-        optimizer={
-            "action_switch_threshold_dollars": 0.0,
-            "forecast_haircut": 0.0,
-            "terminal_soc_value": 0.245,
-            "import_penalty_per_kwh": 0.0,  # keep the thin charge margin alive
-        }
-    )
-    planner = offline_planner(settings)
-    data = synthetic_cycle_data(settings)
-    data.inputs.buy[0] = 0.23
-    planner.previous_plan = previous_plan_with(Action.IDLE)
-    plan = planner.optimize(data, NOW)
-    assert plan.intervals[0].action == Action.CHARGE  # grid charge wins
-
-
 def test_live_spike_guard_suppresses_grid_charge():
-    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    settings = make_settings()
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings, live_spike=True)
     data.inputs.buy[0] = -0.10  # would normally trigger a grid charge now
@@ -524,7 +475,7 @@ def test_plan_curtail_flag_follows_negative_feed_in():
     """The 2026-09-10 gap: 'charge' at negative buy AND feed-in must ALSO say
     withhold export, or the actuator lifts the cap and the PV surplus pays
     to export. The flag is orthogonal to the action."""
-    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    settings = make_settings()
     planner = offline_planner(settings)
     # negative buy and feed-in: the plan grid-charges with zero export
     data = synthetic_cycle_data(settings)
@@ -550,7 +501,7 @@ def test_hold_plus_curtail_is_the_negative_price_combination():
     is HOLD (battery fenced, grid serves the house — self-consumption would
     discharge into the load) and the curtail flag rides it (export capped).
     This is the 2026-09-10 persistent-negative-day shape."""
-    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    settings = make_settings()
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
     data.inputs.pv[:] = 2.0
@@ -568,9 +519,7 @@ def test_pv_off_rides_hold_at_negative_buy():
     house from the grid (paid to) and uses none of its PV — that intent
     used to be unactuatable (PV serves the house first on every hybrid);
     with a PV-off actuator it is published as `pv_off`, riding HOLD."""
-    settings = make_settings(
-        optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID
-    )
+    settings = make_settings(grid=PV_OFF_GRID)
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
     data.inputs.pv[:] = 2.0
@@ -590,9 +539,7 @@ def test_pv_off_rides_charge_for_true_grid_charging():
     """Room in the battery at negative buy: the plan grid-charges with PV
     off — CHARGE + pv_off is the combination that finally draws the charge
     from the grid instead of throttled PV."""
-    settings = make_settings(
-        optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID
-    )
+    settings = make_settings(grid=PV_OFF_GRID)
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
     data.inputs.pv[:] = 2.0
@@ -629,9 +576,7 @@ def test_pv_off_is_gated_on_the_live_buy_price():
     a cent below zero to switch on, anything below zero to stay on (each
     clear costs ~45 s of PV; a 5-minute site's price can hover at zero).
     And nothing to withhold at night (no PV) means no flag either."""
-    settings = make_settings(
-        optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID
-    )
+    settings = make_settings(grid=PV_OFF_GRID)
     planner = offline_planner(settings)
     # positive, zero, and negative-but-shallow live prices: no entry
     for live_buy in (0.30, 0.0, -0.005):
@@ -663,9 +608,7 @@ def test_pv_off_holds_its_state_while_the_live_price_is_an_estimate():
     """Amber's first seconds of an interval are an estimate that the confirmed
     price can contradict; the confirmed re-solve follows within seconds, so
     an estimate neither switches PV off nor back on."""
-    settings = make_settings(
-        optimizer={"action_switch_threshold_dollars": 0.0}, grid=PV_OFF_GRID
-    )
+    settings = make_settings(grid=PV_OFF_GRID)
     planner = offline_planner(settings)
     # off, deep negative estimate: stays off until confirmed
     est = _negative_buy_pv_day(settings, -0.13, estimate=True)
@@ -679,19 +622,6 @@ def test_pv_off_holds_its_state_while_the_live_price_is_an_estimate():
     assert held.pv_off is True
     planner.previous_plan = held
     assert planner.optimize(_negative_buy_pv_day(settings, 0.30), NOW).pv_off is False
-
-
-def test_pv_off_survives_a_hysteresis_pin():
-    """With hysteresis live, step 0 can be pinned to the previous action; the
-    pinned solve still plans no PV at a negative buy, so the flag rides the
-    (relabelled) action it produces."""
-    settings = make_settings(grid=PV_OFF_GRID)  # default switch threshold: hysteresis active
-    planner = offline_planner(settings)
-    planner.previous_plan = previous_plan_with(Action.IDLE)
-    plan = planner.optimize(_negative_buy_pv_day(settings, -0.02), NOW)
-    assert plan.intervals[0].action in (Action.HOLD, Action.IDLE)
-    assert plan.intervals[0].pv_used_kw < 0.01
-    assert plan.pv_off is True
 
 
 def test_fallback_is_annotated_and_its_explanation_reconciles():
@@ -743,7 +673,7 @@ def test_no_charge_keeps_the_room_for_a_paid_grid_fill():
     the inverter would fill the battery from solar and forfeit the paid
     fill — so the action must be `no_charge` (cap on the attribute) and
     the dashboard says the battery fills from the grid later."""
-    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    settings = make_settings()
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
     data.inputs.pv[:] = 4.0
@@ -763,41 +693,28 @@ def test_no_charge_keeps_the_room_for_a_paid_grid_fill():
     assert any(iv.action == Action.CHARGE for iv in plan.intervals[6:])
 
 
-def test_leaving_no_charge_for_a_solar_fill_is_never_thresholded():
-    """no_charge is BINDING (it blocks the inverter's own charging), and the
-    hysteresis exit to idle swaps one limit register: with the default 2c
-    switch threshold, a pinned no_charge would otherwise hold its own label
-    for a ~0.1c/cycle gain and block a free solar fill for hours (review,
-    2026-09-13). Rolling cycles: the fill starts the moment the free solve
-    wants it."""
-    settings = make_settings()  # default threshold: hysteresis active
+def test_a_fence_never_outlives_its_reason():
+    """2026-11-09: a hold left over from a 5-minute price blip stuck for two
+    hours of 44-54c prices because the action-switch hysteresis kept the
+    previous label. With hysteresis gone, each cycle publishes what the
+    plan wants now: the battery serves the house."""
+    settings = make_settings()
     planner = offline_planner(settings)
-    planner.previous_plan = previous_plan_with(Action.NO_CHARGE)
+    planner.previous_plan = previous_plan_with(Action.HOLD)
     data = synthetic_cycle_data(settings)
-    data.inputs.pv[:] = 5.0
-    data.inputs.sell[:] = -0.05
-    data.prices.current_sell = -0.05
+    data.inputs.buy[:] = 0.48
+    data.inputs.load[:] = 0.15
+    data.prices.current_buy = 0.48
     plan = planner.optimize(data, NOW)
     assert plan.intervals[0].action == Action.IDLE
-    assert plan.intervals[0].power_kw > 3.0
-    assert not plan.solver_status.endswith("(hysteresis)")
-    # and the reverse relabel (idle -> no_charge when a paid fill appears)
-    # is the accepted free envelope relabel: no threshold either way
-    planner.previous_plan = plan
-    paid = synthetic_cycle_data(settings)
-    paid.inputs.pv[:] = 4.0
-    paid.inputs.sell[:] = -0.05
-    paid.inputs.buy[:] = 0.09
-    paid.inputs.buy[6:] = -0.15
-    paid.prices.current_sell = -0.05
-    paid = replace(paid, inputs=replace(paid.inputs, soc0_kwh=9.6))
-    assert planner.optimize(paid, NOW).intervals[0].action == Action.NO_CHARGE
+    assert plan.intervals[0].power_kw < -0.1
+    assert plan.solver_status == "optimal"
 
 
 def test_pv_off_is_opt_in():
     """grid.pv_off_enabled defaults off: the same negative-buy hold publishes
     no PV-off flag and marks no interval, while the plan is unchanged."""
-    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    settings = make_settings()
     assert settings.grid.pv_off_enabled is False
     planner = offline_planner(settings)
     plan = planner.optimize(_negative_buy_pv_day(settings, -0.13), NOW)
@@ -813,7 +730,7 @@ def test_curtail_action_survives_where_grid_import_is_not_wanted():
     (importing would cost money), the rest is spilled, the full battery
     just sits — the classic standalone CURTAIL action, still carrying the
     flag. No grid import means there is nothing for HOLD to guard against."""
-    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    settings = make_settings()
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
     data.inputs.pv[:] = 2.0
@@ -830,9 +747,7 @@ def test_hold_when_stored_energy_is_dearer_than_the_grid():
     than the current buy price (a big window beyond the horizon), so the
     plan serves the house from the grid — where 'idle' actuation would
     quietly discharge the battery into the load."""
-    settings = make_settings(
-        optimizer={"action_switch_threshold_dollars": 0.0, "terminal_soc_value": 0.5}
-    )
+    settings = make_settings(optimizer={"terminal_soc_value": 0.5})
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
     data = replace(data, inputs=replace(data.inputs, soc0_kwh=12.8))

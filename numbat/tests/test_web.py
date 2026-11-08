@@ -181,9 +181,16 @@ class FakeStatesClient:
 
         now = datetime.now(UTC)
         return [
-            State("sensor.load_power", "1.2", {"friendly_name": "Load power",
-                                               "device_class": "power",
-                                               "unit_of_measurement": "kW"}, now),
+            State(
+                "sensor.load_power",
+                "1.2",
+                {
+                    "friendly_name": "Load power",
+                    "device_class": "power",
+                    "unit_of_measurement": "kW",
+                },
+                now,
+            ),
             State("weather.home", "sunny", {"friendly_name": "Home"}, now),
         ]
 
@@ -192,8 +199,18 @@ def test_entities_endpoint_lists_for_pickers():
     client = TestClient(create_app(AppState(), client=FakeStatesClient()))
     body = client.get("/api/entities").json()
     assert body["entities"] == [
-        {"entity_id": "sensor.load_power", "name": "Load power", "domain": "sensor",
-         "device_class": "power", "unit": "kW"},
-        {"entity_id": "weather.home", "name": "Home", "domain": "weather",
-         "device_class": None, "unit": None},
+        {
+            "entity_id": "sensor.load_power",
+            "name": "Load power",
+            "domain": "sensor",
+            "device_class": "power",
+            "unit": "kW",
+        },
+        {
+            "entity_id": "weather.home",
+            "name": "Home",
+            "domain": "weather",
+            "device_class": None,
+            "unit": None,
+        },
     ]

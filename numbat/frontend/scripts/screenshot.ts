@@ -135,7 +135,7 @@ function makePlan() {
           battery_kw: s0.power_kw, grid_import_kw: s0.grid_import_kw,
           grid_export_kw: s0.grid_export_kw, interval_cost: s0.interval_cost,
         },
-        context: { hold_value: 0.21, hysteresis: false },
+        context: { hold_value: 0.21 },
         levers: { spike_reserve: null, daily_target: false, live_spike: false, prices_estimated: false },
         flow: {
           key: s0.flow, export_capped: false, pv_off: false, pv_spill_kw: 0,

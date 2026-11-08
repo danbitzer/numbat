@@ -42,9 +42,7 @@ def test_simulated_plans_carry_the_flow_vocabulary():
 
 def test_run_simulation_returns_a_full_optimal_plan():
     settings = make_settings()
-    result = run_simulation(
-        settings, scenario_id="typical", soc_frac=0.5, now=NOW, tz=ADELAIDE
-    )
+    result = run_simulation(settings, scenario_id="typical", soc_frac=0.5, now=NOW, tz=ADELAIDE)
     assert result["solver_status"].startswith("optimal")
     horizon_steps = settings.optimizer.horizon_hours * 2
     assert abs(len(result["intervals"]) - horizon_steps) <= 1
@@ -65,14 +63,16 @@ def test_every_scenario_solves():
 def test_min_battery_export_price_suppresses_low_price_export():
     # cheap_overnight has a pricey evening (feed-in ~0.30) and cheap nights;
     # a floor above the evening feed-in should cut battery export there.
-    base = run_simulation(make_settings(), scenario_id="cheap_overnight", soc_frac=0.9,
-                          now=NOW, tz=ADELAIDE)
-    floored_settings = make_settings(
-        grid={"import_limit_kw": 15.0, "export_limit_kw": 5.0,
-              "min_battery_export_price": 0.50},
+    base = run_simulation(
+        make_settings(), scenario_id="cheap_overnight", soc_frac=0.9, now=NOW, tz=ADELAIDE
     )
-    floored = run_simulation(floored_settings, scenario_id="cheap_overnight", soc_frac=0.9,
-                             now=NOW, tz=ADELAIDE)
+    floored_settings = make_settings(
+        grid={"import_limit_kw": 15.0, "export_limit_kw": 5.0, "min_battery_export_price": 0.50},
+    )
+    floored = run_simulation(
+        floored_settings, scenario_id="cheap_overnight", soc_frac=0.9, now=NOW, tz=ADELAIDE
+    )
+
     def batt_export(r):
         return sum(iv["grid_export_kw"] for iv in r["intervals"] if iv["action"] == "discharge")
 
@@ -82,13 +82,19 @@ def test_min_battery_export_price_suppresses_low_price_export():
 def test_simulate_applies_the_haircut_and_reports_raw_prices():
     """Test mode must honour the sandbox's forecast_haircut (else A/B runs
     lie), while displayed prices stay raw in every case."""
-    base = run_simulation(make_settings(), scenario_id="export_spike_tonight",
-                          soc_frac=0.9, now=NOW, tz=ADELAIDE)
-    cut = run_simulation(make_settings(optimizer={"forecast_haircut": 1.0}),
-                         scenario_id="export_spike_tonight",
-                         soc_frac=0.9, now=NOW, tz=ADELAIDE)
+    base = run_simulation(
+        make_settings(), scenario_id="export_spike_tonight", soc_frac=0.9, now=NOW, tz=ADELAIDE
+    )
+    cut = run_simulation(
+        make_settings(optimizer={"forecast_haircut": 1.0}),
+        scenario_id="export_spike_tonight",
+        soc_frac=0.9,
+        now=NOW,
+        tz=ADELAIDE,
+    )
     # displayed prices are the raw scenario in both runs
     assert [iv["sell"] for iv in cut["intervals"]] == [iv["sell"] for iv in base["intervals"]]
+
     # but a full trim (forecast spike flattened to the median) kills the
     # hold-and-sell-into-the-spike play the base plan makes
     def batt_export(r):
@@ -102,11 +108,16 @@ def test_simulate_spike_reserve_floor_is_wired():
     actually constrain the sim's sales, not just decorate the lever.
     export_spike_tonight peaks at 0.90 — below the $1 release price — so
     nothing releases and the reserved tranche can't sell."""
-    base = run_simulation(make_settings(), scenario_id="export_spike_tonight",
-                          soc_frac=0.9, now=NOW, tz=ADELAIDE)
-    reserved = run_simulation(make_settings(spike={"reserve_soc": 0.6}),
-                              scenario_id="export_spike_tonight",
-                              soc_frac=0.9, now=NOW, tz=ADELAIDE)
+    base = run_simulation(
+        make_settings(), scenario_id="export_spike_tonight", soc_frac=0.9, now=NOW, tz=ADELAIDE
+    )
+    reserved = run_simulation(
+        make_settings(spike={"reserve_soc": 0.6}),
+        scenario_id="export_spike_tonight",
+        soc_frac=0.9,
+        now=NOW,
+        tz=ADELAIDE,
+    )
 
     def batt_export(r):
         return sum(iv["grid_export_kw"] for iv in r["intervals"] if iv["action"] == "discharge")
@@ -120,13 +131,16 @@ def test_simulate_forecast_spike_releases_in_plan():
     """evening_spike's 1.25 feed-in clears the $1 release price as FORECAST:
     the plan anticipates the reserve sale into that window (in-plan release;
     execution would still be gated on the price confirming)."""
-    r = run_simulation(make_settings(spike={"reserve_soc": 0.6}),
-                       scenario_id="evening_spike",
-                       soc_frac=0.9, now=NOW, tz=ADELAIDE)
+    r = run_simulation(
+        make_settings(spike={"reserve_soc": 0.6}),
+        scenario_id="evening_spike",
+        soc_frac=0.9,
+        now=NOW,
+        tz=ADELAIDE,
+    )
     reserve_kwh = 0.6 * 12.8
     assert any(
-        iv["action"] == "discharge" and iv["soc_end"] < reserve_kwh - 0.5
-        for iv in r["intervals"]
+        iv["action"] == "discharge" and iv["soc_end"] < reserve_kwh - 0.5 for iv in r["intervals"]
     )
 
 
@@ -161,13 +175,23 @@ def test_api_simulate_accepts_sandbox_config(tmp_path):
     client = TestClient(create_app(AppState(), _controller(tmp_path, make_settings())))
     resp = client.post(
         "/api/simulate",
-        json={"scenario": "typical", "soc_frac": 0.5,
-              "config": {
-                  "battery": {"capacity_kwh": 20.0, "max_charge_kw": 8.0,
-                              "max_discharge_kw": 8.0, "wear_cost_per_kwh": 0.03},
-                  "grid": {"import_limit_kw": 15.0, "export_limit_kw": 5.0,
-                           "min_battery_export_price": 0.13},
-              }},
+        json={
+            "scenario": "typical",
+            "soc_frac": 0.5,
+            "config": {
+                "battery": {
+                    "capacity_kwh": 20.0,
+                    "max_charge_kw": 8.0,
+                    "max_discharge_kw": 8.0,
+                    "wear_cost_per_kwh": 0.03,
+                },
+                "grid": {
+                    "import_limit_kw": 15.0,
+                    "export_limit_kw": 5.0,
+                    "min_battery_export_price": 0.13,
+                },
+            },
+        },
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -180,9 +204,7 @@ def test_api_simulate_empty_sandbox_section_means_defaults_not_live(tmp_path):
     # the live section (pydantic defaults), not silently keep live values.
     settings = make_settings(optimizer={"import_penalty_per_kwh": 0.05})
     client = TestClient(create_app(AppState(), _controller(tmp_path, settings)))
-    resp = client.post(
-        "/api/simulate", json={"scenario": "typical", "config": {"optimizer": {}}}
-    )
+    resp = client.post("/api/simulate", json={"scenario": "typical", "config": {"optimizer": {}}})
     assert resp.status_code == 200
     assert resp.json()["solver_status"].startswith("optimal")
 
@@ -191,9 +213,12 @@ def test_api_simulate_invalid_sandbox_config_is_422_with_field_errors(tmp_path):
     client = TestClient(create_app(AppState(), _controller(tmp_path, make_settings())))
     resp = client.post(
         "/api/simulate",
-        json={"scenario": "typical",
-              "config": {"battery": {"capacity_kwh": -1.0, "max_charge_kw": 5.0,
-                                     "max_discharge_kw": 5.0}}},
+        json={
+            "scenario": "typical",
+            "config": {
+                "battery": {"capacity_kwh": -1.0, "max_charge_kw": 5.0, "max_discharge_kw": 5.0}
+            },
+        },
     )
     assert resp.status_code == 422
     errors = resp.json()["errors"]
@@ -205,8 +230,11 @@ def test_api_simulate_sandbox_never_touches_the_saved_config(tmp_path):
     client = TestClient(create_app(AppState(), controller))
     client.post(
         "/api/simulate",
-        json={"scenario": "typical",
-              "config": {"battery": {"capacity_kwh": 99.0, "max_charge_kw": 5.0,
-                                     "max_discharge_kw": 5.0}}},
+        json={
+            "scenario": "typical",
+            "config": {
+                "battery": {"capacity_kwh": 99.0, "max_charge_kw": 5.0, "max_discharge_kw": 5.0}
+            },
+        },
     )
     assert controller.current.battery.capacity_kwh == 12.8

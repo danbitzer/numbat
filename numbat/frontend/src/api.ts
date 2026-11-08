@@ -92,7 +92,6 @@ export const ExplanationSchema = z.object({
   context: z
     .looseObject({
       hold_value: z.number().optional(),
-      hysteresis: z.boolean().optional(),
     })
     .optional(),
   levers: z

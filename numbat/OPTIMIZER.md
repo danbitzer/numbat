@@ -326,10 +326,14 @@ A few quieter mechanisms keep the plan sensible:
   holding earns the whisker. The cost difference is a couple of tenths of
   a cent per kWh, real Amber days are never flat, and the import toll does
   not change it (it prices imports, not the tie).
-- **Action switch threshold** (default $0.02): the current action only
-  changes if the new plan beats sticking with the old action by more than
-  this, across the whole horizon — this stops the battery flip-flopping
-  between near-identical plans every 5 minutes.
+- **No action hysteresis.** Numbat used to keep the previous action unless
+  switching beat it by a fixed dollar amount. It never prevented a real
+  flip-flop (a 10 kW move across a 2c price gap clears any sensible
+  threshold) and three times it kept a decision that should have changed
+  — a blocked solar fill for hours, a battery fenced out of a 50c morning
+  because the house drew only 150 W. Chatter is handled inside the
+  objective, where ties actually live: the cycling epsilon, bird-in-hand
+  and the early-charge tie-break act on energy, not on labels.
 - **Honest state of charge:** if the battery reports below SoC min
   (e.g. after a sensor recalibration), the plan starts from the real
   number rather than pretending the reserve energy exists.

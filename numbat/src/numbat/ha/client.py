@@ -175,7 +175,6 @@ class HaClient:
             body = await resp.json()
         return body["service_response"] if return_response else body
 
-
     async def ws_command(self, message: dict[str, Any], timeout_s: float = 30.0) -> Any:
         """One-shot WebSocket command: connect, auth, send, return the result.
 
@@ -250,9 +249,7 @@ class HaClient:
         result = await self.ws_command(
             {"type": "recorder/get_statistics_metadata", "statistic_ids": statistic_ids}
         )
-        return {
-            m["statistic_id"]: m.get("statistics_unit_of_measurement") for m in (result or [])
-        }
+        return {m["statistic_id"]: m.get("statistics_unit_of_measurement") for m in (result or [])}
 
     async def watch_states(
         self,

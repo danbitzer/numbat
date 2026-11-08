@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Removed: action-switch hysteresis (`optimizer.action_switch_threshold_dollars`).**
+  Each cycle now publishes what the plan wants now. The pin-and-compare
+  step never prevented a real flip-flop (a 10 kW move across a 2c gap
+  clears any sensible threshold) and three times kept a decision that
+  should have changed: a pinned `no_charge` blocked a free solar fill for
+  hours (September), and on 2026-11-09 a one-interval −2.5c blip's 10 kW
+  charge survived at +19c as a token 10 W pin mislabelled `hold`, which
+  then fenced a 34 % battery out of a 50c morning for two hours because
+  the house drew only 150 W. Chatter is handled inside the objective,
+  where ties actually live (cycling epsilon, bird-in-hand, early-charge
+  tie-break). The setting is ignored in saved configs; the "More info"
+  panel no longer has a hysteresis flag.
+
 ## 0.23.0
 
 - **Blueprints: a changed setpoint under the same action now actuates

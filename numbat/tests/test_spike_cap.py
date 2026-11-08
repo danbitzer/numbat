@@ -84,7 +84,7 @@ def test_planner_cap_disabled_when_not_higher():
 
 
 def test_plan_carries_live_spike_flag():
-    settings = make_settings(optimizer={"action_switch_threshold_dollars": 0.0})
+    settings = make_settings()
     planner = offline_planner(settings)
     data = synthetic_cycle_data(settings, live_spike=True)
     plan = planner.optimize(data, datetime(2026, 7, 15, 11, 36, 30, tzinfo=UTC))

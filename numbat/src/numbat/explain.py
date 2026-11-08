@@ -57,7 +57,6 @@ def build_explanation(
         "values": values,
         "context": {
             "hold_value": round(hold_value, 3),
-            "hysteresis": plan.solver_status.endswith("(hysteresis)"),
         },
         "levers": {
             "spike_reserve": spike_reserve,

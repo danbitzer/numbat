@@ -83,8 +83,7 @@ def normalize_pv_units(
         d = ts.date()
         peak_by_day[d] = max(peak_by_day.get(d, 0.0), v)
     scale_by_day = {
-        d: 0.001 if peak > MAX_PLAUSIBLE_PV_PEAK_KW else 1.0
-        for d, peak in peak_by_day.items()
+        d: 0.001 if peak > MAX_PLAUSIBLE_PV_PEAK_KW else 1.0 for d, peak in peak_by_day.items()
     }
     if down := sum(1 for s in scale_by_day.values() if s != 1.0):
         log.warning(
@@ -133,9 +132,7 @@ async def _power_series(
     return Series(times=[t for t, _ in fixed], values=[v for _, v in fixed]), None
 
 
-async def _recorded_soc_frac(
-    client: HaClient, entity_id: str, at: datetime
-) -> float | None:
+async def _recorded_soc_frac(client: HaClient, entity_id: str, at: datetime) -> float | None:
     """The last recorded battery SoC at or before `at`, as a fraction."""
     rows = await client.get_history(entity_id, at - SOC_LOOKBACK, at + timedelta(minutes=1))
     last: float | None = None
@@ -174,8 +171,7 @@ async def run_history_simulation(
     at = at.astimezone(UTC)
     if at >= wall_now - MIN_SPAN:
         raise ValueError(
-            "pick a time at least 30 minutes in the past — the replay needs "
-            "recorded data after it"
+            "pick a time at least 30 minutes in the past — the replay needs recorded data after it"
         )
 
     # The horizon can only reach as far as recorded reality does.
@@ -196,9 +192,7 @@ async def run_history_simulation(
         coros["soc"] = _recorded_soc_frac(client, ent.battery_soc, at)
     # gather (not TaskGroup): a failure propagates as itself, not wrapped in an
     # ExceptionGroup the endpoint would render as an opaque message.
-    fetched = dict(
-        zip(coros.keys(), await asyncio.gather(*coros.values()), strict=True)
-    )
+    fetched = dict(zip(coros.keys(), await asyncio.gather(*coros.values()), strict=True))
 
     buy_series = _series(fetched["buy"])
     sell_series = _series(fetched["sell"])
@@ -211,9 +205,7 @@ async def run_history_simulation(
     ]
     if horizon < configured:
         hours = horizon.total_seconds() / 3600
-        notes.append(
-            f"Horizon clamped to {hours:.1f}h — recorded data only reaches the present."
-        )
+        notes.append(f"Horizon clamped to {hours:.1f}h — recorded data only reaches the present.")
 
     # NEM-aligned 30-min boundaries (Amber settles on :00/:30), fractional
     # first step from `at` to the next boundary, exactly like the live grid.
@@ -274,8 +266,7 @@ async def run_history_simulation(
         recorded = fetched["soc"]
         if recorded is None:
             raise ValueError(
-                "no recorded battery level at that time — set the starting "
-                "SoC manually instead"
+                "no recorded battery level at that time — set the starting SoC manually instead"
             )
         soc_frac = recorded
         sources["soc"] = "recorded"

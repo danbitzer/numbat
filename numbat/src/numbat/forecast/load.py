@@ -157,7 +157,7 @@ def _local_hour_pieces(
     cur = start
     while cur < end:
         local = cur.astimezone(tz)
-        boundary = (local.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+        boundary = local.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
         nxt = min(boundary.astimezone(cur.tzinfo), end)
         pieces.append(
             (1 if local.weekday() >= 5 else 0, local.hour, (nxt - cur).total_seconds() / 3600)
@@ -309,8 +309,7 @@ def fit_load_model(
     if use_temp and len(with_temp) < len(records):
         joint_days = (with_temp[-1][0] - with_temp[0][0]).total_seconds() / 86400
         log.info(
-            "learning window capped to load/temperature overlap: %d of %d "
-            "hourly rows (~%.0f days)",
+            "learning window capped to load/temperature overlap: %d of %d hourly rows (~%.0f days)",
             len(with_temp),
             len(records),
             joint_days,
@@ -529,12 +528,8 @@ class HistoryLoadForecaster:
             info["learned_at"] = self._learned_at.isoformat()
         if model.has_temp_response:
             info["temp_entity"] = self._temp_entity_id
-            info["heat_kw_per_deg"] = round(
-                max(model.heat_by_hour or [model.heat_kw_per_deg]), 3
-            )
-            info["cool_kw_per_deg"] = round(
-                max(model.cool_by_hour or [model.cool_kw_per_deg]), 3
-            )
+            info["heat_kw_per_deg"] = round(max(model.heat_by_hour or [model.heat_kw_per_deg]), 3)
+            info["cool_kw_per_deg"] = round(max(model.cool_by_hour or [model.cool_kw_per_deg]), 3)
             info["balance_heat_c"] = model.balance_heat_c
             info["balance_cool_c"] = model.balance_cool_c
             info["temp_hours"] = model.temp_hours
@@ -596,8 +591,7 @@ class HistoryLoadForecaster:
             self._source = "statistics"
         except Exception as e:  # noqa: BLE001 - LTS is an upgrade, not a requirement
             log.info(
-                "long-term statistics unavailable for %s (%s); falling back to "
-                "recorder history",
+                "long-term statistics unavailable for %s (%s); falling back to recorder history",
                 self._entity_id,
                 e,
             )
@@ -649,9 +643,7 @@ class HistoryLoadForecaster:
         if unit not in _UNIT_TO_KW:
             raise ValueError(f"{self._entity_id} unit {unit!r} is not W/kW")
         scale = _UNIT_TO_KW[unit]
-        raw = await self._client.get_history(
-            self._entity_id, now - timedelta(days=self._days), now
-        )
+        raw = await self._client.get_history(self._entity_id, now - timedelta(days=self._days), now)
         samples: list[tuple[datetime, float]] = []
         for ts, value in raw:
             try:

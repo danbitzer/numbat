@@ -90,11 +90,7 @@ def annotate(plan: Plan, *, pv_off_enabled: bool = True) -> Plan:
                 iv.sell < 0 and iv.grid_export_kw < CURTAIL_TOL_KW and iv.pv_kw > POWER_TOL_KW
             )
             unused_pv = iv.pv_kw > POWER_TOL_KW and iv.pv_used_kw < POWER_TOL_KW
-            pv_off = (
-                pv_off_enabled
-                and unused_pv
-                and iv.buy < (0.0 if pv_off else PV_OFF_ENTRY_BUY)
-            )
+            pv_off = pv_off_enabled and unused_pv and iv.buy < (0.0 if pv_off else PV_OFF_ENTRY_BUY)
             iv.pv_off = pv_off
         iv.flow = flow_for(iv)
     return plan
