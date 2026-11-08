@@ -223,6 +223,14 @@ class CycleData:
 # on while the buy price is negative at all (asymmetric, like a thermostat).
 
 
+# Leaving hold for self-consumption is priced per kWh the free plan would
+# move this step (see _apply_hysteresis): below this gain the fence stays.
+# Three cents — the wear cost's magnitude — means a 150 W house at a 50c buy
+# price leaves hold at once, while a one-cent wobble around the break-even
+# price does not flip the limit registers every cycle.
+FENCE_EXIT_THRESHOLD_PER_KWH = 0.03  # $/kWh
+
+
 def pv_off_wanted(
     current_buy: float, step0: PlanInterval, *, previously: bool, estimate: bool = False
 ) -> bool:
@@ -327,9 +335,7 @@ class Planner:
         vacation_info: dict | None = None
         if vacation.active(now, self._tz):
             until_utc = vacation.until_utc(self._tz)
-            away = np.array(
-                [until_utc is None or s.start < until_utc for s in grid.steps]
-            )
+            away = np.array([until_utc is None or s.start < until_utc for s in grid.steps])
             load_kw = np.where(away, vacation.baseline_kw, load_kw)
             vacation_info = {
                 "baseline_kw": vacation.baseline_kw,
@@ -580,15 +586,24 @@ class Planner:
         thresholded, and the reverse relabels can't oscillate because the
         tighter pin does hold its own label.
 
-        The reverse direction is made free on purpose: leaving no_charge or
-        hold for another self-consumption shape swaps only limit registers,
-        and both are BINDING (no_charge blocks the inverter's own charging,
-        hold blocks it serving the house) — thresholded, a pinned fence
-        holds its own label for a gain of a cent or two per cycle: a pinned
-        no_charge blocked a free solar fill for hours (review, 2026-09-13),
-        and a pinned hold kept a 34 % battery out of a 50c morning for two
-        hours because the house drew only 150 W (live, 2026-11-09). So when
-        the free solve wants self-consumption after a fence, it gets it.
+        Leaving a FENCE (no_charge, hold) for another self-consumption shape
+        swaps only limit registers, and both fences are BINDING (no_charge
+        blocks the inverter's own charging, hold blocks it serving the
+        house), so the fixed dollar threshold is the wrong tool for their
+        exits: it compares a whole-horizon gain against a number that one
+        5-minute step of a small flow can never reach. A pinned no_charge
+        blocked a free solar fill for hours (review, 2026-09-13); a pinned
+        hold kept a 34 % battery out of a 50c morning for two hours because
+        the house drew only 150 W (live, 2026-11-09). So:
+        - no_charge exits are free (the free solve wanting to store solar is
+          a tie the early-charge tie-break resolves — no dollar gain to
+          measure);
+        - hold exits are priced PER kWh the free solve would move at step 0
+          (FENCE_EXIT_THRESHOLD_PER_KWH), not per step: a 150 W house at a
+          50c price clears it, a wobble of a cent around the break-even
+          does not. Entering hold from idle is a free envelope relabel, so
+          without this the pair would flip every cycle near the tie
+          (review, 2026-11-09: 23 of 23 cycles).
 
         Forced-mode pins hold the PREVIOUS POWER (see solve): a token-power
         pin made "keep charging" nearly free to price, so a 10 kW charge
@@ -605,9 +620,7 @@ class Planner:
             float(free.pv_used_kw[0]),
             float(data.inputs.load[0]),
             holdable=float(free.soc_kwh[0])
-            > hold_floor_kwh(
-                self._battery_params.soc_min_kwh, self._battery_params.capacity_kwh
-            ),
+            > hold_floor_kwh(self._battery_params.soc_min_kwh, self._battery_params.capacity_kwh),
             chargeable=float(free.soc_kwh[0])
             < charge_ceiling_kwh(
                 self._battery_params.soc_max_kwh, self._battery_params.capacity_kwh
@@ -616,10 +629,10 @@ class Planner:
         if free_action == prev_action:
             return free
         self_consumption_family = (Action.IDLE, Action.CURTAIL, Action.HOLD, Action.NO_CHARGE)
-        if (
-            prev_action in (Action.NO_CHARGE, Action.HOLD)
-            and free_action in self_consumption_family
-        ):
+        fence_exit = prev_action in (Action.NO_CHARGE, Action.HOLD) and (
+            free_action in self_consumption_family
+        )
+        if fence_exit and prev_action == Action.NO_CHARGE:
             return free  # a limit-register restore, never worth holding out for
         try:
             pinned = solve(
@@ -633,6 +646,11 @@ class Planner:
         except SolverError:
             return free  # previous action no longer feasible; switch
         gain = pinned.objective - free.objective
+        if fence_exit:
+            moved_kwh = abs(float(free.charge_kw[0] - free.discharge_kw[0])) * float(
+                data.inputs.dt_hours[0]
+            )
+            threshold = FENCE_EXIT_THRESHOLD_PER_KWH * moved_kwh
         if gain < threshold:
             log.debug("hysteresis: keeping %s (switch would gain only $%.4f)", prev_action, gain)
             pinned.status = f"{pinned.status} (hysteresis)"

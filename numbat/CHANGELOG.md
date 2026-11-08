@@ -11,9 +11,10 @@
   because the house drew only ~150 W and one interval of that never
   cleared the threshold either. Two changes: forced-mode pins now hold
   the *previous power* (clamped to the cap), so hysteresis compares like
-  with like; and leaving `hold` for any self-consumption shape is free,
-  like leaving `no_charge` — both are binding fences whose exit is a
-  limit-register restore.
+  with like; and leaving `hold` for self-consumption is priced per kWh the
+  battery would move (3c/kWh) instead of per step — a 150 W house at a 50c
+  price escapes hold at once, while a one-cent wobble around the
+  break-even no longer flips the limit registers every cycle.
 
 ## 0.23.0
 

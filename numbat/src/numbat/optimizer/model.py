@@ -237,7 +237,8 @@ def solve(
     pin_power_kw: float | None = None,
 ) -> Solution:
     """pin_step0 constrains the first step's battery mode ('charge' /
-    'discharge' / 'idle') — used by the planner's hysteresis to price the
+    'discharge' / 'no_charge' / 'hold' / 'idle'; forced modes at least at
+    pin_power_kw, the previous power) — used by the planner's hysteresis to price the
     previous action before allowing a switch.
 
     Actions are grid-coupled (see classify_action): 'idle' pins step 0 to the

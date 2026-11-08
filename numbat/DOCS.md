@@ -322,6 +322,10 @@ buffer until learning is active. The goal state is always a learned forecast.
   rather than doing anything abrupt.
 - `action_switch_threshold_dollars` (0.02) — hysteresis: the current action
   only changes if switching improves the horizon objective by more than this.
+  Applies to forced charge/discharge (pinned at their previous power);
+  leaving `no_charge` for self-consumption is free, and leaving `hold` is
+  priced per kWh moved (3c/kWh) so a dear-price morning escapes it while a
+  wobble around the break-even doesn't flip it every cycle.
 - `forecast_haircut` (0 = off; "Sell price forecast haircut" in the UI) — the
   share of the above-median excess shaved off every *forecast* sell price.
   The live confirmed price is never cut, so the plan is biased toward

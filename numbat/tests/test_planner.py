@@ -389,11 +389,12 @@ def test_leaving_hold_for_the_house_is_never_thresholded():
 
 
 def test_hysteresis_pins_a_forced_mode_at_its_previous_power():
-    """The same morning's first domino: a 10 kW grid charge during a one-
-    interval -2.5c blip. At +19c the next cycle the pinned "charge" was a
-    token 10 W (nearly free to keep, under the threshold) and classified as
-    hold. Pinned at the previous 10 kW, keeping the charge costs real money
-    and the plan switches to serving the house."""
+    """The same morning's first domino: a full-power grid charge during a
+    one-interval -2.5c blip (10 kW live; this test battery's 5 kW). At +19c
+    the next cycle the pinned "charge" was a token 10 W (nearly free to
+    keep, under the threshold) and classified as hold. Pinned at the
+    previous power, keeping the charge costs real money and the plan
+    switches to serving the house."""
     settings = make_settings()
     planner = offline_planner(settings)
     planner.previous_plan = previous_plan_with(Action.CHARGE, power_kw=5.0)
@@ -404,6 +405,30 @@ def test_hysteresis_pins_a_forced_mode_at_its_previous_power():
     assert plan.intervals[0].action == Action.IDLE
     assert plan.intervals[0].power_kw <= 0.0
     assert "hysteresis" not in plan.solver_status
+
+
+def test_leaving_hold_is_damped_near_the_break_even_price():
+    """Entering hold from idle is a free envelope relabel, so a free exit
+    would flip the limit registers every cycle while the buy price wobbles
+    around the break-even (review 2026-11-09: 23 of 23 cycles). The exit is
+    priced per kWh moved: a wobble of a cent stays held."""
+    settings = make_settings(
+        optimizer={
+            "forecast_haircut": 0.0,
+            "terminal_soc_value": 0.245,
+            "import_penalty_per_kwh": 0.0,
+        }
+    )
+    planner = offline_planner(settings)
+    planner.previous_plan = previous_plan_with(Action.HOLD)
+    data = synthetic_cycle_data(settings)
+    # just above the hold-value break-even (~0.245/0.95 + 0.03 wear): the free
+    # solve wants the battery to serve the house, for a fraction of a cent
+    data.inputs.buy[0] = 0.30
+    data.prices.current_buy = 0.30
+    plan = planner.optimize(data, NOW)
+    assert plan.intervals[0].action == Action.HOLD
+    assert "hysteresis" in plan.solver_status
 
 
 def test_hysteresis_disabled_switches_freely():

@@ -328,8 +328,15 @@ A few quieter mechanisms keep the plan sensible:
   not change it (it prices imports, not the tie).
 - **Action switch threshold** (default $0.02): the current action only
   changes if the new plan beats sticking with the old action by more than
-  this, across the whole horizon — this stops the battery flip-flopping
-  between near-identical plans every 5 minutes.
+  this, across the whole horizon — this stops forced charge/discharge
+  flip-flopping between near-identical plans every 5 minutes. "Sticking
+  with" a forced mode means keeping it at its previous power, so a charge
+  that outlived its price blip is priced honestly. The fences are handled
+  differently: leaving `no_charge` for self-consumption is free (its ties
+  are resolved by the early-charge tie-break, not by money), and leaving
+  `hold` is priced per kWh the battery would move (3c/kWh) rather than per
+  step — a 150 W house at a 50c price escapes hold at once, a one-cent
+  wobble around the break-even does not flip it.
 - **Honest state of charge:** if the battery reports below SoC min
   (e.g. after a sensor recalibration), the plan starts from the real
   number rather than pretending the reserve energy exists.
