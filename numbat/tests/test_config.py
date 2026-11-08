@@ -186,6 +186,10 @@ def test_unknown_keys_ignored():
     config = json.loads(json.dumps(MINIMAL_CONFIG))
     config["entities"]["buy_forecast"] = "sensor.amber_general_forecast"
     Settings.model_validate(config)
+    # the removed hysteresis knob (<= 0.23) is dropped, not rejected
+    config["optimizer"] = {"action_switch_threshold_dollars": 0.02}
+    settings = Settings.model_validate(config)
+    assert "action_switch_threshold_dollars" not in settings.model_dump()["optimizer"]
 
 
 def env_settings(**kwargs) -> EnvSettings:
