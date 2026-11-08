@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.24.0
 
 - **Removed: action-switch hysteresis (`optimizer.action_switch_threshold_dollars`)
   (#60).** Each cycle now publishes what the plan wants now. The
