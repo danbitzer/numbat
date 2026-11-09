@@ -14,8 +14,14 @@ from numbat.adapters.sungrow import SungrowAdapter
 from numbat.adapters.weather import WeatherAdapter
 from numbat.config import Settings
 from numbat.models import Action, BatteryState, Plan, PlanInterval, PriceForecast, Series
-from numbat.optimizer.model import OptimizerInputs
-from numbat.planner import CycleData, InputsStale, Planner
+from numbat.optimizer.model import GridParams, OptimizerInputs
+from numbat.planner import (
+    CycleData,
+    InputsStale,
+    Planner,
+    battery_params,
+    discharge_request_kw,
+)
 from numbat.timegrid import TimeGrid
 
 ADELAIDE = ZoneInfo("Australia/Adelaide")
@@ -714,17 +720,57 @@ def test_a_fence_never_outlives_its_reason():
 ARBITRATE_GRID = {"import_limit_kw": 15.0, "export_limit_kw": 5.0, "inverter_limits_export": True}
 
 
-def _spike_with_forecast_solar(settings, soc0_kwh: float = 6.4, pv_kw: float = 3.0):
-    # a $2 feed-in now with solar forecast: export = pv + battery - load is
-    # pinned at the 5 kW limit, so the plan can only give the battery 2.5 kW
+def _spike_plan(
+    settings,
+    *,
+    soc0_kwh: float = 6.4,
+    pv_kw: float = 3.0,
+    sell0: float = 2.0,
+    buy_rest: float = 0.30,
+    sell_later: dict[int, float] | None = None,
+    first_minutes: int | None = None,
+):
+    """Optimize a high feed-in at step 0 with solar forecast, through the
+    planner's own floor and cap vectors (as gather would build them)."""
+    planner = offline_planner(settings)
     data = synthetic_cycle_data(settings)
-    data.inputs.pv[:] = pv_kw
+    if first_minutes is not None:
+        bounds = [NOW + timedelta(minutes=first_minutes)] + [
+            NOW + timedelta(minutes=first_minutes + 30 * i) for i in range(1, 12)
+        ]
+        grid = TimeGrid.build(NOW, bounds, timedelta(hours=6))
+        n = len(grid)
+        inputs = replace(
+            data.inputs,
+            dt_hours=grid.dt_hours,
+            buy=np.full(n, 0.30),
+            sell=np.full(n, 0.10),
+            pv=np.zeros(n),
+            load=np.full(n, 0.5),
+        )
+        data = replace(data, grid=grid, inputs=inputs)
+    inputs = data.inputs
+    inputs.pv[:] = pv_kw
+    inputs.buy[:] = buy_rest
     # a spike lifts both prices (the model keeps sell below buy)
-    data.inputs.buy[0] = 2.4
-    data.inputs.sell[0] = 2.0
-    data.prices.current_buy = 2.4
-    data.prices.current_sell = 2.0
-    return replace(data, inputs=replace(data.inputs, soc0_kwh=soc0_kwh))
+    inputs.buy[0] = max(buy_rest, sell0 + 0.4)
+    inputs.sell[0] = sell0
+    for i, price in (sell_later or {}).items():
+        inputs.sell[i] = price
+        inputs.buy[i] = max(buy_rest, price + 0.4)
+    prices = PriceForecast(
+        buy=Series(times=[NOW], values=[float(inputs.buy[0])]),
+        sell=Series(times=[NOW], values=[sell0]),
+        current_buy=float(inputs.buy[0]),
+        current_sell=sell0,
+    )
+    inputs = replace(
+        inputs,
+        soc0_kwh=soc0_kwh,
+        sell_floor_kwh=planner._sell_floor(inputs.sell),
+        max_discharge_kw_step=planner._discharge_caps(inputs.sell, planner._live_spike(prices)),
+    )
+    return planner.optimize(replace(data, inputs=inputs, prices=prices), NOW)
 
 
 def test_export_limited_discharge_requests_the_full_cap():
@@ -734,9 +780,7 @@ def test_export_limited_discharge_requests_the_full_cap():
     itself, the request is the step's full discharge cap and the inverter
     trims the battery against the solar that actually arrives — the plan's
     own numbers are untouched."""
-    settings = make_settings(grid=ARBITRATE_GRID)
-    planner = offline_planner(settings)
-    plan = planner.optimize(_spike_with_forecast_solar(settings), NOW)
+    plan = _spike_plan(make_settings(grid=ARBITRATE_GRID))
     s0 = plan.intervals[0]
     assert s0.action == Action.DISCHARGE
     assert s0.grid_export_kw == pytest.approx(5.0, abs=0.01)  # pinned at the limit
@@ -744,31 +788,88 @@ def test_export_limited_discharge_requests_the_full_cap():
     assert plan.setpoint_kw == pytest.approx(-5.0)  # the battery's full cap
 
 
-def test_discharge_request_is_opt_in_and_only_for_export_limited_steps():
+def test_discharge_request_is_opt_in():
     # off by default: an inverter that doesn't enforce the limit would over-export
     off = make_settings()
     assert off.grid.inverter_limits_export is False
-    assert offline_planner(off).optimize(_spike_with_forecast_solar(off), NOW).setpoint_kw is None
-    # on, but the plan's discharge isn't export-limited (no solar: 5 kW cap,
-    # 4.5 kW export): the plan's own power stands
-    on = make_settings(grid=ARBITRATE_GRID)
-    plan = offline_planner(on).optimize(_spike_with_forecast_solar(on, pv_kw=0.0), NOW)
+    plan = _spike_plan(off)
     assert plan.intervals[0].action == Action.DISCHARGE
     assert plan.setpoint_kw is None
-    # on, not discharging: nothing to request
-    calm = offline_planner(on).optimize(synthetic_cycle_data(on), NOW)
-    assert calm.setpoint_kw is None
+    # on, nothing to discharge: nothing to request
+    on = make_settings(grid=ARBITRATE_GRID)
+    assert offline_planner(on).optimize(synthetic_cycle_data(on), NOW).setpoint_kw is None
+
+
+def test_discharge_request_only_when_the_export_limit_cut_the_plan_short():
+    """A discharge the plan sized for any other reason (price, energy it is
+    keeping for the house) is left alone, however much the battery could
+    give: only an export pinned at the limit means the plan wanted more."""
+    settings = make_settings(grid=ARBITRATE_GRID)
+    inputs = synthetic_cycle_data(settings).inputs
+    battery = battery_params(settings)
+    grid = GridParams(import_limit_kw=15.0, export_limit_kw=5.0)
+    step0 = previous_plan_with(Action.DISCHARGE).intervals[0]
+    step0.power_kw = -2.5
+    step0.grid_export_kw = 2.0  # 2.5 kW out of the battery, export well under 5 kW
+    assert discharge_request_kw([step0], inputs, battery, grid) is None
+    step0.grid_export_kw = 5.0  # the same discharge, pinned at the export limit
+    assert discharge_request_kw([step0], inputs, battery, grid) == pytest.approx(5.0)
+    # and only for a forced discharge: self-consumption at the limit is solar
+    idle = previous_plan_with(Action.IDLE).intervals[0]
+    idle.power_kw = -2.5
+    idle.grid_export_kw = 5.0
+    assert discharge_request_kw([idle], inputs, battery, grid) is None
 
 
 def test_discharge_request_never_sells_through_the_floor():
     # 3.0 kWh with a 1.28 kWh export reserve: one 30-min step can give
     # (3.0 - 1.28) * 0.95 / 0.5 h = 3.27 kW, less than the 5 kW cap
-    settings = make_settings(grid=ARBITRATE_GRID)
-    plan = offline_planner(settings).optimize(
-        _spike_with_forecast_solar(settings, soc0_kwh=3.0), NOW
-    )
+    plan = _spike_plan(make_settings(grid=ARBITRATE_GRID), soc0_kwh=3.0)
     assert plan.intervals[0].action == Action.DISCHARGE
     assert plan.setpoint_kw == pytest.approx(-(3.0 - 1.28) * 0.95 / 0.5, abs=0.02)
+    # an unreleased spike reserve (50 % = 6.4 kWh, 80c is below the $1
+    # release) is the floor: (8.0 - 6.4) * 0.95 / 0.5 = 3.04 kW
+    held = make_settings(grid=ARBITRATE_GRID, spike={"reserve_soc": 0.5})
+    assert _spike_plan(held, soc0_kwh=8.0, sell0=0.80).setpoint_kw == pytest.approx(-3.04, abs=0.02)
+    # released by a live spike: the floor drops to the export reserve
+    assert _spike_plan(held, soc0_kwh=8.0, sell0=2.0).setpoint_kw == pytest.approx(-5.0)
+
+
+def test_discharge_request_uses_the_spike_cap():
+    # spike.discharge_kw lifts the step's cap above the everyday 5 kW
+    settings = make_settings(
+        grid={**ARBITRATE_GRID, "export_limit_kw": 10.0}, spike={"discharge_kw": 10.0}
+    )
+    plan = _spike_plan(settings, soc0_kwh=10.0, pv_kw=6.0)
+    assert plan.intervals[0].power_kw == pytest.approx(-4.5, abs=0.05)  # 10 - (6 - 0.5)
+    assert plan.setpoint_kw == pytest.approx(-10.0)
+
+
+def test_discharge_request_assumes_at_least_a_five_minute_step():
+    # after a price event step 0 can be a minute long: sizing the energy
+    # bound on that would allow the full cap from a nearly empty battery.
+    # (1.6 - 1.28) * 0.95 / (5/60 h) = 3.65 kW, not 5
+    plan = _spike_plan(make_settings(grid=ARBITRATE_GRID), soc0_kwh=1.6, first_minutes=1)
+    assert plan.intervals[0].action == Action.DISCHARGE
+    assert plan.setpoint_kw == pytest.approx(-(1.6 - 1.28) * 0.95 / (5 / 60), abs=0.03)
+
+
+def test_discharge_request_waits_while_a_better_sale_is_planned():
+    """$1 now, $3 in half an hour, energy short: the plan sells a little now
+    and keeps the rest for the $3 interval, both export-limited under
+    forecast solar. The full cap now would spend the $3 energy at $1 (a
+    rolling simulation lost 19 % that way), so the request waits."""
+    plan = _spike_plan(
+        make_settings(grid=ARBITRATE_GRID), soc0_kwh=5.0, sell0=1.0, sell_later={1: 3.0}
+    )
+    assert plan.intervals[0].action == Action.DISCHARGE
+    assert plan.intervals[1].action == Action.DISCHARGE
+    assert plan.setpoint_kw is None
+    # the same prices the other way round: now IS the best sale
+    best_now = _spike_plan(
+        make_settings(grid=ARBITRATE_GRID), soc0_kwh=5.0, sell0=3.0, sell_later={1: 1.0}
+    )
+    assert best_now.setpoint_kw == pytest.approx(-5.0)
 
 
 def test_pv_off_is_opt_in():

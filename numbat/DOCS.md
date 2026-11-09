@@ -198,9 +198,13 @@ Limits of your **grid connection**, distinct from the battery's power limits:
   inverter simply keeps serving the house from solar first, as every hybrid
   does.
 
-- `inverter_limits_export` (default **off**) — turn on when the inverter's
-  own export limit is set to `export_limit_kw` (the `sungrow` blueprint
-  writes it every run). The plan sizes a forced discharge as "export limit
+- `inverter_limits_export` (default **off**) — turn on only when the
+  inverter's **own** export limit equals `export_limit_kw`. Numbat never
+  sends this setting to the inverter: with the `sungrow` blueprint, set its
+  *Normal export limit (W)* input to `export_limit_kw` × 1000 (the
+  blueprint writes that input every run); with the generic blueprint, the
+  inverter's export limit must itself hold your DNSP cap. If the two
+  differ, a cloudy spike can export past the cap. The plan sizes a forced discharge as "export limit
   minus solar" — and that solar is a *forecast*. With this on, a discharge
   the export limit cut short is requested at the step's full discharge cap
   (the spike cap during a spike) and the inverter trims the battery to the
@@ -209,10 +213,14 @@ Limits of your **grid connection**, distinct from the battery's power limits:
   never exceeds what the battery can give above its export/spike reserve,
   the plan's own numbers and charts are unchanged, and the dashboard shows
   both ("plan 6.7 kW · inverter trims to the export limit"). Leave it off
-  if nothing but Numbat's setpoint keeps you under your export limit. One
-  trade to know: taking more now is greedy — if stored energy is short and
-  a later interval pays more, the plan would have saved it; each 5-minute
-  re-solve corrects from the real state of charge.
+  if nothing but Numbat's setpoint keeps you under your export limit.
+  Things to know: the request is withheld while the plan sells stored
+  energy at a *higher* price later (that energy is requested at full cap
+  when its interval arrives); it does nothing when forecast solar alone
+  fills the export limit (the plan then isn't discharging, so there is
+  nothing to raise); `sensor.numbat_soc_target`, the "More info" numbers
+  and the flow sub-label stay on the plan's figures; and Test mode shows
+  the plan, not the request.
 
 `battery.max_charge_kw` / `max_discharge_kw` limit the *battery* (cell wear,
 inverter DC side); the grid limits cap the *net AC flow at the meter*. The

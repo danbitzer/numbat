@@ -77,19 +77,10 @@ async def test_published_power_is_the_request_when_it_differs_from_the_plan():
     """With grid.inverter_limits_export an export-limited discharge asks for
     the full cap: the action sensor's power attributes carry the request,
     the only place an actuator reads it."""
-    from datetime import UTC, datetime
 
-    from test_planner import (
-        ARBITRATE_GRID,
-        _spike_with_forecast_solar,
-        make_settings,
-        offline_planner,
-    )
+    from test_planner import ARBITRATE_GRID, _spike_plan, make_settings
 
-    settings = make_settings(grid=ARBITRATE_GRID)
-    plan = offline_planner(settings).optimize(
-        _spike_with_forecast_solar(settings), datetime(2026, 7, 15, 11, 36, 30, tzinfo=UTC)
-    )
+    plan = _spike_plan(make_settings(grid=ARBITRATE_GRID))
     assert plan.setpoint_kw == -5.0
     fake = FakeHa()
     async with fake_ha_client(fake) as client:

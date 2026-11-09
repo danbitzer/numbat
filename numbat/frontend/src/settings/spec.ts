@@ -326,8 +326,10 @@ export const SECTIONS: SectionSpec[] = [
         kind: "boolean",
         default: false,
         help:
-          "Turn on if the inverter's own export limit is set to the Export limit above " +
-          "(the sungrow blueprint writes it every run). A forced discharge that the plan " +
+          "Turn on only if the inverter's OWN export limit equals the Export limit above — " +
+          "with the sungrow blueprint, set its \"Normal export limit (W)\" input to the " +
+          "same number (the blueprint writes that input, not this setting); if they " +
+          "differ you can export past your DNSP cap. A forced discharge that the plan " +
           "sized around FORECAST solar is then requested at the full discharge cap, and " +
           "the inverter trims the battery to the limit against the solar that actually " +
           "turns up — so a cloud during a price spike doesn't leave export headroom " +

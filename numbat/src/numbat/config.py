@@ -178,15 +178,17 @@ class Grid(BaseModel):
     # it off, negative-buy intervals still plan and publish hold/charge; the
     # inverter just keeps serving the house from solar first.
     pv_off_enabled: bool = False
-    # The inverter itself holds grid export at export_limit_kw (its own
-    # export-limit setting, kept equal to this one — the sungrow blueprint
-    # writes it every run). When on, a forced discharge that the plan had to
-    # size around FORECAST solar is requested at the step's full discharge
-    # cap instead, and the inverter trims the battery to the limit in real
-    # time, solar first. 2026-11-09: a $3.69 spike under cloud — the plan
-    # left room for 9 kW of forecast solar, 3 kW turned up, and ~6 kW of
-    # export headroom went unused for half an hour. Off by default: with an
-    # inverter that does NOT enforce the limit this would over-export.
+    # The inverter itself holds grid export at export_limit_kw: its OWN
+    # export-limit setting must equal this one (the sungrow blueprint writes
+    # its "Normal export limit (W)" input every run — set that to
+    # export_limit_kw x 1000; Numbat's setting is never sent). When on, a
+    # forced discharge that the plan had to size around FORECAST solar is
+    # requested at the step's full discharge cap instead, and the inverter
+    # trims the battery to the limit in real time, solar first. 2026-11-09:
+    # a $3.69 spike under cloud — the plan left room for 9 kW of forecast
+    # solar, 3 kW turned up, and ~6 kW of export headroom went unused for
+    # half an hour. Off by default: with an inverter that does NOT enforce
+    # the limit this would over-export.
     inverter_limits_export: bool = False
 
 
