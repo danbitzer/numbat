@@ -229,7 +229,7 @@ MIN_REQUEST_STEP_HOURS = 5 / 60
 
 
 def discharge_request_kw(
-    intervals: list[PlanInterval],
+    step0: PlanInterval,
     inputs: OptimizerInputs,
     battery: BatteryParams,
     grid: GridParams,
@@ -252,12 +252,14 @@ def discharge_request_kw(
 
     It is deliberately NOT held back for a better price forecast later.
     Events worth selling everything into are short, and a predicted higher
-    peak is only a prediction: a sale at a good confirmed price now beats
-    waiting for it. The cost is real but narrow — when the battery is
-    nearly down to its reserve, the higher price does arrive, and solar
-    under-delivers, the full cap now spends energy the plan had set aside
-    (up to ~19 % of that event's revenue in a rolling simulation)."""
-    step0 = intervals[0]
+    peak is only a prediction: a sale at a good current price beats waiting
+    for it (on a rising spike with energy to spare, waiting cost ~$1.20 of
+    a three-interval event in simulation). The cost: when the energy above
+    the reserve is less than a later, dearer window could sell, that price
+    does arrive, and solar under-delivers, the full cap now spends energy
+    the plan had set aside — in a rolling simulation up to ~19 % of the
+    event's revenue against the setting off, and up to ~28 % against
+    holding back for the dearer window."""
     if step0.action != Action.DISCHARGE:
         return None
     if step0.grid_export_kw < grid.export_limit_kw - 0.05:
@@ -562,7 +564,7 @@ class Planner:
         )
         if self._settings.grid.inverter_limits_export:
             request = discharge_request_kw(
-                plan.intervals, data.inputs, self._battery_params, self._grid_params
+                plan.intervals[0], data.inputs, self._battery_params, self._grid_params
             )
             plan.setpoint_kw = None if request is None else -request
         annotate_flows(plan, pv_off_enabled=pv_off_enabled)

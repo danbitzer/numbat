@@ -216,9 +216,11 @@ Limits of your **grid connection**, distinct from the battery's power limits:
   if nothing but Numbat's setpoint keeps you under your export limit.
   Things to know: the request does not wait for a better price forecast
   later — a spike is short and a predicted peak is only a prediction, so
-  a good confirmed price now wins (the narrow cost: with the battery
-  nearly at its reserve, a higher price that does arrive finds less to
-  sell); it does nothing when forecast solar alone
+  a good current price wins (the cost: when the energy above the reserve
+  is less than a later, dearer window could sell, and that price does
+  arrive while solar under-delivers, it finds less to sell — up to ~19 %
+  of such an event's revenue against the setting off in simulation, ~28 %
+  against holding back for it); it does nothing when forecast solar alone
   fills the export limit (the plan then isn't discharging, so there is
   nothing to raise); `sensor.numbat_soc_target`, the "More info" numbers
   and the flow sub-label stay on the plan's figures; and Test mode shows
