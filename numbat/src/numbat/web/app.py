@@ -149,6 +149,9 @@ def create_app(
                 "solver_status": plan.solver_status,
                 "solve_ms": plan.solve_ms,
                 "objective_cost": plan.objective_cost,
+                # the battery power actually requested at step 0 when it
+                # differs from the plan's (see Plan.setpoint_kw)
+                "setpoint_kw": plan.setpoint_kw,
                 "meta": state.meta,
                 "intervals": [
                     {

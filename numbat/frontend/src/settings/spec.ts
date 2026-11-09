@@ -320,6 +320,21 @@ export const SECTIONS: SectionSpec[] = [
           "generation until the cap is lifted. Off: negative-price intervals still " +
           "hold or grid-charge; solar just keeps serving the house first.",
       },
+      {
+        path: "grid.inverter_limits_export",
+        label: "Inverter enforces the export limit",
+        kind: "boolean",
+        default: false,
+        help:
+          "Turn on only if the inverter's OWN export limit equals the Export limit above — " +
+          "with the sungrow blueprint, set its \"Normal export limit (W)\" input to the " +
+          "same number (the blueprint writes that input, not this setting); if they " +
+          "differ you can export past your DNSP cap. A forced discharge that the plan " +
+          "sized around FORECAST solar is then requested at the full discharge cap, and " +
+          "the inverter trims the battery to the limit against the solar that actually " +
+          "turns up — so a cloud during a price spike doesn't leave export headroom " +
+          "unused. Leave off if nothing but Numbat's setpoint keeps you under the limit.",
+      },
     ],
   },
   {

@@ -46,6 +46,7 @@ def test_health_and_plan_endpoints():
     assert body["intervals"][0]["action"] == "discharge"
     assert body["intervals"][0]["power_kw"] == -3.2
     # the flow vocabulary rides every interval (empty when never annotated)
+    assert body["setpoint_kw"] is None  # the plan's own power is requested
     for key in ("flow", "export_capped", "pv_off", "pv_spill_kw", "pv_used_kw"):
         assert key in body["intervals"][0]
 

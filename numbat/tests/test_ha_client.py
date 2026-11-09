@@ -73,6 +73,24 @@ async def test_power_rides_the_action_sensor_only():
     assert {"power_kw", "power_w"} <= action["attributes"].keys()
 
 
+async def test_published_power_is_the_request_when_it_differs_from_the_plan():
+    """With grid.inverter_limits_export an export-limited discharge asks for
+    the full cap: the action sensor's power attributes carry the request,
+    the only place an actuator reads it."""
+
+    from test_planner import ARBITRATE_GRID, _spike_plan, make_settings
+
+    plan = _spike_plan(make_settings(grid=ARBITRATE_GRID))
+    assert plan.setpoint_kw == -5.0
+    fake = FakeHa()
+    async with fake_ha_client(fake) as client:
+        await Publisher(client).publish_plan(plan, capacity_kwh=12.8)
+    action = next(b for e, b in fake.posted if e == "sensor.numbat_action")
+    assert action["state"] == "discharge"
+    assert action["attributes"]["power_kw"] == -5.0
+    assert action["attributes"]["power_w"] == 5000
+
+
 async def test_retire_legacy_sensors_never_blocks_startup():
     # HA answering 500 (or not at all) is logged, not raised
     fake = FakeHa()
