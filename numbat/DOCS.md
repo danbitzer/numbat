@@ -214,9 +214,11 @@ Limits of your **grid connection**, distinct from the battery's power limits:
   the plan's own numbers and charts are unchanged, and the dashboard shows
   both ("plan 6.7 kW · inverter trims to the export limit"). Leave it off
   if nothing but Numbat's setpoint keeps you under your export limit.
-  Things to know: the request is withheld while the plan sells stored
-  energy at a *higher* price later (that energy is requested at full cap
-  when its interval arrives); it does nothing when forecast solar alone
+  Things to know: the request does not wait for a better price forecast
+  later — a spike is short and a predicted peak is only a prediction, so
+  a good confirmed price now wins (the narrow cost: with the battery
+  nearly at its reserve, a higher price that does arrive finds less to
+  sell); it does nothing when forecast solar alone
   fills the export limit (the plan then isn't discharging, so there is
   nothing to raise); `sensor.numbat_soc_target`, the "More info" numbers
   and the flow sub-label stay on the plan's figures; and Test mode shows

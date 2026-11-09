@@ -246,28 +246,21 @@ def discharge_request_kw(
     first and keeps the solar (seen live 2026-11-09). A discharge the plan
     sized for any other reason (energy, price, reserve) is left alone.
 
-    Two bounds keep the request honest:
-    - energy: never more than the battery can give above the step's sales
-      floor, so a cloudy step can't sell through the export reserve or an
-      unreleased spike reserve;
-    - price order: not while the plan sells stored energy at a HIGHER price
-      later. Taking the full cap now would spend energy the plan set aside
-      for that interval, and the re-solve can't win it back — the later
-      sale is sized around the same optimistic solar forecast (a rolling
-      simulation lost 19 % that way; with this guard it never did worse
-      than the plan, and the held-back energy is requested at full cap
-      when its interval arrives)."""
+    The request is bounded by energy only: never more than the battery can
+    give above the step's sales floor, so a cloudy step can't sell through
+    the export reserve or an unreleased spike reserve.
+
+    It is deliberately NOT held back for a better price forecast later.
+    Events worth selling everything into are short, and a predicted higher
+    peak is only a prediction: a sale at a good confirmed price now beats
+    waiting for it. The cost is real but narrow — when the battery is
+    nearly down to its reserve, the higher price does arrive, and solar
+    under-delivers, the full cap now spends energy the plan had set aside
+    (up to ~19 % of that event's revenue in a rolling simulation)."""
     step0 = intervals[0]
     if step0.action != Action.DISCHARGE:
         return None
     if step0.grid_export_kw < grid.export_limit_kw - 0.05:
-        return None
-    later_sales = [
-        float(inputs.sell[i])
-        for i, iv in enumerate(intervals)
-        if i > 0 and iv.action == Action.DISCHARGE
-    ]
-    if later_sales and max(later_sales) > float(inputs.sell[0]) + 1e-6:
         return None
     planned = -step0.power_kw
     cap = float(
