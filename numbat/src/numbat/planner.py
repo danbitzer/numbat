@@ -229,7 +229,7 @@ MIN_REQUEST_STEP_HOURS = 5 / 60
 
 
 def discharge_request_kw(
-    intervals: list[PlanInterval],
+    step0: PlanInterval,
     inputs: OptimizerInputs,
     battery: BatteryParams,
     grid: GridParams,
@@ -246,28 +246,23 @@ def discharge_request_kw(
     first and keeps the solar (seen live 2026-11-09). A discharge the plan
     sized for any other reason (energy, price, reserve) is left alone.
 
-    Two bounds keep the request honest:
-    - energy: never more than the battery can give above the step's sales
-      floor, so a cloudy step can't sell through the export reserve or an
-      unreleased spike reserve;
-    - price order: not while the plan sells stored energy at a HIGHER price
-      later. Taking the full cap now would spend energy the plan set aside
-      for that interval, and the re-solve can't win it back — the later
-      sale is sized around the same optimistic solar forecast (a rolling
-      simulation lost 19 % that way; with this guard it never did worse
-      than the plan, and the held-back energy is requested at full cap
-      when its interval arrives)."""
-    step0 = intervals[0]
+    The request is bounded by energy only: never more than the battery can
+    give above the step's sales floor, so a cloudy step can't sell through
+    the export reserve or an unreleased spike reserve.
+
+    It is deliberately NOT held back for a better price forecast later.
+    Events worth selling everything into are short, and a predicted higher
+    peak is only a prediction: a sale at a good current price beats waiting
+    for it (on a rising spike with energy to spare, waiting cost ~$1.20 of
+    a three-interval event in simulation). The cost: when the energy above
+    the reserve is less than a later, dearer window could sell, that price
+    does arrive, and solar under-delivers, the full cap now spends energy
+    the plan had set aside — in a rolling simulation up to ~19 % of the
+    event's revenue against the setting off, and up to ~28 % against
+    holding back for the dearer window."""
     if step0.action != Action.DISCHARGE:
         return None
     if step0.grid_export_kw < grid.export_limit_kw - 0.05:
-        return None
-    later_sales = [
-        float(inputs.sell[i])
-        for i, iv in enumerate(intervals)
-        if i > 0 and iv.action == Action.DISCHARGE
-    ]
-    if later_sales and max(later_sales) > float(inputs.sell[0]) + 1e-6:
         return None
     planned = -step0.power_kw
     cap = float(
@@ -569,7 +564,7 @@ class Planner:
         )
         if self._settings.grid.inverter_limits_export:
             request = discharge_request_kw(
-                plan.intervals, data.inputs, self._battery_params, self._grid_params
+                plan.intervals[0], data.inputs, self._battery_params, self._grid_params
             )
             plan.setpoint_kw = None if request is None else -request
         annotate_flows(plan, pv_off_enabled=pv_off_enabled)

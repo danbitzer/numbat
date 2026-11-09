@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **The full-cap discharge request (`grid.inverter_limits_export`) no
+  longer waits for a better price forecast (#62).** 0.25.0 withheld the request
+  whenever the plan also sold stored energy at a higher feed-in price
+  later — which held a rising spike at the forecast-sized setpoint, full
+  battery or not. Events worth selling everything into are short and a
+  predicted peak is only a prediction, so the request is now raised
+  whenever the action is `discharge` and the plan's export is at the
+  export limit, bounded only by the energy above the export/spike
+  reserve. In simulation that is worth ~$1.20 on a three-interval rising
+  spike with energy to spare; the cost is the opposite case — energy
+  short, the dearer window does arrive, solar under-delivers — where
+  holding back would have sold up to ~28 % more.
+
 ## 0.25.0
 
 - **New setting: `grid.inverter_limits_export` ("Inverter enforces the

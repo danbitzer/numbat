@@ -811,14 +811,14 @@ def test_discharge_request_only_when_the_export_limit_cut_the_plan_short():
     step0 = previous_plan_with(Action.DISCHARGE).intervals[0]
     step0.power_kw = -2.5
     step0.grid_export_kw = 2.0  # 2.5 kW out of the battery, export well under 5 kW
-    assert discharge_request_kw([step0], inputs, battery, grid) is None
+    assert discharge_request_kw(step0, inputs, battery, grid) is None
     step0.grid_export_kw = 5.0  # the same discharge, pinned at the export limit
-    assert discharge_request_kw([step0], inputs, battery, grid) == pytest.approx(5.0)
+    assert discharge_request_kw(step0, inputs, battery, grid) == pytest.approx(5.0)
     # and only for a forced discharge: self-consumption at the limit is solar
     idle = previous_plan_with(Action.IDLE).intervals[0]
     idle.power_kw = -2.5
     idle.grid_export_kw = 5.0
-    assert discharge_request_kw([idle], inputs, battery, grid) is None
+    assert discharge_request_kw(idle, inputs, battery, grid) is None
 
 
 def test_discharge_request_never_sells_through_the_floor():
@@ -854,22 +854,35 @@ def test_discharge_request_assumes_at_least_a_five_minute_step():
     assert plan.setpoint_kw == pytest.approx(-(1.6 - 1.28) * 0.95 / (5 / 60), abs=0.03)
 
 
-def test_discharge_request_waits_while_a_better_sale_is_planned():
-    """$1 now, $3 in half an hour, energy short: the plan sells a little now
-    and keeps the rest for the $3 interval, both export-limited under
-    forecast solar. The full cap now would spend the $3 energy at $1 (a
-    rolling simulation lost 19 % that way), so the request waits."""
+def test_discharge_request_never_asks_for_less_than_the_plan():
+    # a one-minute step 0 with little above the floor: the energy bound is
+    # sized on a 5-minute step — (1.5 - 1.28) * 0.95 / (5/60 h) = 2.5 kW —
+    # and can come out BELOW what the plan itself discharges in that minute;
+    # the request must then stand aside, not shrink the plan's power
+    settings = make_settings(grid=ARBITRATE_GRID)
+    inputs = replace(synthetic_cycle_data(settings).inputs)
+    inputs.dt_hours[0] = 1 / 60
+    battery = battery_params(settings)
+    grid = GridParams(import_limit_kw=15.0, export_limit_kw=5.0)
+    step0 = previous_plan_with(Action.DISCHARGE).intervals[0]
+    step0.soc_start = 1.5  # 0.22 kWh above the 1.28 kWh export reserve
+    step0.power_kw = -4.0  # the plan already discharges more than that
+    step0.grid_export_kw = 5.0
+    assert discharge_request_kw(step0, inputs, battery, grid) is None
+
+
+def test_discharge_request_does_not_wait_for_a_predicted_better_price():
+    """$1 now, $3 forecast in half an hour: the plan keeps some energy for
+    the $3 interval, but the request still asks for the full cap now. Events
+    worth selling everything into are short and a predicted peak is only a
+    prediction — a good current price in hand wins (Dan's call,
+    2026-11-09; the trade is documented on discharge_request_kw)."""
     plan = _spike_plan(
         make_settings(grid=ARBITRATE_GRID), soc0_kwh=5.0, sell0=1.0, sell_later={1: 3.0}
     )
     assert plan.intervals[0].action == Action.DISCHARGE
-    assert plan.intervals[1].action == Action.DISCHARGE
-    assert plan.setpoint_kw is None
-    # the same prices the other way round: now IS the best sale
-    best_now = _spike_plan(
-        make_settings(grid=ARBITRATE_GRID), soc0_kwh=5.0, sell0=3.0, sell_later={1: 1.0}
-    )
-    assert best_now.setpoint_kw == pytest.approx(-5.0)
+    assert plan.intervals[1].action == Action.DISCHARGE  # a dearer sale is planned
+    assert plan.setpoint_kw == pytest.approx(-5.0)
 
 
 def test_pv_off_is_opt_in():
