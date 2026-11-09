@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.25.0
 
 - **New setting: `grid.inverter_limits_export` ("Inverter enforces the
   export limit"), default off — a forecast cloud no longer wastes a
