@@ -146,6 +146,13 @@ class Plan:
     # action sensor's `pv_off` attribute, atomic with the action; actuators
     # that can stop PV (Sungrow SH-T "PV power limitation") key off it.
     pv_off: bool = False
+    # Battery power to REQUEST at step 0 (signed, +charge / −discharge) when
+    # it differs from the plan's own step-0 power: with
+    # grid.inverter_limits_export, an export-limited discharge asks for the
+    # step's full cap and the inverter trims it to the limit against the
+    # solar that actually turns up. None = request the plan's power. The
+    # plan's intervals keep the solver's numbers either way.
+    setpoint_kw: float | None = None
     # Plain-language explanation of step 0's action (see numbat.explain); surfaced
     # in the dashboard's "Why this action?" panel, not published as a sensor.
     explanation: dict | None = None

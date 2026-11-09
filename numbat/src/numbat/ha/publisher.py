@@ -86,6 +86,9 @@ class Publisher:
         vice versa.
         """
         step0 = plan.intervals[0]
+        # what to ask the inverter for: the plan's step-0 power, or the
+        # request that replaces it (Plan.setpoint_kw)
+        setpoint_kw = step0.power_kw if plan.setpoint_kw is None else plan.setpoint_kw
         await self._client.set_state(
             "sensor.numbat_action",
             step0.action.value,
@@ -114,8 +117,8 @@ class Publisher:
                 # the battery power rides the action in ONE atomic POST — the
                 # only place actuators read it, so action and magnitude can
                 # never disagree
-                "power_kw": round(step0.power_kw, 3),
-                "power_w": round(abs(step0.power_kw) * 1000),
+                "power_kw": round(setpoint_kw, 3),
+                "power_w": round(abs(setpoint_kw) * 1000),
             },
         )
         await self._client.set_state(

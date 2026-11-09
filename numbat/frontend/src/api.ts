@@ -153,6 +153,9 @@ export const PlanMetaSchema = z.looseObject({
 export type PlanMeta = z.infer<typeof PlanMetaSchema>;
 
 export const PlanResponseSchema = z.object({
+  // battery power requested at step 0 when it differs from the plan's own
+  // (an export-limited discharge asks for the full cap; the inverter trims)
+  setpoint_kw: z.number().nullish(),
   computed_at: z.string(),
   solver_status: z.string(),
   solve_ms: z.number(),

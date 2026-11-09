@@ -103,8 +103,12 @@ export function Hero({
   const step0 = rows[0];
   if (!step0) return null;
   const forced = step0.action === "charge" || step0.action === "discharge";
+  // the request can exceed the plan's own power: an export-limited discharge
+  // asks for the full cap and the inverter trims it to the export limit
+  const requested = plan?.setpoint_kw ?? step0.battery;
+  const overridden = plan?.setpoint_kw != null && Math.abs(requested - step0.battery) > 0.05;
   const setpoint = forced
-    ? `${step0.battery > 0 ? "+" : "−"}${Math.abs(step0.battery).toFixed(1)} kW`
+    ? `${requested > 0 ? "+" : "−"}${Math.abs(requested).toFixed(1)} kW`
     : "—";
   // What the energy is doing, in household words (flowText.ts), from the
   // backend's action-first flow key + the step-0 numbers; the contract
@@ -144,6 +148,11 @@ export function Hero({
           <div className="mt-1.5 font-mono text-[28px] leading-tight font-semibold text-foreground">
             {setpoint}
           </div>
+          {forced && overridden && (
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              plan {Math.abs(step0.battery).toFixed(1)} kW · inverter trims to the export limit
+            </div>
+          )}
         </div>
       </div>
       {explanation && <MoreInfo explanation={explanation} plan={plan} step0={step0} />}
@@ -220,7 +229,8 @@ function MoreInfo({
   const { values: v, context: c, levers: l, stale } = explanation;
   // The contract, verbatim: what sensor.numbat_action published this
   // interval, so a trace hunt can reconcile tile ↔ state ↔ automation.
-  const signed = `${v.battery_kw >= 0 ? "+" : "−"}${Math.abs(v.battery_kw).toFixed(2)}`;
+  const published = plan?.setpoint_kw ?? v.battery_kw;
+  const signed = `${published >= 0 ? "+" : "−"}${Math.abs(published).toFixed(2)}`;
   const contract =
     `action: ${step0.action} · power_kw: ${signed} · curtail: ${String(!!l?.curtail)} · ` +
     `pv_off: ${String(!!l?.pv_off)} · live_spike: ${String(!!l?.live_spike)}` +

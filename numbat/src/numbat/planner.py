@@ -221,6 +221,44 @@ class CycleData:
 # on while the buy price is negative at all (asymmetric, like a thermostat).
 
 
+def discharge_request_kw(
+    step0: PlanInterval,
+    inputs: OptimizerInputs,
+    battery: BatteryParams,
+    grid: GridParams,
+) -> float | None:
+    """The battery discharge to request when the inverter enforces the export
+    limit itself (grid.inverter_limits_export), or None to request the
+    plan's own power.
+
+    Only when step 0 is a forced discharge the EXPORT LIMIT cut short: the
+    plan wanted more out of the battery and was held back by solar it
+    expects — a forecast. Then ask for everything the step allows (the
+    discharge cap, spike cap included) and let the inverter trim the
+    battery against the solar that actually arrives; it sheds battery
+    first and keeps the solar (seen live 2026-11-09). Bounded by the energy
+    above the step's sales floor, so a cloudy step can't sell through the
+    export reserve or an unreleased spike reserve. A discharge the plan
+    sized for any other reason (energy, price, reserve) is left alone."""
+    if step0.action != Action.DISCHARGE:
+        return None
+    if step0.grid_export_kw < grid.export_limit_kw - 0.05:
+        return None
+    planned = -step0.power_kw
+    cap = float(
+        inputs.max_discharge_kw_step[0]
+        if inputs.max_discharge_kw_step is not None
+        else battery.max_discharge_kw
+    )
+    floor = max(battery.export_reserve_kwh, min(battery.soc_min_kwh, step0.soc_start))
+    if inputs.sell_floor_kwh is not None:
+        floor = max(floor, float(inputs.sell_floor_kwh[0]))
+    dt0 = float(inputs.dt_hours[0])
+    by_soc = max(0.0, step0.soc_start - floor) * battery.efficiency_discharge / dt0
+    request = min(cap, by_soc)
+    return request if request > planned + 0.05 else None
+
+
 def pv_off_wanted(
     current_buy: float, step0: PlanInterval, *, previously: bool, estimate: bool = False
 ) -> bool:
@@ -504,6 +542,11 @@ class Planner:
             previously=self.previous_plan.pv_off if self.previous_plan else False,
             estimate=data.prices.current_estimate,
         )
+        if self._settings.grid.inverter_limits_export:
+            request = discharge_request_kw(
+                plan.intervals[0], data.inputs, self._battery_params, self._grid_params
+            )
+            plan.setpoint_kw = None if request is None else -request
         annotate_flows(plan, pv_off_enabled=pv_off_enabled)
         plan.explanation = build_explanation(
             plan,

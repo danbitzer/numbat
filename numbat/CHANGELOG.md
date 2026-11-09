@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **New setting: `grid.inverter_limits_export` ("Inverter enforces the
+  export limit"), default off — a forecast cloud no longer wastes a
+  spike.** The plan sizes a forced discharge as export limit minus solar,
+  and that solar is a forecast: on 2026-11-09 a $3.69 feed-in spike arrived
+  under cloud, the plan left room for 9 kW of forecast solar, 3 kW turned
+  up, and ~6 kW of export headroom went unused for half an hour. With the
+  setting on (and the inverter's own export limit equal to
+  `grid.export_limit_kw` — the sungrow blueprint writes it every run), a
+  discharge the export limit cut short is requested at the step's full
+  discharge cap, and the inverter trims the battery to the limit in real
+  time, solar first. The request is bounded by the energy above the
+  export/spike reserve; the plan's numbers and charts are unchanged, and
+  the dashboard shows the request with the plan's figure beneath it.
+  `/api/plan` gains `setpoint_kw` (null when the plan's power is requested).
+
 ## 0.24.0
 
 - **Removed: action-switch hysteresis (`optimizer.action_switch_threshold_dollars`)

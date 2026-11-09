@@ -711,6 +711,66 @@ def test_a_fence_never_outlives_its_reason():
     assert plan.solver_status == "optimal"
 
 
+ARBITRATE_GRID = {"import_limit_kw": 15.0, "export_limit_kw": 5.0, "inverter_limits_export": True}
+
+
+def _spike_with_forecast_solar(settings, soc0_kwh: float = 6.4, pv_kw: float = 3.0):
+    # a $2 feed-in now with solar forecast: export = pv + battery - load is
+    # pinned at the 5 kW limit, so the plan can only give the battery 2.5 kW
+    data = synthetic_cycle_data(settings)
+    data.inputs.pv[:] = pv_kw
+    # a spike lifts both prices (the model keeps sell below buy)
+    data.inputs.buy[0] = 2.4
+    data.inputs.sell[0] = 2.0
+    data.prices.current_buy = 2.4
+    data.prices.current_sell = 2.0
+    return replace(data, inputs=replace(data.inputs, soc0_kwh=soc0_kwh))
+
+
+def test_export_limited_discharge_requests_the_full_cap():
+    """2026-11-09: a $3.69 spike under cloud. The plan sized the discharge
+    around 9 kW of FORECAST solar; 3 kW turned up and ~6 kW of export
+    headroom went unused. With the inverter enforcing the export limit
+    itself, the request is the step's full discharge cap and the inverter
+    trims the battery against the solar that actually arrives — the plan's
+    own numbers are untouched."""
+    settings = make_settings(grid=ARBITRATE_GRID)
+    planner = offline_planner(settings)
+    plan = planner.optimize(_spike_with_forecast_solar(settings), NOW)
+    s0 = plan.intervals[0]
+    assert s0.action == Action.DISCHARGE
+    assert s0.grid_export_kw == pytest.approx(5.0, abs=0.01)  # pinned at the limit
+    assert s0.power_kw == pytest.approx(-2.5, abs=0.05)  # 5 - (3 solar - 0.5 load)
+    assert plan.setpoint_kw == pytest.approx(-5.0)  # the battery's full cap
+
+
+def test_discharge_request_is_opt_in_and_only_for_export_limited_steps():
+    # off by default: an inverter that doesn't enforce the limit would over-export
+    off = make_settings()
+    assert off.grid.inverter_limits_export is False
+    assert offline_planner(off).optimize(_spike_with_forecast_solar(off), NOW).setpoint_kw is None
+    # on, but the plan's discharge isn't export-limited (no solar: 5 kW cap,
+    # 4.5 kW export): the plan's own power stands
+    on = make_settings(grid=ARBITRATE_GRID)
+    plan = offline_planner(on).optimize(_spike_with_forecast_solar(on, pv_kw=0.0), NOW)
+    assert plan.intervals[0].action == Action.DISCHARGE
+    assert plan.setpoint_kw is None
+    # on, not discharging: nothing to request
+    calm = offline_planner(on).optimize(synthetic_cycle_data(on), NOW)
+    assert calm.setpoint_kw is None
+
+
+def test_discharge_request_never_sells_through_the_floor():
+    # 3.0 kWh with a 1.28 kWh export reserve: one 30-min step can give
+    # (3.0 - 1.28) * 0.95 / 0.5 h = 3.27 kW, less than the 5 kW cap
+    settings = make_settings(grid=ARBITRATE_GRID)
+    plan = offline_planner(settings).optimize(
+        _spike_with_forecast_solar(settings, soc0_kwh=3.0), NOW
+    )
+    assert plan.intervals[0].action == Action.DISCHARGE
+    assert plan.setpoint_kw == pytest.approx(-(3.0 - 1.28) * 0.95 / 0.5, abs=0.02)
+
+
 def test_pv_off_is_opt_in():
     """grid.pv_off_enabled defaults off: the same negative-buy hold publishes
     no PV-off flag and marks no interval, while the plan is unchanged."""

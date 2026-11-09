@@ -198,6 +198,22 @@ Limits of your **grid connection**, distinct from the battery's power limits:
   inverter simply keeps serving the house from solar first, as every hybrid
   does.
 
+- `inverter_limits_export` (default **off**) — turn on when the inverter's
+  own export limit is set to `export_limit_kw` (the `sungrow` blueprint
+  writes it every run). The plan sizes a forced discharge as "export limit
+  minus solar" — and that solar is a *forecast*. With this on, a discharge
+  the export limit cut short is requested at the step's full discharge cap
+  (the spike cap during a spike) and the inverter trims the battery to the
+  limit against the solar that actually turns up, solar first — so a cloud
+  during a price spike doesn't leave export headroom unused. The request
+  never exceeds what the battery can give above its export/spike reserve,
+  the plan's own numbers and charts are unchanged, and the dashboard shows
+  both ("plan 6.7 kW · inverter trims to the export limit"). Leave it off
+  if nothing but Numbat's setpoint keeps you under your export limit. One
+  trade to know: taking more now is greedy — if stored energy is short and
+  a later interval pays more, the plan would have saved it; each 5-minute
+  re-solve corrects from the real state of charge.
+
 `battery.max_charge_kw` / `max_discharge_kw` limit the *battery* (cell wear,
 inverter DC side); the grid limits cap the *net AC flow at the meter*. The
 optimizer respects both simultaneously.
