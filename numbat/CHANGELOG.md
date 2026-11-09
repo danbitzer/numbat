@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.26.0
 
 - **The full-cap discharge request (`grid.inverter_limits_export`) no
   longer waits for a better price forecast (#62).** 0.25.0 withheld the request
