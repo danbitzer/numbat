@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Dashboard: a chart range picker for phones.** The 36-hour charts and
+  mode strip were unreadable on a phone, where the next few hours are
+  what matters. A picker above the charts (1 h · 6 h · 12 h · 24 h · All)
+  sets how much of the plan they show from now; narrow screens default to
+  the next 12 hours, wide screens to the whole horizon, and the choice is
+  remembered per browser. The time axis spaces its ticks to the window
+  (quarter-hours for an hour, hourly to 8 h, two-hourly to 14 h,
+  three-hourly to a day). Also: kW axes no longer repeat whole-number
+  ticks over a small range ("1 1 1 0 0").
+
 ## 0.26.0
 
 - **The full-cap discharge request (`grid.inverter_limits_export`) no

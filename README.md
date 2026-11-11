@@ -40,7 +40,10 @@ Numbat does one thing well: the battery.
 </picture>
 
 *The ingress dashboard (demo data), mid-way through selling into an evening
-price peak.*
+price peak. On a phone the charts default to the next 12 hours — a range
+picker (1 h · 6 h · 12 h · 24 h · All) sits above them:*
+
+<img alt="The dashboard on a phone, showing the next 12 hours" src="docs/screenshots/dashboard-phone.png" width="300">
 
 ## Inputs
 

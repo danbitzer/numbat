@@ -503,7 +503,11 @@ template:
 The add-on serves an ingress panel (sidebar → Energy Manager): current
 action/setpoint/SoC/cost tiles plus charts of prices, PV/load forecast, planned
 battery power with grid flows, and the SoC trajectory. Auto-refreshes every
-minute; fully offline (no CDN).
+minute; fully offline (no CDN). A range picker above the charts (1 h · 6 h ·
+12 h · 24 h · All) sets how much of the plan they show, counted from now;
+phones default to the next 12 hours, wide screens to the whole horizon, and
+the choice is remembered per browser. The tiles above the picker always
+describe the whole plan.
 
 The page has two top-level modes, switched in the header: **Live** (the real
 plan, and settings that apply immediately when saved) and **Test** (a
