@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.27.0
 
-- **Dashboard: a chart range picker for phones.** The 36-hour charts and
+- **Dashboard: a chart range picker for phones (#63).** The 36-hour charts and
   mode strip were unreadable on a phone, where the next few hours are
   what matters. A picker above the charts (1 h · 6 h · 12 h · 24 h · All)
   sets how much of the plan they show from now; narrow screens default to
