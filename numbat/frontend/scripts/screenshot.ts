@@ -203,10 +203,13 @@ const server = Bun.serve({
 // Headless --screenshot captures exactly the window (the dashboard page
 // doesn't scroll the body), and content height is ~1625px with this mock
 // plan — 1650 frames the full dashboard with its natural bottom padding.
-// If the dashboard gains a card, bump the height.
-const SIZE = "1100,1650";
+// If the dashboard gains a card, bump the height. The phone capture is
+// narrow enough to take the mobile default (the next 12 h) and tall enough
+// for the stacked cards.
+const SIZE = "1100,1700";
+const PHONE_SIZE = "420,2260";
 
-async function capture(theme: string, out: string) {
+async function capture(theme: string, out: string, size = SIZE) {
   const profile = mkdtempSync(join(tmpdir(), "numbat-shot-"));
   // Capture into the fresh profile dir first: `out` is committed, so its mere
   // existence proves nothing — a failed run must never pass off the old PNG.
@@ -214,7 +217,7 @@ async function capture(theme: string, out: string) {
   try {
     const proc = Bun.spawn(
       [FIREFOX, "-headless", "-no-remote", "--profile", profile,
-       `--window-size=${SIZE}`, "--screenshot", shot,
+       `--window-size=${size}`, "--screenshot", shot,
        `http://127.0.0.1:${server.port}/?theme=${theme}`],
       { stdout: "ignore", stderr: "pipe" },
     );
@@ -234,4 +237,5 @@ async function capture(theme: string, out: string) {
 
 await capture("light", join(OUT_DIR, "dashboard-light.png"));
 await capture("dark", join(OUT_DIR, "dashboard-dark.png"));
+await capture("light", join(OUT_DIR, "dashboard-phone.png"), PHONE_SIZE);
 server.stop();

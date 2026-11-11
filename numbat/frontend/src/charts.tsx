@@ -24,6 +24,7 @@ import {
   useDark,
 } from "./theme";
 import { setHoverT } from "./hover";
+import { makeTicks } from "./ticks";
 
 // One parsed interval — timestamps are parsed exactly once, in App, and every
 // consumer (charts, tiles, mode strip) works from these numbers.
@@ -44,17 +45,6 @@ export interface Row {
   pvOff: boolean;
 }
 
-/** Hourly-aligned ticks every `stepHours`, matching the plan's local timezone. */
-function makeTicks(t0: number, tEnd: number, stepHours = 2): number[] {
-  const first = new Date(t0);
-  first.setMinutes(0, 0, 0);
-  while (first.getTime() < t0) first.setHours(first.getHours() + 1);
-  const ticks: number[] = [];
-  for (const d = first; d.getTime() <= tEnd; d.setHours(d.getHours() + stepHours)) {
-    ticks.push(d.getTime());
-  }
-  return ticks;
-}
 
 export function LegendRow({ items }: { items: { label: string; color: string }[] }) {
   return (
@@ -198,6 +188,10 @@ const mutedTick = (dark: boolean) => (dark ? "#9b9b9b" : "#69727e");
 const kw = (_: string, v: number) => `${v.toFixed(2)} kW`;
 const dollars = (_: string, v: number) => `$${v.toFixed(3)}`;
 
+// kW axes over a short window can span under 5 kW, where whole-number ticks
+// repeat ("1 1 1 0 0"): show the decimal only when the tick has one.
+const kwTick = (v: number) => (Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1));
+
 export function PricesChart({
   rows,
   domain,
@@ -270,7 +264,7 @@ export function ForecastChart({
       {info && (
         <div className="-mt-2.5 mb-2.5 text-xs text-muted-foreground">{info}</div>
       )}
-      <HemChart data={rows} domain={domain} yTickFormat={(v) => v.toFixed(0)} format={kw}>
+      <HemChart data={rows} domain={domain} yTickFormat={kwTick} format={kw}>
         <Area dataKey="pv" name="PV" type="stepAfter" stroke={SERIES.pv} strokeWidth={2} fill={SERIES_FILL.pv} fillOpacity={1} isAnimationActive={false} />
         <Line dataKey="load" name="load" type="stepAfter" stroke={SERIES.load} strokeWidth={2} dot={false} isAnimationActive={false} />
       </HemChart>
@@ -292,7 +286,7 @@ export function BatteryChart({ rows, domain }: { rows: Row[]; domain: [number, n
         />
       }
     >
-      <HemChart data={rows} domain={domain} yTickFormat={(v) => v.toFixed(0)} format={kw}>
+      <HemChart data={rows} domain={domain} yTickFormat={kwTick} format={kw}>
         <Area dataKey="gridExport" name="export" type="stepAfter" stroke={SERIES.gridExport} strokeWidth={1.8} fill={SERIES_FILL.gridExport} fillOpacity={1} isAnimationActive={false} />
         <Area dataKey="gridImport" name="import" type="stepAfter" stroke={SERIES.gridImport} strokeWidth={1.8} fill={SERIES_FILL.gridImport} fillOpacity={1} isAnimationActive={false} />
         <Area dataKey="battery" name="battery" type="stepAfter" stroke={SERIES.battery} strokeWidth={2.2} fill={SERIES_FILL.battery} fillOpacity={1} isAnimationActive={false} />
@@ -317,7 +311,7 @@ export function SocChart({
       <HemChart
         data={rows}
         domain={domain}
-        yTickFormat={(v) => v.toFixed(0)}
+        yTickFormat={kwTick}
         yDomain={capacity ? [0, capacity] : undefined}
         format={format}
       >
